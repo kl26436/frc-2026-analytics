@@ -4,7 +4,6 @@ import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { usePickListStore } from '../store/usePickListStore';
 import { useMetricsStore } from '../store/useMetricsStore';
 import { ArrowUpDown, Search, CheckSquare, Square, Plus, Sliders } from 'lucide-react';
-import type { TeamStatistics } from '../types/scouting';
 
 type SortDirection = 'asc' | 'desc';
 
@@ -145,7 +144,7 @@ function TeamList() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {filteredAndSortedTeams.map((team, index) => (
+              {filteredAndSortedTeams.map((team) => (
                 <tr
                   key={team.teamNumber}
                   className={`hover:bg-interactive transition-colors ${

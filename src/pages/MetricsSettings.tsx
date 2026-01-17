@@ -7,7 +7,6 @@ import {
   RefreshCw,
   Settings as SettingsIcon,
   Save,
-  X,
 } from 'lucide-react';
 import type { MetricColumn, MetricAggregation } from '../types/metrics';
 
@@ -89,7 +88,7 @@ function MetricsSettings() {
         </div>
 
         <div className="divide-y divide-border">
-          {config.columns.map((column, index) => (
+          {config.columns.map((column) => (
             <div
               key={column.id}
               className={`p-4 ${column.enabled ? 'bg-surface' : 'bg-background opacity-60'}`}

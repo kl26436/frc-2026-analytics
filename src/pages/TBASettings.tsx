@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { usePickListStore } from '../store/usePickListStore';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
-import { getEventRankings, getEventTeams } from '../utils/tbaApi';
+import { getEventRankings } from '../utils/tbaApi';
 import { Save, Download, AlertCircle, CheckCircle } from 'lucide-react';
 
 function TBASettings() {

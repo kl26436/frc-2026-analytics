@@ -21,7 +21,6 @@ import {
   Settings,
   Download,
   Upload,
-  RefreshCw,
   Flag,
   StickyNote,
   X,
@@ -183,7 +182,7 @@ function TeamCard({ team, onUpdateNotes, onTogglePicked, onToggleFlag, onRemove 
 }
 
 // Tier column component
-function TierColumn({ tier, tierName, teams, onSort }: {
+function TierColumn({ tierName, teams, onSort }: {
   tier: 'tier1' | 'tier2' | 'tier3';
   tierName: string;
   teams: PickListTeam[];
@@ -375,7 +374,6 @@ function PickList() {
     if (!pickList) return;
 
     const tierTeams = pickList.teams.filter(t => t.tier === tier);
-    const otherTeams = pickList.teams.filter(t => t.tier !== tier);
 
     // Sort teams based on criteria
     tierTeams.sort((a, b) => {

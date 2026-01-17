@@ -29,7 +29,7 @@ interface PickListState {
   importFromTBARankings: (rankings: TBAEventRankings) => void;
 
   // Sorting
-  sortTier: (tier: 'tier1' | 'tier2' | 'tier3', sortBy: 'rank' | 'teamNumber' | 'points' | 'climb') => void;
+  sortTier: (tier: 'tier1' | 'tier2' | 'tier3', sortBy: 'rank' | 'teamNumber' | 'points' | 'climb' | 'auto') => void;
 
   // Bulk operations
   clearPickList: () => void;
