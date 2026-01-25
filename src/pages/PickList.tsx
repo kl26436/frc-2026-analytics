@@ -24,7 +24,6 @@ import {
   Upload,
   Flag,
   StickyNote,
-  X,
   GripVertical,
   ArrowUp,
   ArrowDown,
@@ -98,9 +97,9 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onT
 
           {/* Quick stats */}
           <div className="flex gap-2 text-xs text-textSecondary">
-            <span>{displayStats.avgTotalPoints.toFixed(0)} pts</span>
-            <span>L3: {displayStats.level3ClimbRate.toFixed(0)}%</span>
-            <span>A: {displayStats.avgAutoPoints.toFixed(0)}</span>
+            <span>{(displayStats as any).avgTotalPoints?.toFixed(0) ?? '0'} pts</span>
+            <span>L3: {(displayStats as any).level3ClimbRate?.toFixed(0) ?? '0'}%</span>
+            <span>A: {(displayStats as any).avgAutoPoints?.toFixed(0) ?? '0'}</span>
           </div>
 
           {/* Notes for teams in tiers */}
@@ -281,7 +280,6 @@ function PickList() {
   const importPickList = usePickListStore(state => state.importPickList);
   const addTeamToTier = usePickListStore(state => state.addTeamToTier);
   const moveTeam = usePickListStore(state => state.moveTeam);
-  const removeTeam = usePickListStore(state => state.removeTeam);
   const eventCode = useAnalyticsStore(state => state.eventCode);
   const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
 
@@ -314,7 +312,7 @@ function PickList() {
         const sortedTeams = [...teamStatistics].sort((a, b) => b.avgTotalPoints - a.avgTotalPoints);
 
         // Top 12 go to Potatoes (tier2)
-        sortedTeams.slice(0, 12).forEach((team, index) => {
+        sortedTeams.slice(0, 12).forEach((team) => {
           addTeamToTier(team.teamNumber, 'tier2');
         });
 
