@@ -17,6 +17,7 @@ interface PickListState {
   addTeamToTier: (teamNumber: number, tier: 'tier1' | 'tier2' | 'tier3') => void;
   moveTeam: (teamNumber: number, newTier: 'tier1' | 'tier2' | 'tier3', newRank: number) => void;
   removeTeam: (teamNumber: number) => void;
+  swapTeamRanks: (teamNumber1: number, teamNumber2: number) => void;
 
   // Team metadata
   updateNotes: (teamNumber: number, notes: string) => void;
@@ -158,6 +159,38 @@ export const usePickListStore = create<PickListState>()(
           pickList: {
             ...pickList,
             teams: pickList.teams.filter(t => t.teamNumber !== teamNumber),
+          },
+        });
+      },
+
+      // Swap ranks between two teams (must be in same tier)
+      swapTeamRanks: (teamNumber1, teamNumber2) => {
+        const { pickList } = get();
+        if (!pickList) return;
+
+        const team1 = pickList.teams.find(t => t.teamNumber === teamNumber1);
+        const team2 = pickList.teams.find(t => t.teamNumber === teamNumber2);
+
+        if (!team1 || !team2 || team1.tier !== team2.tier) return;
+
+        const updatedTeams = pickList.teams.map(team => {
+          if (team.teamNumber === teamNumber1) {
+            return { ...team, rank: team2.rank };
+          }
+          if (team.teamNumber === teamNumber2) {
+            return { ...team, rank: team1.rank };
+          }
+          return team;
+        });
+
+        set({
+          pickList: {
+            ...pickList,
+            teams: updatedTeams,
+            config: {
+              ...pickList.config,
+              lastUpdated: new Date().toISOString(),
+            },
           },
         });
       },

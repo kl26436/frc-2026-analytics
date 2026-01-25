@@ -3,9 +3,10 @@ import { Link } from 'react-router-dom';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { usePickListStore } from '../store/usePickListStore';
 import { useMetricsStore } from '../store/useMetricsStore';
-import { ArrowUpDown, Search, CheckSquare, Square, Plus, Sliders } from 'lucide-react';
+import { ArrowUpDown, Search, CheckSquare, Square, Plus, Sliders, LayoutGrid, Table2 } from 'lucide-react';
 
 type SortDirection = 'asc' | 'desc';
+type ViewMode = 'table' | 'cards';
 
 function TeamList() {
   const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
@@ -20,6 +21,7 @@ function TeamList() {
   const [sortField, setSortField] = useState<string>('avgTotalPoints');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [showAddMenu, setShowAddMenu] = useState<number | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('table');
 
   // Sort and filter teams
   const filteredAndSortedTeams = useMemo(() => {
@@ -88,20 +90,44 @@ function TeamList() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Team Rankings</h1>
-        <div className="flex items-center gap-4">
-          <span className="text-textSecondary">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <h1 className="text-2xl md:text-3xl font-bold">Team Rankings</h1>
+        <div className="flex flex-wrap items-center gap-2 md:gap-4">
+          <span className="text-textSecondary text-sm md:text-base">
             {selectedTeams.length} team{selectedTeams.length !== 1 ? 's' : ''} selected
           </span>
+
+          {/* View Toggle */}
+          <div className="flex gap-1 bg-surface border border-border rounded-lg p-1">
+            <button
+              onClick={() => setViewMode('cards')}
+              className={`p-2 rounded transition-colors ${
+                viewMode === 'cards' ? 'bg-interactive' : 'hover:bg-surfaceElevated'
+              }`}
+              title="Card view"
+            >
+              <LayoutGrid size={18} />
+            </button>
+            <button
+              onClick={() => setViewMode('table')}
+              className={`p-2 rounded transition-colors ${
+                viewMode === 'table' ? 'bg-interactive' : 'hover:bg-surfaceElevated'
+              }`}
+              title="Table view"
+            >
+              <Table2 size={18} />
+            </button>
+          </div>
+
           <Link
             to="/metrics"
             className="flex items-center gap-2 px-3 py-2 bg-surface hover:bg-interactive rounded-lg transition-colors text-sm border border-border"
           >
             <Sliders size={16} />
-            Customize Columns
+            <span className="hidden sm:inline">Customize Columns</span>
+            <span className="sm:hidden">Columns</span>
           </Link>
         </div>
       </div>
@@ -118,10 +144,11 @@ function TeamList() {
         />
       </div>
 
-      {/* Team Table */}
-      <div className="bg-surface rounded-lg border border-border overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
+      {/* Team Display - Table or Cards */}
+      {viewMode === 'table' ? (
+        <div className="bg-surface rounded-lg border border-border overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
             <thead className="bg-surfaceElevated border-b border-border">
               <tr>
                 <th className="px-4 py-3 text-left text-textSecondary text-sm font-semibold">
@@ -228,6 +255,101 @@ function TeamList() {
           </table>
         </div>
       </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredAndSortedTeams.map((team) => (
+            <div
+              key={team.teamNumber}
+              className={`bg-surface rounded-lg border border-border p-4 space-y-3 ${
+                selectedTeams.includes(team.teamNumber) ? 'ring-2 ring-success' : ''
+              }`}
+            >
+              {/* Card Header */}
+              <div className="flex items-start justify-between">
+                <Link to={`/teams/${team.teamNumber}`} className="flex-1">
+                  <h3 className="text-xl font-bold hover:text-blueAlliance transition-colors">
+                    {team.teamNumber}
+                  </h3>
+                  {team.teamName && (
+                    <p className="text-sm text-textSecondary line-clamp-1">{team.teamName}</p>
+                  )}
+                </Link>
+                <button
+                  onClick={() => toggleTeamSelection(team.teamNumber)}
+                  className="text-textPrimary hover:text-success transition-colors p-1"
+                >
+                  {selectedTeams.includes(team.teamNumber) ? (
+                    <CheckSquare size={24} className="text-success" />
+                  ) : (
+                    <Square size={24} />
+                  )}
+                </button>
+              </div>
+
+              {/* Key Metrics */}
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="bg-surfaceElevated rounded p-2">
+                  <p className="text-textSecondary text-xs">Matches</p>
+                  <p className="font-semibold">{team.matchesPlayed}</p>
+                </div>
+                {enabledColumns.slice(0, 3).map(column => {
+                  const value = (team as any)[column.field];
+                  return (
+                    <div key={column.id} className="bg-surfaceElevated rounded p-2">
+                      <p className="text-textSecondary text-xs truncate">{column.label}</p>
+                      <p className="font-semibold">
+                        {formatMetricValue(value || 0, column.format, column.decimals)}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Actions */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowAddMenu(showAddMenu === team.teamNumber ? null : team.teamNumber)}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-surfaceElevated hover:bg-interactive rounded transition-colors text-sm"
+                >
+                  <Plus size={16} />
+                  Add to Pick List
+                </button>
+                {showAddMenu === team.teamNumber && (
+                  <div className="absolute bottom-full mb-2 w-full bg-surface border border-border rounded-lg shadow-lg z-10">
+                    <button
+                      onClick={() => {
+                        addTeamToTier(team.teamNumber, 'tier1');
+                        setShowAddMenu(null);
+                      }}
+                      className="w-full px-4 py-2 text-left hover:bg-interactive transition-colors rounded-t-lg"
+                    >
+                      Add to Steak
+                    </button>
+                    <button
+                      onClick={() => {
+                        addTeamToTier(team.teamNumber, 'tier2');
+                        setShowAddMenu(null);
+                      }}
+                      className="w-full px-4 py-2 text-left hover:bg-interactive transition-colors"
+                    >
+                      Add to Potatoes
+                    </button>
+                    <button
+                      onClick={() => {
+                        addTeamToTier(team.teamNumber, 'tier3');
+                        setShowAddMenu(null);
+                      }}
+                      className="w-full px-4 py-2 text-left hover:bg-interactive transition-colors rounded-b-lg"
+                    >
+                      Add to Chicken Nuggets
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Results count */}
       <div className="text-center text-textSecondary">

@@ -16,6 +16,7 @@ import {
   verticalListSortingStrategy,
   useSortable,
 } from '@dnd-kit/sortable';
+import { useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import {
   Settings,
@@ -24,17 +25,22 @@ import {
   Flag,
   StickyNote,
   X,
-  ArrowUpDown,
+  GripVertical,
+  ArrowUp,
+  ArrowDown,
+  ChevronsUp,
+  ChevronsDown,
 } from 'lucide-react';
 import type { PickListTeam } from '../types/pickList';
 
 // Sortable team card component
-function TeamCard({ team, onUpdateNotes, onTogglePicked, onToggleFlag, onRemove }: {
-  team: PickListTeam;
-  onUpdateNotes: (notes: string) => void;
-  onTogglePicked: () => void;
-  onToggleFlag: () => void;
-  onRemove: () => void;
+function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onToggleFlag }: {
+  team: PickListTeam | { teamNumber: number; teamName?: string; avgTotalPoints: number; level3ClimbRate: number; avgAutoPoints: number };
+  currentTier?: 'tier1' | 'tier2' | 'tier3';
+  tierNames?: { tier1: string; tier2: string; tier3: string };
+  onMoveTier?: (tier: 'tier1' | 'tier2' | 'tier3') => void;
+  onUpdateNotes?: (notes: string) => void;
+  onToggleFlag?: () => void;
 }) {
   const {
     attributes,
@@ -43,7 +49,7 @@ function TeamCard({ team, onUpdateNotes, onTogglePicked, onToggleFlag, onRemove 
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: team.teamNumber.toString() });
+  } = useSortable({ id: `team-${team.teamNumber}` });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -51,220 +57,218 @@ function TeamCard({ team, onUpdateNotes, onTogglePicked, onToggleFlag, onRemove 
     opacity: isDragging ? 0.5 : 1,
   };
 
+  const isPickListTeam = 'tier' in team;
   const teamStats = useAnalyticsStore(state =>
     state.teamStatistics.find(t => t.teamNumber === team.teamNumber)
   );
 
   const [isEditingNotes, setIsEditingNotes] = useState(false);
-  const [notes, setNotes] = useState(team.notes);
+  const [notes, setNotes] = useState(isPickListTeam ? team.notes : '');
+
+  const displayStats = teamStats || team;
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`bg-surface border rounded-lg p-3 mb-2 ${
-        team.isPicked
-          ? 'border-textMuted opacity-50'
-          : team.flagged
+      className={`bg-surface border rounded-lg p-2 mb-2 ${
+        isPickListTeam && team.flagged
           ? 'border-danger'
           : 'border-border'
       }`}
     >
-      <div className="flex items-start gap-3">
+      <div className="flex items-start gap-2">
         {/* Drag handle */}
         <div
           {...listeners}
           {...attributes}
-          className="cursor-grab active:cursor-grabbing text-textMuted hover:text-textPrimary mt-1"
+          className="cursor-grab active:cursor-grabbing text-textMuted hover:text-textPrimary mt-1 touch-none"
         >
-          <ArrowUpDown size={16} />
+          <GripVertical size={16} />
         </div>
 
         {/* Team info */}
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <span className="font-bold text-lg">{team.teamNumber}</span>
+            <span className="font-bold text-sm">{team.teamNumber}</span>
             {teamStats?.teamName && (
-              <span className="text-sm text-textSecondary">{teamStats.teamName}</span>
-            )}
-            {team.isPicked && (
-              <span className="text-xs bg-textMuted text-background px-2 py-0.5 rounded">
-                PICKED{team.pickedBy ? ` by ${team.pickedBy}` : ''}
-              </span>
+              <span className="text-xs text-textSecondary truncate">{teamStats.teamName}</span>
             )}
           </div>
 
           {/* Quick stats */}
-          {teamStats && (
-            <div className="flex gap-3 text-xs text-textSecondary mb-2">
-              <span>{teamStats.avgTotalPoints.toFixed(1)} pts</span>
-              <span>L3: {teamStats.level3ClimbRate.toFixed(0)}%</span>
-              <span>Auto: {teamStats.avgAutoPoints.toFixed(1)}</span>
-            </div>
-          )}
+          <div className="flex gap-2 text-xs text-textSecondary">
+            <span>{displayStats.avgTotalPoints.toFixed(0)} pts</span>
+            <span>L3: {displayStats.level3ClimbRate.toFixed(0)}%</span>
+            <span>A: {displayStats.avgAutoPoints.toFixed(0)}</span>
+          </div>
 
-          {/* Tags */}
-          {team.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1 mb-2">
-              {team.tags.map(tag => (
-                <span
-                  key={tag}
-                  className="text-xs bg-blueAlliance/20 text-blueAlliance px-2 py-0.5 rounded"
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
-          )}
-
-          {/* Notes */}
-          {isEditingNotes ? (
+          {/* Notes for teams in tiers */}
+          {currentTier && isPickListTeam && isEditingNotes ? (
             <input
               type="text"
               value={notes}
               onChange={e => setNotes(e.target.value)}
               onBlur={() => {
                 setIsEditingNotes(false);
-                onUpdateNotes(notes);
+                onUpdateNotes?.(notes);
               }}
               onKeyDown={e => {
                 if (e.key === 'Enter') {
                   setIsEditingNotes(false);
-                  onUpdateNotes(notes);
+                  onUpdateNotes?.(notes);
                 }
               }}
-              className="w-full bg-background border border-border rounded px-2 py-1 text-sm"
+              className="w-full mt-1 bg-background border border-border rounded px-2 py-1 text-xs"
               autoFocus
             />
           ) : (
-            team.notes && (
-              <p className="text-sm text-textSecondary italic">{team.notes}</p>
+            currentTier && isPickListTeam && team.notes && (
+              <p className="text-xs text-textSecondary italic mt-1 truncate">{team.notes}</p>
             )
+          )}
+
+          {/* Quick tier switcher - mobile friendly */}
+          {currentTier && tierNames && onMoveTier && (
+            <div className="flex gap-1 mt-2 flex-wrap">
+              {/* Tier 1 (Steak) - show demote buttons */}
+              {currentTier === 'tier1' && (
+                <>
+                  <button
+                    onClick={() => onMoveTier('tier2')}
+                    className="flex items-center gap-1 px-2 py-1 text-xs bg-surfaceElevated hover:bg-interactive rounded transition-colors"
+                    title={`Demote to ${tierNames.tier2}`}
+                  >
+                    <ArrowDown size={14} />
+                    <span className="truncate max-w-[60px]">{tierNames.tier2}</span>
+                  </button>
+                  <button
+                    onClick={() => onMoveTier('tier3')}
+                    className="flex items-center gap-1 px-2 py-1 text-xs bg-surfaceElevated hover:bg-interactive rounded transition-colors"
+                    title={`Demote to ${tierNames.tier3}`}
+                  >
+                    <ChevronsDown size={14} />
+                    <span className="truncate max-w-[60px]">{tierNames.tier3}</span>
+                  </button>
+                </>
+              )}
+
+              {/* Tier 2 (Potatoes) - show promote and demote buttons */}
+              {currentTier === 'tier2' && (
+                <>
+                  <button
+                    onClick={() => onMoveTier('tier1')}
+                    className="flex items-center gap-1 px-2 py-1 text-xs bg-surfaceElevated hover:bg-interactive rounded transition-colors"
+                    title={`Promote to ${tierNames.tier1}`}
+                  >
+                    <ArrowUp size={14} />
+                    <span className="truncate max-w-[60px]">{tierNames.tier1}</span>
+                  </button>
+                  <button
+                    onClick={() => onMoveTier('tier3')}
+                    className="flex items-center gap-1 px-2 py-1 text-xs bg-surfaceElevated hover:bg-interactive rounded transition-colors"
+                    title={`Demote to ${tierNames.tier3}`}
+                  >
+                    <ArrowDown size={14} />
+                    <span className="truncate max-w-[60px]">{tierNames.tier3}</span>
+                  </button>
+                </>
+              )}
+
+              {/* Tier 3 (Jacks) - show promote buttons */}
+              {currentTier === 'tier3' && (
+                <>
+                  <button
+                    onClick={() => onMoveTier('tier2')}
+                    className="flex items-center gap-1 px-2 py-1 text-xs bg-surfaceElevated hover:bg-interactive rounded transition-colors"
+                    title={`Promote to ${tierNames.tier2}`}
+                  >
+                    <ArrowUp size={14} />
+                    <span className="truncate max-w-[60px]">{tierNames.tier2}</span>
+                  </button>
+                  <button
+                    onClick={() => onMoveTier('tier1')}
+                    className="flex items-center gap-1 px-2 py-1 text-xs bg-surfaceElevated hover:bg-interactive rounded transition-colors"
+                    title={`Promote to ${tierNames.tier1}`}
+                  >
+                    <ChevronsUp size={14} />
+                    <span className="truncate max-w-[60px]">{tierNames.tier1}</span>
+                  </button>
+                </>
+              )}
+            </div>
           )}
         </div>
 
-        {/* Actions */}
-        <div className="flex flex-col gap-1">
-          <button
-            onClick={onToggleFlag}
-            className={`p-1 rounded transition-colors ${
-              team.flagged ? 'text-danger' : 'text-textMuted hover:text-warning'
-            }`}
-            title="Flag team"
-          >
-            <Flag size={16} />
-          </button>
-          <button
-            onClick={() => setIsEditingNotes(true)}
-            className="p-1 text-textMuted hover:text-textPrimary rounded transition-colors"
-            title="Add note"
-          >
-            <StickyNote size={16} />
-          </button>
-          <button
-            onClick={onTogglePicked}
-            className="p-1 text-textMuted hover:text-success rounded transition-colors"
-            title={team.isPicked ? 'Mark as available' : 'Mark as picked'}
-          >
-            {team.isPicked ? '✓' : '○'}
-          </button>
-          <button
-            onClick={onRemove}
-            className="p-1 text-textMuted hover:text-danger rounded transition-colors"
-            title="Remove from list"
-          >
-            <X size={16} />
-          </button>
-        </div>
+        {/* Actions - only show for teams in tiers */}
+        {currentTier && (
+          <div className="flex flex-col gap-1">
+            <button
+              onClick={() => onToggleFlag?.()}
+              className={`p-1 rounded transition-colors ${
+                isPickListTeam && team.flagged ? 'text-danger' : 'text-textMuted hover:text-warning'
+              }`}
+              title="Flag team"
+            >
+              <Flag size={14} />
+            </button>
+            <button
+              onClick={() => setIsEditingNotes(true)}
+              className="p-1 text-textMuted hover:text-textPrimary rounded transition-colors"
+              title="Add note"
+            >
+              <StickyNote size={14} />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-// Tier column component
-function TierColumn({ tierName, teams, onSort }: {
-  tier: 'tier1' | 'tier2' | 'tier3';
-  tierName: string;
-  teams: PickListTeam[];
-  onSort: (sortBy: 'rank' | 'teamNumber' | 'points' | 'climb' | 'auto') => void;
+// Droppable column component
+function DroppableColumn({ id, title, teams, tier, tierNames, onMoveTier }: {
+  id: string;
+  title: string;
+  teams: any[];
+  tier?: 'tier1' | 'tier2' | 'tier3';
+  tierNames?: { tier1: string; tier2: string; tier3: string };
+  onMoveTier?: (teamNumber: number, newTier: 'tier1' | 'tier2' | 'tier3') => void;
 }) {
+  const { setNodeRef, isOver } = useDroppable({ id });
   const updateNotes = usePickListStore(state => state.updateNotes);
-  const togglePicked = usePickListStore(state => state.togglePicked);
   const toggleFlag = usePickListStore(state => state.toggleFlag);
-  const removeTeam = usePickListStore(state => state.removeTeam);
-  const [showSortMenu, setShowSortMenu] = useState(false);
-
-  const sortedTeams = [...teams].sort((a, b) => a.rank - b.rank);
 
   return (
-    <div className="flex-1 bg-surfaceElevated rounded-lg p-4 min-h-[500px]">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-bold">{tierName}</h2>
-        <div className="relative">
-          <button
-            onClick={() => setShowSortMenu(!showSortMenu)}
-            className="p-2 text-textMuted hover:text-textPrimary rounded transition-colors"
-            title="Sort tier"
-          >
-            <ArrowUpDown size={16} />
-          </button>
-          {showSortMenu && (
-            <div className="absolute right-0 mt-2 w-40 bg-surface border border-border rounded-lg shadow-lg z-20">
-              <button
-                onClick={() => {
-                  onSort('points');
-                  setShowSortMenu(false);
-                }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-interactive transition-colors"
-              >
-                Sort by Points
-              </button>
-              <button
-                onClick={() => {
-                  onSort('climb');
-                  setShowSortMenu(false);
-                }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-interactive transition-colors"
-              >
-                Sort by Climb
-              </button>
-              <button
-                onClick={() => {
-                  onSort('auto');
-                  setShowSortMenu(false);
-                }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-interactive transition-colors"
-              >
-                Sort by Auto
-              </button>
-              <button
-                onClick={() => {
-                  onSort('teamNumber');
-                  setShowSortMenu(false);
-                }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-interactive transition-colors"
-              >
-                Sort by Team #
-              </button>
+    <div
+      ref={setNodeRef}
+      className={`flex-1 bg-surfaceElevated rounded-lg p-3 md:p-4 min-h-[600px] transition-colors ${
+        isOver ? 'ring-2 ring-success bg-interactive' : ''
+      }`}
+    >
+      <h2 className="text-base md:text-lg font-bold mb-3">{title}</h2>
+      <SortableContext items={teams.map(t => `team-${t.teamNumber}`)} strategy={verticalListSortingStrategy}>
+        <div className="space-y-0 min-h-[500px]">
+          {teams.map((team) => (
+            <TeamCard
+              key={team.teamNumber}
+              team={team}
+              currentTier={tier}
+              tierNames={tierNames}
+              onMoveTier={tier && onMoveTier ? (newTier) => onMoveTier(team.teamNumber, newTier) : undefined}
+              onUpdateNotes={tier ? (notes) => updateNotes(team.teamNumber, notes) : undefined}
+              onToggleFlag={tier ? () => toggleFlag(team.teamNumber) : undefined}
+            />
+          ))}
+          {teams.length === 0 && (
+            <div className="flex items-center justify-center h-full min-h-[400px]">
+              <p className="text-textMuted text-sm text-center">
+                {tier ? 'Drag teams here or use buttons' : 'No teams available'}
+              </p>
             </div>
           )}
         </div>
-      </div>
-      <SortableContext items={sortedTeams.map(t => t.teamNumber.toString())} strategy={verticalListSortingStrategy}>
-        {sortedTeams.map(team => (
-          <TeamCard
-            key={team.teamNumber}
-            team={team}
-            onUpdateNotes={(notes) => updateNotes(team.teamNumber, notes)}
-            onTogglePicked={() => togglePicked(team.teamNumber)}
-            onToggleFlag={() => toggleFlag(team.teamNumber)}
-            onRemove={() => removeTeam(team.teamNumber)}
-          />
-        ))}
       </SortableContext>
-      {sortedTeams.length === 0 && (
-        <p className="text-textMuted text-center py-8">No teams in this tier yet</p>
-      )}
     </div>
   );
 }
@@ -275,8 +279,9 @@ function PickList() {
   const setTierNames = usePickListStore(state => state.setTierNames);
   const exportPickList = usePickListStore(state => state.exportPickList);
   const importPickList = usePickListStore(state => state.importPickList);
+  const addTeamToTier = usePickListStore(state => state.addTeamToTier);
   const moveTeam = usePickListStore(state => state.moveTeam);
-  const sortTier = usePickListStore(state => state.sortTier);
+  const removeTeam = usePickListStore(state => state.removeTeam);
   const eventCode = useAnalyticsStore(state => state.eventCode);
   const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
 
@@ -285,6 +290,7 @@ function PickList() {
   const [tier2Name, setTier2Name] = useState('Potatoes');
   const [tier3Name, setTier3Name] = useState('Chicken Nuggets');
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [initialized, setInitialized] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -301,8 +307,26 @@ function PickList() {
       setTier1Name(pickList.config.tier1Name);
       setTier2Name(pickList.config.tier2Name);
       setTier3Name(pickList.config.tier3Name);
+
+      // Auto-populate tiers on first load
+      if (!initialized && pickList.teams.length === 0 && teamStatistics.length > 0) {
+        // Sort teams by total points (TBA ranking approximation)
+        const sortedTeams = [...teamStatistics].sort((a, b) => b.avgTotalPoints - a.avgTotalPoints);
+
+        // Top 12 go to Potatoes (tier2)
+        sortedTeams.slice(0, 12).forEach((team, index) => {
+          addTeamToTier(team.teamNumber, 'tier2');
+        });
+
+        // Rest go to Chicken Nuggets (tier3)
+        sortedTeams.slice(12).forEach((team) => {
+          addTeamToTier(team.teamNumber, 'tier3');
+        });
+
+        setInitialized(true);
+      }
     }
-  }, [pickList, eventCode, initializePickList]);
+  }, [pickList, eventCode, initializePickList, teamStatistics, addTeamToTier, initialized]);
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id.toString());
@@ -314,19 +338,71 @@ function PickList() {
 
     if (!over || !pickList) return;
 
-    const activeTeamNumber = parseInt(active.id.toString());
-    const activeTeam = pickList.teams.find(t => t.teamNumber === activeTeamNumber);
+    const activeTeamNumber = parseInt(active.id.toString().replace('team-', ''));
+    const overId = over.id.toString();
 
-    if (!activeTeam) return;
+    // Check if dragging over another team (for within-tier reordering)
+    if (overId.startsWith('team-')) {
+      const overTeamNumber = parseInt(overId.replace('team-', ''));
 
-    // If dropped on another team, insert before that team
-    const overTeamNumber = parseInt(over.id.toString());
-    const overTeam = pickList.teams.find(t => t.teamNumber === overTeamNumber);
+      // Don't do anything if dropped on itself
+      if (activeTeamNumber === overTeamNumber) return;
 
-    if (overTeam && activeTeamNumber !== overTeamNumber) {
-      // Move to the same tier and rank as the team we're hovering over
+      const activeTeam = pickList.teams.find(t => t.teamNumber === activeTeamNumber);
+      const overTeam = pickList.teams.find(t => t.teamNumber === overTeamNumber);
+
+      if (!activeTeam || !overTeam) return;
+
+      // If same tier, reorder within tier
+      if (activeTeam.tier === overTeam.tier) {
+        const tierTeams = pickList.teams
+          .filter(t => t.tier === activeTeam.tier)
+          .sort((a, b) => a.rank - b.rank);
+
+        const oldIndex = tierTeams.findIndex(t => t.teamNumber === activeTeamNumber);
+        const newIndex = tierTeams.findIndex(t => t.teamNumber === overTeamNumber);
+
+        if (oldIndex === newIndex) return;
+
+        // Move the team to the new position in the tier
+        moveTeam(activeTeamNumber, activeTeam.tier, overTeam.rank);
+        return;
+      }
+
+      // Different tier - move to that tier at the target position
       moveTeam(activeTeamNumber, overTeam.tier, overTeam.rank);
+      return;
     }
+
+    // Dropped on a column (tier container)
+    let targetTier: 'tier1' | 'tier2' | 'tier3' | null = null;
+
+    if (overId === 'tier1-column') {
+      targetTier = 'tier1';
+    } else if (overId === 'tier2-column') {
+      targetTier = 'tier2';
+    } else if (overId === 'tier3-column') {
+      targetTier = 'tier3';
+    }
+
+    if (!targetTier) return;
+
+    const existingTeam = pickList.teams.find(t => t.teamNumber === activeTeamNumber);
+    if (!existingTeam) return;
+
+    // Only move if it's a different tier
+    if (existingTeam.tier !== targetTier) {
+      const tierTeams = pickList.teams.filter(t => t.tier === targetTier);
+      const newRank = tierTeams.length + 1;
+      moveTeam(activeTeamNumber, targetTier, newRank);
+    }
+  };
+
+  const handleMoveTier = (teamNumber: number, newTier: 'tier1' | 'tier2' | 'tier3') => {
+    if (!pickList) return;
+    const tierTeams = pickList.teams.filter(t => t.tier === newTier);
+    const newRank = tierTeams.length + 1;
+    moveTeam(teamNumber, newTier, newRank);
   };
 
   const handleExport = () => {
@@ -366,74 +442,42 @@ function PickList() {
     return <div>Loading...</div>;
   }
 
-  const tier1Teams = pickList.teams.filter(t => t.tier === 'tier1');
-  const tier2Teams = pickList.teams.filter(t => t.tier === 'tier2');
-  const tier3Teams = pickList.teams.filter(t => t.tier === 'tier3');
-
-  const handleSort = (tier: 'tier1' | 'tier2' | 'tier3', sortBy: 'rank' | 'teamNumber' | 'points' | 'climb' | 'auto') => {
-    if (!pickList) return;
-
-    const tierTeams = pickList.teams.filter(t => t.tier === tier);
-
-    // Sort teams based on criteria
-    tierTeams.sort((a, b) => {
-      const statsA = teamStatistics.find(t => t.teamNumber === a.teamNumber);
-      const statsB = teamStatistics.find(t => t.teamNumber === b.teamNumber);
-
-      switch (sortBy) {
-        case 'points':
-          return (statsB?.avgTotalPoints || 0) - (statsA?.avgTotalPoints || 0);
-        case 'climb':
-          return (statsB?.level3ClimbRate || 0) - (statsA?.level3ClimbRate || 0);
-        case 'auto':
-          return (statsB?.avgAutoPoints || 0) - (statsA?.avgAutoPoints || 0);
-        case 'teamNumber':
-          return a.teamNumber - b.teamNumber;
-        default:
-          return a.rank - b.rank;
-      }
-    });
-
-    // Re-assign ranks
-    tierTeams.forEach((team, index) => {
-      team.rank = index + 1;
-    });
-
-    // This is a hack - we should have a proper updatePickList action
-    // For now, manually triggering re-sort by calling sortTier
-    sortTier(tier, sortBy);
-  };
+  // Get teams in each tier
+  const tier1Teams = pickList.teams.filter(t => t.tier === 'tier1').sort((a, b) => a.rank - b.rank);
+  const tier2Teams = pickList.teams.filter(t => t.tier === 'tier2').sort((a, b) => a.rank - b.rank);
+  const tier3Teams = pickList.teams.filter(t => t.tier === 'tier3').sort((a, b) => a.rank - b.rank);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Pick List</h1>
-          <p className="text-textSecondary">
+          <h1 className="text-2xl md:text-3xl font-bold">Pick List</h1>
+          <p className="text-textSecondary text-sm md:text-base">
             {eventCode} • Last updated: {new Date(pickList.config.lastUpdated).toLocaleString()}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setShowSettings(!showSettings)}
-            className="flex items-center gap-2 px-4 py-2 bg-surface hover:bg-interactive rounded-lg transition-colors"
+            className="flex items-center gap-2 px-3 md:px-4 py-2 bg-surface hover:bg-interactive rounded-lg transition-colors text-sm md:text-base"
           >
-            <Settings size={20} />
-            <span>Settings</span>
+            <Settings size={18} />
+            <span className="hidden sm:inline">Settings</span>
+            <span className="sm:hidden">Config</span>
           </button>
           <button
             onClick={handleExport}
-            className="flex items-center gap-2 px-4 py-2 bg-surface hover:bg-interactive rounded-lg transition-colors"
+            className="flex items-center gap-2 px-3 md:px-4 py-2 bg-surface hover:bg-interactive rounded-lg transition-colors text-sm md:text-base"
           >
-            <Download size={20} />
+            <Download size={18} />
             <span>Export</span>
           </button>
           <button
             onClick={handleImport}
-            className="flex items-center gap-2 px-4 py-2 bg-surface hover:bg-interactive rounded-lg transition-colors"
+            className="flex items-center gap-2 px-3 md:px-4 py-2 bg-surface hover:bg-interactive rounded-lg transition-colors text-sm md:text-base"
           >
-            <Upload size={20} />
+            <Upload size={18} />
             <span>Import</span>
           </button>
         </div>
@@ -441,9 +485,9 @@ function PickList() {
 
       {/* Settings Panel */}
       {showSettings && (
-        <div className="bg-surface p-6 rounded-lg border border-border">
-          <h2 className="text-xl font-bold mb-4">Pick List Settings</h2>
-          <div className="grid grid-cols-3 gap-4 mb-4">
+        <div className="bg-surface p-4 md:p-6 rounded-lg border border-border">
+          <h2 className="text-lg md:text-xl font-bold mb-4">Pick List Settings</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
             <div>
               <label className="block text-sm text-textSecondary mb-2">Tier 1 Name</label>
               <input
@@ -484,38 +528,59 @@ function PickList() {
         </div>
       )}
 
-      {/* Three-column layout */}
+      {/* Three-column drag-and-drop layout */}
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
       >
-        <div className="grid grid-cols-3 gap-4">
-          <TierColumn
-            tier="tier1"
-            tierName={pickList.config.tier1Name}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 md:gap-4">
+          <DroppableColumn
+            id="tier1-column"
+            title={`${pickList.config.tier1Name} (${tier1Teams.length})`}
             teams={tier1Teams}
-            onSort={(sortBy) => handleSort('tier1', sortBy)}
+            tier="tier1"
+            tierNames={{
+              tier1: pickList.config.tier1Name,
+              tier2: pickList.config.tier2Name,
+              tier3: pickList.config.tier3Name,
+            }}
+            onMoveTier={handleMoveTier}
           />
-          <TierColumn
-            tier="tier2"
-            tierName={pickList.config.tier2Name}
+          <DroppableColumn
+            id="tier2-column"
+            title={`${pickList.config.tier2Name} (${tier2Teams.length})`}
             teams={tier2Teams}
-            onSort={(sortBy) => handleSort('tier2', sortBy)}
+            tier="tier2"
+            tierNames={{
+              tier1: pickList.config.tier1Name,
+              tier2: pickList.config.tier2Name,
+              tier3: pickList.config.tier3Name,
+            }}
+            onMoveTier={handleMoveTier}
           />
-          <TierColumn
-            tier="tier3"
-            tierName={pickList.config.tier3Name}
+          <DroppableColumn
+            id="tier3-column"
+            title={`${pickList.config.tier3Name} (${tier3Teams.length})`}
             teams={tier3Teams}
-            onSort={(sortBy) => handleSort('tier3', sortBy)}
+            tier="tier3"
+            tierNames={{
+              tier1: pickList.config.tier1Name,
+              tier2: pickList.config.tier2Name,
+              tier3: pickList.config.tier3Name,
+            }}
+            onMoveTier={handleMoveTier}
           />
         </div>
 
         <DragOverlay>
           {activeId ? (
-            <div className="bg-surface border border-border rounded-lg p-3 opacity-75">
-              Team {activeId}
+            <div className="bg-surface border border-border rounded-lg p-3 opacity-90 shadow-lg">
+              <div className="flex items-center gap-2">
+                <GripVertical size={16} className="text-textMuted" />
+                <span className="font-bold">Team {activeId.replace('team-', '')}</span>
+              </div>
             </div>
           ) : null}
         </DragOverlay>
