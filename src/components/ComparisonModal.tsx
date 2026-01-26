@@ -175,7 +175,7 @@ function ComparisonModal({ team1, team2, onPickTeam, onClose }: ComparisonModalP
           />
           <StatRow
             label="Mobility Rate"
-            getValue={t => t.mobilityRate}
+            getValue={t => t.autoMobilityRate}
             format="percentage"
           />
           <StatRow
@@ -194,7 +194,7 @@ function ComparisonModal({ team1, team2, onPickTeam, onClose }: ComparisonModalP
           />
           <StatRow
             label="Robot Died Rate"
-            getValue={t => t.robotDiedRate}
+            getValue={t => t.diedRate}
             format="percentage"
             higherIsBetter={false}
           />
