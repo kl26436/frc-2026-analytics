@@ -1,14 +1,22 @@
 import { useParams, Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
-import { ArrowLeft, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { usePickListStore } from '../store/usePickListStore';
+import { ArrowLeft, TrendingUp, TrendingDown, Minus, Play, X } from 'lucide-react';
 import type { MatchScoutingEntry } from '../types/scouting';
-import MatchVideos from '../components/MatchVideos';
+import type { TBAMatch } from '../types/tba';
+import { getTeamEventMatches, getMatchVideoUrl, teamNumberToKey } from '../utils/tbaApi';
 
 function TeamDetail() {
   const { teamNumber } = useParams<{ teamNumber: string }>();
   const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
   const matchEntries = useAnalyticsStore(state => state.matchEntries);
   const pitEntries = useAnalyticsStore(state => state.pitEntries);
+  const eventCode = useAnalyticsStore(state => state.eventCode);
+  const tbaApiKey = usePickListStore(state => state.tbaApiKey);
+
+  const [tbaMatches, setTbaMatches] = useState<TBAMatch[]>([]);
+  const [selectedVideo, setSelectedVideo] = useState<{ matchNumber: number; videoUrl: string } | null>(null);
 
   const teamNum = parseInt(teamNumber || '0');
   const teamStats = teamStatistics.find(t => t.teamNumber === teamNum);
@@ -16,6 +24,20 @@ function TeamDetail() {
     .filter(m => m.teamNumber === teamNum)
     .sort((a, b) => a.matchNumber - b.matchNumber);
   const pitData = pitEntries.find(p => p.teamNumber === teamNum);
+
+  // Fetch TBA match data for videos
+  useEffect(() => {
+    async function fetchMatches() {
+      try {
+        const teamKey = teamNumberToKey(teamNum);
+        const matches = await getTeamEventMatches(teamKey, eventCode, tbaApiKey);
+        setTbaMatches(matches);
+      } catch (error) {
+        console.error('Failed to load TBA matches:', error);
+      }
+    }
+    fetchMatches();
+  }, [teamNum, eventCode, tbaApiKey]);
 
   if (!teamStats) {
     return (
@@ -164,11 +186,6 @@ function TeamDetail() {
         </div>
       )}
 
-      {/* Match Videos from TBA */}
-      <div className="bg-surface p-6 rounded-lg border border-border">
-        <MatchVideos teamNumber={teamNum} />
-      </div>
-
       {/* Match History */}
       <div className="bg-surface rounded-lg border border-border">
         <div className="p-6 border-b border-border">
@@ -180,6 +197,9 @@ function TeamDetail() {
               <tr>
                 <th className="px-4 py-3 text-left text-textSecondary text-sm font-semibold">
                   Match
+                </th>
+                <th className="px-4 py-3 text-center text-textSecondary text-sm font-semibold">
+                  Video
                 </th>
                 <th className="px-4 py-3 text-center text-textSecondary text-sm font-semibold">
                   Alliance
@@ -214,15 +234,35 @@ function TeamDetail() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {matchPointsData.map(({ match, points }) => (
-                <tr key={match.id} className="hover:bg-interactive transition-colors">
-                  <td className="px-4 py-4">
-                    <span className="font-semibold">
-                      {match.matchType === 'qualification' ? 'Q' : match.matchType === 'playoff' ? 'P' : 'Pr'}
-                      {match.matchNumber}
-                    </span>
-                  </td>
-                  <td className="px-4 py-4 text-center">
+              {matchPointsData.map(({ match, points }) => {
+                // Find corresponding TBA match for video
+                const tbaMatch = tbaMatches.find(
+                  m => m.comp_level === 'qm' && m.match_number === match.matchNumber
+                );
+                const videoUrl = tbaMatch ? getMatchVideoUrl(tbaMatch) : null;
+
+                return (
+                  <tr key={match.id} className="hover:bg-interactive transition-colors">
+                    <td className="px-4 py-4">
+                      <span className="font-semibold">
+                        {match.matchType === 'qualification' ? 'Q' : match.matchType === 'playoff' ? 'P' : 'Pr'}
+                        {match.matchNumber}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4 text-center">
+                      {videoUrl ? (
+                        <button
+                          onClick={() => setSelectedVideo({ matchNumber: match.matchNumber, videoUrl })}
+                          className="p-1 text-danger hover:bg-danger/10 rounded transition-colors"
+                          title="Watch match video"
+                        >
+                          <Play size={18} fill="currentColor" />
+                        </button>
+                      ) : (
+                        <span className="text-textMuted text-xs">-</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-4 text-center">
                     <span
                       className={`px-2 py-1 rounded text-xs font-semibold ${
                         match.alliance === 'red'
@@ -268,7 +308,8 @@ function TeamDetail() {
                     {match.commentsOverall}
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -378,6 +419,43 @@ function TeamDetail() {
           </div>
         </div>
       </div>
+
+      {/* Video Modal */}
+      {selectedVideo && (
+        <div
+          className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
+          onClick={() => setSelectedVideo(null)}
+        >
+          <div
+            className="bg-surface rounded-lg max-w-4xl w-full overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b border-border">
+              <h3 className="font-bold">
+                Match Q{selectedVideo.matchNumber} - Team {teamNum}
+              </h3>
+              <button
+                onClick={() => setSelectedVideo(null)}
+                className="p-1 hover:bg-interactive rounded transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="aspect-video w-full">
+              <iframe
+                width="100%"
+                height="100%"
+                src={selectedVideo.videoUrl.replace('watch?v=', 'embed/')}
+                title={`Match Q${selectedVideo.matchNumber}`}
+                frameBorder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                className="w-full h-full"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

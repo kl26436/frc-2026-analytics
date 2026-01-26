@@ -316,15 +316,13 @@ export const usePickListStore = create<PickListState>()(
         const { pickList } = get();
         if (!pickList) return;
 
+        // Clear tier2 (Potatoes) before importing
+        const teamsNotInTier2 = pickList.teams.filter(t => t.tier !== 'tier2');
+
         const top12 = rankings.rankings
           .slice(0, 12)
           .map((ranking, index) => {
             const teamNumber = teamKeyToNumber(ranking.team_key);
-
-            // Check if team already in pick list
-            if (pickList.teams.find(t => t.teamNumber === teamNumber)) {
-              return null;
-            }
 
             const team: PickListTeam = {
               teamNumber,
@@ -336,13 +334,12 @@ export const usePickListStore = create<PickListState>()(
               flagged: false,
             };
             return team;
-          })
-          .filter(t => t !== null) as PickListTeam[];
+          });
 
         set({
           pickList: {
             ...pickList,
-            teams: [...pickList.teams, ...top12],
+            teams: [...teamsNotInTier2, ...top12],
             config: {
               ...pickList.config,
               lastUpdated: new Date().toISOString(),
