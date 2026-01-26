@@ -3,23 +3,46 @@ import { Link } from 'react-router-dom';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { usePickListStore } from '../store/usePickListStore';
 import { useMetricsStore } from '../store/useMetricsStore';
-import { ArrowUpDown, Search, CheckSquare, Square, Plus, Sliders, LayoutGrid, Table2 } from 'lucide-react';
+import { ArrowUp, ArrowDown, Search, CheckSquare, Square, Plus, Sliders, LayoutGrid, Table2, X } from 'lucide-react';
+import { teamKeyToNumber } from '../utils/tbaApi';
 
 type SortDirection = 'asc' | 'desc';
 type ViewMode = 'table' | 'cards';
+type SortCriteria = { field: string; direction: SortDirection };
 
 function TeamList() {
   const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
   const selectedTeams = useAnalyticsStore(state => state.selectedTeams);
   const toggleTeamSelection = useAnalyticsStore(state => state.toggleTeamSelection);
+  const tbaData = useAnalyticsStore(state => state.tbaData);
   const addTeamToTier = usePickListStore(state => state.addTeamToTier);
+  const pickList = usePickListStore(state => state.pickList);
+
+  // Get tier names from pick list config or use defaults
+  const tierNames = {
+    tier1: pickList?.config?.tier1Name || 'Steak',
+    tier2: pickList?.config?.tier2Name || 'Potatoes',
+    tier3: pickList?.config?.tier3Name || 'Chicken Nuggets',
+  };
   const getEnabledColumns = useMetricsStore(state => state.getEnabledColumns);
+
+  // Build a map of team number -> event rank
+  const teamRankMap = useMemo(() => {
+    const map = new Map<number, number>();
+    if (tbaData?.rankings?.rankings) {
+      tbaData.rankings.rankings.forEach(r => {
+        map.set(teamKeyToNumber(r.team_key), r.rank);
+      });
+    }
+    return map;
+  }, [tbaData]);
 
   const enabledColumns = getEnabledColumns();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortField, setSortField] = useState<string>('avgTotalPoints');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [sortCriteria, setSortCriteria] = useState<SortCriteria[]>([
+    { field: 'avgTotalPoints', direction: 'desc' }
+  ]);
   const [showAddMenu, setShowAddMenu] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('table');
 
@@ -36,45 +59,113 @@ function TeamList() {
       );
     }
 
-    // Sort
+    // Multi-sort
     teams.sort((a, b) => {
-      let aValue = (a as any)[sortField];
-      let bValue = (b as any)[sortField];
+      for (const criteria of sortCriteria) {
+        let aValue: number;
+        let bValue: number;
 
-      // Handle undefined values
-      if (aValue === undefined) aValue = 0;
-      if (bValue === undefined) bValue = 0;
+        // Handle eventRank specially (comes from teamRankMap)
+        if (criteria.field === 'eventRank') {
+          aValue = teamRankMap.get(a.teamNumber) ?? 999;
+          bValue = teamRankMap.get(b.teamNumber) ?? 999;
+        } else {
+          aValue = (a as any)[criteria.field];
+          bValue = (b as any)[criteria.field];
+        }
 
-      if (sortDirection === 'asc') {
-        return aValue > bValue ? 1 : -1;
-      } else {
-        return aValue < bValue ? 1 : -1;
+        // Handle undefined values
+        if (aValue === undefined) aValue = 0;
+        if (bValue === undefined) bValue = 0;
+
+        // Compare values
+        if (aValue !== bValue) {
+          if (criteria.direction === 'asc') {
+            return aValue > bValue ? 1 : -1;
+          } else {
+            return aValue < bValue ? 1 : -1;
+          }
+        }
+        // If equal, continue to next sort criteria
       }
+      return 0;
     });
 
     return teams;
-  }, [teamStatistics, searchQuery, sortField, sortDirection]);
+  }, [teamStatistics, searchQuery, sortCriteria, teamRankMap]);
 
-  const handleSort = (field: string) => {
-    if (sortField === field) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field);
-      setSortDirection('desc');
-    }
+  // Handle sort - shift+click adds secondary sort, regular click replaces
+  const handleSort = (field: string, shiftKey: boolean) => {
+    setSortCriteria(prev => {
+      const existingIndex = prev.findIndex(c => c.field === field);
+
+      if (existingIndex !== -1) {
+        // Field already in sort - toggle direction
+        const newCriteria = [...prev];
+        newCriteria[existingIndex] = {
+          ...newCriteria[existingIndex],
+          direction: newCriteria[existingIndex].direction === 'asc' ? 'desc' : 'asc'
+        };
+        return newCriteria;
+      }
+
+      if (shiftKey && prev.length < 3) {
+        // Shift+click: add as secondary sort (max 3)
+        return [...prev, { field, direction: 'desc' }];
+      }
+
+      // Regular click: replace all sorts
+      return [{ field, direction: 'desc' }];
+    });
   };
 
-  const SortButton = ({ field, label }: { field: string; label: string }) => (
-    <button
-      onClick={() => handleSort(field)}
-      className="flex items-center gap-1 hover:text-textPrimary transition-colors"
-    >
-      {label}
-      {sortField === field && (
-        <ArrowUpDown size={14} className={sortDirection === 'desc' ? 'rotate-180' : ''} />
-      )}
-    </button>
-  );
+  // Remove a sort criteria
+  const removeSortCriteria = (field: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSortCriteria(prev => {
+      const filtered = prev.filter(c => c.field !== field);
+      // Always keep at least one sort
+      return filtered.length > 0 ? filtered : [{ field: 'avgTotalPoints', direction: 'desc' }];
+    });
+  };
+
+  const SortButton = ({ field, label }: { field: string; label: string }) => {
+    const criteriaIndex = sortCriteria.findIndex(c => c.field === field);
+    const isActive = criteriaIndex !== -1;
+    const criteria = isActive ? sortCriteria[criteriaIndex] : null;
+    const sortNumber = criteriaIndex + 1;
+
+    return (
+      <button
+        onClick={(e) => handleSort(field, e.shiftKey)}
+        className="flex items-center gap-1 hover:text-textPrimary transition-colors group"
+        title={isActive ? "Click to toggle direction, Shift+click to add secondary sort" : "Click to sort, Shift+click to add as secondary sort"}
+      >
+        {label}
+        {isActive && (
+          <span className="flex items-center gap-0.5">
+            {sortCriteria.length > 1 && (
+              <span className="text-xs text-warning font-bold">{sortNumber}</span>
+            )}
+            {criteria?.direction === 'desc' ? (
+              <ArrowDown size={14} className="text-warning" />
+            ) : (
+              <ArrowUp size={14} className="text-warning" />
+            )}
+            {sortCriteria.length > 1 && (
+              <button
+                onClick={(e) => removeSortCriteria(field, e)}
+                className="ml-0.5 opacity-0 group-hover:opacity-100 hover:text-danger transition-opacity"
+                title="Remove this sort"
+              >
+                <X size={12} />
+              </button>
+            )}
+          </span>
+        )}
+      </button>
+    );
+  };
 
   // Helper to format metric values
   const formatMetricValue = (value: number, format: 'number' | 'percentage' | 'time', decimals: number) => {
@@ -93,7 +184,7 @@ function TeamList() {
     <div className="space-y-4 md:space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <h1 className="text-2xl md:text-3xl font-bold">Team Rankings</h1>
+        <h1 className="text-2xl md:text-3xl font-bold">Team List</h1>
         <div className="flex flex-wrap items-center gap-2 md:gap-4">
           <span className="text-textSecondary text-sm md:text-base">
             {selectedTeams.length} team{selectedTeams.length !== 1 ? 's' : ''} selected
@@ -144,6 +235,40 @@ function TeamList() {
         />
       </div>
 
+      {/* Active Sort Indicators */}
+      {sortCriteria.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-textSecondary">Sorting by:</span>
+          {sortCriteria.map((criteria, index) => (
+            <span
+              key={criteria.field}
+              className="flex items-center gap-1 px-2 py-1 bg-surface border border-border rounded"
+            >
+              <span className="text-warning font-bold">{index + 1}.</span>
+              <span>{criteria.field === 'eventRank' ? 'Rank' :
+                     criteria.field === 'teamNumber' ? 'Team' :
+                     criteria.field === 'matchesPlayed' ? 'Matches' :
+                     enabledColumns.find(c => c.field === criteria.field)?.label || criteria.field}</span>
+              {criteria.direction === 'desc' ? (
+                <ArrowDown size={12} className="text-textSecondary" />
+              ) : (
+                <ArrowUp size={12} className="text-textSecondary" />
+              )}
+              <button
+                onClick={(e) => removeSortCriteria(criteria.field, e)}
+                className="ml-1 hover:text-danger transition-colors"
+                title="Remove this sort"
+              >
+                <X size={12} />
+              </button>
+            </span>
+          ))}
+          {sortCriteria.length < 3 && (
+            <span className="text-textMuted text-xs">(Shift+click column to add)</span>
+          )}
+        </div>
+      )}
+
       {/* Team Display - Table or Cards */}
       {viewMode === 'table' ? (
         <div className="bg-surface rounded-lg border border-border overflow-hidden">
@@ -157,8 +282,11 @@ function TeamList() {
                 <th className="px-4 py-3 text-left text-textSecondary text-sm font-semibold">
                   <SortButton field="teamNumber" label="Team" />
                 </th>
+                <th className="px-3 py-3 text-center text-textSecondary text-sm font-semibold">
+                  <SortButton field="eventRank" label="Rank" />
+                </th>
                 <th className="px-4 py-3 text-center text-textSecondary text-sm font-semibold">
-                  Matches
+                  <SortButton field="matchesPlayed" label="Matches" />
                 </th>
                 {enabledColumns.map(column => (
                   <th key={column.id} className="px-4 py-3 text-right text-textSecondary text-sm font-semibold">
@@ -198,6 +326,13 @@ function TeamList() {
                       )}
                     </Link>
                   </td>
+                  <td className="px-3 py-4 text-center">
+                    {teamRankMap.get(team.teamNumber) ? (
+                      <span className="font-bold text-warning">#{teamRankMap.get(team.teamNumber)}</span>
+                    ) : (
+                      <span className="text-textMuted">-</span>
+                    )}
+                  </td>
                   <td className="px-4 py-4 text-center text-textSecondary">
                     {team.matchesPlayed}
                   </td>
@@ -226,7 +361,7 @@ function TeamList() {
                           }}
                           className="w-full px-4 py-2 text-left hover:bg-interactive transition-colors"
                         >
-                          Add to Steak
+                          Add to {tierNames.tier1}
                         </button>
                         <button
                           onClick={() => {
@@ -235,7 +370,7 @@ function TeamList() {
                           }}
                           className="w-full px-4 py-2 text-left hover:bg-interactive transition-colors"
                         >
-                          Add to Potatoes
+                          Add to {tierNames.tier2}
                         </button>
                         <button
                           onClick={() => {
@@ -244,7 +379,7 @@ function TeamList() {
                           }}
                           className="w-full px-4 py-2 text-left hover:bg-interactive transition-colors"
                         >
-                          Add to Chicken Nuggets
+                          Add to {tierNames.tier3}
                         </button>
                       </div>
                     )}
@@ -267,9 +402,14 @@ function TeamList() {
               {/* Card Header */}
               <div className="flex items-start justify-between">
                 <Link to={`/teams/${team.teamNumber}`} className="flex-1">
-                  <h3 className="text-xl font-bold hover:text-blueAlliance transition-colors">
-                    {team.teamNumber}
-                  </h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-xl font-bold hover:text-blueAlliance transition-colors">
+                      {team.teamNumber}
+                    </h3>
+                    {teamRankMap.get(team.teamNumber) && (
+                      <span className="text-sm font-bold text-warning">#{teamRankMap.get(team.teamNumber)}</span>
+                    )}
+                  </div>
                   {team.teamName && (
                     <p className="text-sm text-textSecondary line-clamp-1">{team.teamName}</p>
                   )}
@@ -323,7 +463,7 @@ function TeamList() {
                       }}
                       className="w-full px-4 py-2 text-left hover:bg-interactive transition-colors rounded-t-lg"
                     >
-                      Add to Steak
+                      Add to {tierNames.tier1}
                     </button>
                     <button
                       onClick={() => {
@@ -332,7 +472,7 @@ function TeamList() {
                       }}
                       className="w-full px-4 py-2 text-left hover:bg-interactive transition-colors"
                     >
-                      Add to Potatoes
+                      Add to {tierNames.tier2}
                     </button>
                     <button
                       onClick={() => {
@@ -341,7 +481,7 @@ function TeamList() {
                       }}
                       className="w-full px-4 py-2 text-left hover:bg-interactive transition-colors rounded-b-lg"
                     >
-                      Add to Chicken Nuggets
+                      Add to {tierNames.tier3}
                     </button>
                   </div>
                 )}

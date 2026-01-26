@@ -20,18 +20,25 @@ export interface TBAEventTeam {
 export interface TBAEventRanking {
   team_key: string; // e.g., "frc148"
   rank: number;
-  wins: number;
-  losses: number;
-  ties: number;
+  record: {
+    wins: number;
+    losses: number;
+    ties: number;
+  };
   qual_average: number | null;
   matches_played: number;
   dq: number;
   sort_orders: number[];
+  extra_stats?: number[];
 }
 
 export interface TBAEventRankings {
   rankings: TBAEventRanking[];
   sort_order_info: {
+    precision: number;
+    name: string;
+  }[];
+  extra_stats_info?: {
     precision: number;
     name: string;
   }[];
@@ -73,4 +80,40 @@ export interface TBAEvent {
   state_prov: string;
   country: string;
   week: number;
+}
+
+// Alliance selection data
+export interface TBAAlliance {
+  name: string; // e.g., "Alliance 1"
+  picks: string[]; // Team keys in pick order, e.g., ["frc148", "frc254", "frc1678"]
+  declines?: string[]; // Teams that declined this alliance
+  backup?: {
+    in: string;
+    out: string;
+  };
+  status?: {
+    playoff_average: number;
+    level: string;
+    record: {
+      wins: number;
+      losses: number;
+      ties: number;
+    };
+    current_level_record: {
+      wins: number;
+      losses: number;
+      ties: number;
+    };
+    status: string;
+  };
+}
+
+// All TBA data for an event
+export interface TBAEventData {
+  event: TBAEvent | null;
+  teams: TBAEventTeam[];
+  matches: TBAMatch[];
+  rankings: TBAEventRankings | null;
+  alliances: TBAAlliance[];
+  lastUpdated: string | null;
 }

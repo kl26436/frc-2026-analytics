@@ -1,13 +1,12 @@
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { BarChart3, Users, GitCompare, ClipboardList, Settings, Sliders, Menu, X, Calendar } from 'lucide-react';
+import { BarChart3, Users, GitCompare, ClipboardList, Sliders, Menu, X, Calendar } from 'lucide-react';
 import { useAnalyticsStore } from './store/useAnalyticsStore';
 import TeamList from './pages/TeamList';
 import TeamComparison from './pages/TeamComparison';
 import Dashboard from './pages/Dashboard';
 import TeamDetail from './pages/TeamDetail';
 import PickList from './pages/PickList';
-import TBASettings from './pages/TBASettings';
 import MetricsSettings from './pages/MetricsSettings';
 import EventSetup from './pages/EventSetup';
 
@@ -29,7 +28,6 @@ function App() {
     { to: '/compare', icon: GitCompare, label: 'Compare' },
     { to: '/picklist', icon: ClipboardList, label: 'Pick List' },
     { to: '/event', icon: Calendar, label: 'Event' },
-    { to: '/settings', icon: Settings, label: 'TBA' },
     { to: '/metrics', icon: Sliders, label: 'Metrics' },
   ];
 
@@ -46,7 +44,7 @@ function App() {
               <div className="flex items-center gap-3 md:gap-4">
                 <img src={`${import.meta.env.BASE_URL}team-logo.png`} alt="Team 148 Logo" className="h-10 w-10 md:h-12 md:w-12 object-contain" />
                 <div>
-                  <h1 className="text-lg md:text-2xl font-bold">Team 148 Analytics</h1>
+                  <h1 className="text-lg md:text-2xl font-bold">Team 148 - Data Wrangler</h1>
                   <p className="text-textSecondary text-xs md:text-sm">REBUILT 2026 • {eventCode}</p>
                 </div>
               </div>
@@ -103,7 +101,6 @@ function App() {
             <Route path="/compare" element={<TeamComparison />} />
             <Route path="/picklist" element={<PickList />} />
             <Route path="/event" element={<EventSetup />} />
-            <Route path="/settings" element={<TBASettings />} />
             <Route path="/metrics" element={<MetricsSettings />} />
           </Routes>
         </main>

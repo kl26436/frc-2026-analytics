@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { X } from 'lucide-react';
+import { X, ArrowUp } from 'lucide-react';
 import type { TeamStatistics } from '../types/scouting';
 
 interface ComparisonModalProps {
@@ -212,18 +212,21 @@ function ComparisonModal({ team1, team2, onPickTeam, onClose }: ComparisonModalP
 
         {/* Footer with action buttons - fixed at bottom */}
         <div className="flex-shrink-0 bg-surfaceElevated p-4 border-t border-border rounded-b-lg">
+          <p className="text-center text-sm text-textSecondary mb-3">Which team should rank higher?</p>
           <div className="grid grid-cols-2 gap-4">
             <button
               onClick={() => onPickTeam(team1.teamNumber)}
-              className="px-4 sm:px-6 py-3 bg-success text-background font-semibold rounded-lg hover:bg-success/90 transition-colors min-h-[48px] text-sm sm:text-base"
+              className="flex items-center justify-center gap-2 px-4 sm:px-6 py-3 bg-success text-background font-semibold rounded-lg hover:bg-success/90 transition-colors min-h-[48px] text-sm sm:text-base"
             >
-              Pick {team1.teamNumber}
+              <ArrowUp size={18} />
+              {team1.teamNumber}
             </button>
             <button
               onClick={() => onPickTeam(team2.teamNumber)}
-              className="px-4 sm:px-6 py-3 bg-success text-background font-semibold rounded-lg hover:bg-success/90 transition-colors min-h-[48px] text-sm sm:text-base"
+              className="flex items-center justify-center gap-2 px-4 sm:px-6 py-3 bg-success text-background font-semibold rounded-lg hover:bg-success/90 transition-colors min-h-[48px] text-sm sm:text-base"
             >
-              Pick {team2.teamNumber}
+              <ArrowUp size={18} />
+              {team2.teamNumber}
             </button>
           </div>
         </div>

@@ -6,6 +6,8 @@ import type {
   TBAMatch,
   TBAEvent,
   TBAEventTeam,
+  TBAAlliance,
+  TBAEventData,
 } from '../types/tba';
 
 const TBA_API_BASE = 'https://www.thebluealliance.com/api/v3';
@@ -54,6 +56,31 @@ export async function getTeam(teamKey: string, apiKey?: string): Promise<TBATeam
 // Get matches for a specific team at an event
 export async function getTeamEventMatches(teamKey: string, eventKey: string, apiKey?: string): Promise<TBAMatch[]> {
   return fetchTBA<TBAMatch[]>(`/team/${teamKey}/event/${eventKey}/matches`, apiKey);
+}
+
+// Get alliance selections at an event
+export async function getEventAlliances(eventKey: string, apiKey?: string): Promise<TBAAlliance[]> {
+  return fetchTBA<TBAAlliance[]>(`/event/${eventKey}/alliances`, apiKey);
+}
+
+// Fetch all TBA data for an event at once
+export async function getAllEventData(eventKey: string, apiKey?: string): Promise<TBAEventData> {
+  const [event, teams, matches, rankings, alliances] = await Promise.all([
+    getEvent(eventKey, apiKey).catch(() => null),
+    getEventTeams(eventKey, apiKey).catch(() => []),
+    getEventMatches(eventKey, apiKey).catch(() => []),
+    getEventRankings(eventKey, apiKey).catch(() => null),
+    getEventAlliances(eventKey, apiKey).catch(() => []),
+  ]);
+
+  return {
+    event,
+    teams,
+    matches,
+    rankings,
+    alliances,
+    lastUpdated: new Date().toISOString(),
+  };
 }
 
 // Get match video URL (YouTube)

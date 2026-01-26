@@ -324,10 +324,10 @@ export const usePickListStore = create<PickListState>()(
         // Helper to build notes
         const buildNotes = (ranking: any) => {
           let notes = `Event Rank ${ranking.rank}`;
-          if (typeof ranking.wins === 'number' && typeof ranking.losses === 'number') {
-            notes += ` - ${ranking.wins}W/${ranking.losses}L`;
-            if (ranking.ties > 0) {
-              notes += `/${ranking.ties}T`;
+          if (ranking.record && typeof ranking.record.wins === 'number' && typeof ranking.record.losses === 'number') {
+            notes += ` - ${ranking.record.wins}W/${ranking.record.losses}L`;
+            if (ranking.record.ties > 0) {
+              notes += `/${ranking.record.ties}T`;
             }
           }
           return notes;

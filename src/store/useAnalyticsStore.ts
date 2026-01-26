@@ -1,13 +1,21 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { MatchScoutingEntry, PitScoutingEntry, TeamStatistics } from '../types/scouting';
+import type { TBAEventData } from '../types/tba';
 import { generateMockData } from '../data/mockData';
 import { calculateAllTeamStatistics } from '../utils/statistics';
+import { getAllEventData } from '../utils/tbaApi';
 
 interface AnalyticsState {
   // Raw data
   matchEntries: MatchScoutingEntry[];
   pitEntries: PitScoutingEntry[];
+
+  // TBA data
+  tbaData: TBAEventData | null;
+  tbaLoading: boolean;
+  tbaError: string | null;
+  autoRefreshEnabled: boolean;
 
   // Calculated stats
   teamStatistics: TeamStatistics[];
@@ -22,6 +30,9 @@ interface AnalyticsState {
   toggleTeamSelection: (teamNumber: number) => void;
   clearTeamSelection: () => void;
   setEventCode: (code: string) => void;
+  fetchTBAData: (eventCode?: string) => Promise<TBAEventData | null>;
+  setAutoRefresh: (enabled: boolean) => void;
+  clearTBAData: () => void;
 }
 
 export const useAnalyticsStore = create<AnalyticsState>()(
@@ -33,6 +44,10 @@ export const useAnalyticsStore = create<AnalyticsState>()(
       teamStatistics: [],
       selectedTeams: [],
       eventCode: '2025txcmp1',
+      tbaData: null,
+      tbaLoading: false,
+      tbaError: null,
+      autoRefreshEnabled: false,
 
       // Load mock data
       loadMockData: async () => {
@@ -68,12 +83,40 @@ export const useAnalyticsStore = create<AnalyticsState>()(
       setEventCode: (code: string) => {
         set({ eventCode: code });
       },
+
+      // Fetch TBA data for current or specified event
+      fetchTBAData: async (eventCodeOverride?: string) => {
+        const code = eventCodeOverride || get().eventCode;
+        set({ tbaLoading: true, tbaError: null });
+
+        try {
+          const data = await getAllEventData(code);
+          set({ tbaData: data, tbaLoading: false });
+          return data;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Failed to fetch TBA data';
+          set({ tbaError: message, tbaLoading: false });
+          return null;
+        }
+      },
+
+      // Toggle auto-refresh
+      setAutoRefresh: (enabled: boolean) => {
+        set({ autoRefreshEnabled: enabled });
+      },
+
+      // Clear TBA data
+      clearTBAData: () => {
+        set({ tbaData: null, tbaError: null });
+      },
     }),
     {
       name: 'frc-analytics-storage',
       partialize: (state) => ({
         eventCode: state.eventCode,
         selectedTeams: state.selectedTeams,
+        tbaData: state.tbaData,
+        autoRefreshEnabled: state.autoRefreshEnabled,
       }),
     }
   )

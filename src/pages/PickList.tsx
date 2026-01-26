@@ -35,7 +35,6 @@ import {
   GitCompare,
   CheckSquare,
   Square,
-  Play,
 } from 'lucide-react';
 import type { PickListTeam } from '../types/pickList';
 
@@ -111,7 +110,13 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onT
         {/* Team info */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <span className="font-bold text-sm">{team.teamNumber}</span>
+            <Link
+              to={`/teams/${team.teamNumber}`}
+              className="font-bold text-sm text-textPrimary hover:text-blueAlliance transition-colors"
+              title="View team details"
+            >
+              {team.teamNumber}
+            </Link>
             {teamStats?.teamName && (
               <span className="text-xs text-textSecondary truncate">{teamStats.teamName}</span>
             )}
@@ -278,13 +283,6 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onT
         {/* Actions - only show for teams in tiers */}
         {currentTier && (
           <div className="flex flex-col gap-1">
-            <Link
-              to={`/teams/${team.teamNumber}`}
-              className="p-1 text-textMuted hover:text-danger rounded transition-colors"
-              title="View match videos"
-            >
-              <Play size={14} />
-            </Link>
             <button
               onClick={() => onToggleFlag?.()}
               className={`p-1 rounded transition-colors ${

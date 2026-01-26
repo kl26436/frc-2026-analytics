@@ -2,10 +2,11 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { usePickListStore } from '../store/usePickListStore';
-import { ArrowLeft, TrendingUp, TrendingDown, Minus, Play, X } from 'lucide-react';
+import { ArrowLeft, TrendingUp, TrendingDown, Minus, Play, X, FileText } from 'lucide-react';
 import type { MatchScoutingEntry } from '../types/scouting';
 import type { TBAMatch } from '../types/tba';
 import { getTeamEventMatches, getMatchVideoUrl, teamNumberToKey } from '../utils/tbaApi';
+import MatchDetailModal from '../components/MatchDetailModal';
 
 function TeamDetail() {
   const { teamNumber } = useParams<{ teamNumber: string }>();
@@ -18,6 +19,7 @@ function TeamDetail() {
 
   const [tbaMatches, setTbaMatches] = useState<TBAMatch[]>([]);
   const [selectedVideo, setSelectedVideo] = useState<{ matchNumber: number; videoUrl: string } | null>(null);
+  const [selectedMatch, setSelectedMatch] = useState<MatchScoutingEntry | null>(null);
 
   const teamNum = parseInt(teamNumber || '0');
   const teamStats = teamStatistics.find(t => t.teamNumber === teamNum);
@@ -249,10 +251,15 @@ function TeamDetail() {
                 return (
                   <tr key={match.id} className="hover:bg-interactive transition-colors">
                     <td className="px-4 py-4">
-                      <span className="font-semibold">
+                      <button
+                        onClick={() => setSelectedMatch(match)}
+                        className="flex items-center gap-1 font-semibold text-textPrimary hover:text-blueAlliance transition-colors"
+                        title="View full scouting data"
+                      >
                         {match.matchType === 'qualification' ? 'Q' : match.matchType === 'playoff' ? 'P' : 'Pr'}
                         {match.matchNumber}
-                      </span>
+                        <FileText size={14} className="text-textMuted" />
+                      </button>
                     </td>
                     <td className="px-4 py-4 text-center">
                       {videoUrl ? (
@@ -460,6 +467,14 @@ function TeamDetail() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Match Detail Modal */}
+      {selectedMatch && (
+        <MatchDetailModal
+          match={selectedMatch}
+          onClose={() => setSelectedMatch(null)}
+        />
       )}
     </div>
   );

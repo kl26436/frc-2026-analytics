@@ -6,6 +6,25 @@ const avg = (values: number[]): number => {
   return values.reduce((sum, val) => sum + val, 0) / values.length;
 };
 
+// Helper to calculate max
+const max = (values: number[]): number => {
+  if (values.length === 0) return 0;
+  return Math.max(...values);
+};
+
+// Helper to calculate min (for non-zero values, useful for times)
+const minNonZero = (values: number[]): number => {
+  const nonZero = values.filter(v => v > 0);
+  if (nonZero.length === 0) return 0;
+  return Math.min(...nonZero);
+};
+
+// Helper to calculate min
+const min = (values: number[]): number => {
+  if (values.length === 0) return 0;
+  return Math.min(...values);
+};
+
 // Helper to calculate percentage
 const percentage = (count: number, total: number): number => {
   if (total === 0) return 0;
@@ -107,6 +126,15 @@ export function calculateTeamStatistics(
       avgAutoPoints: 0,
       avgTeleopPoints: 0,
       avgEndgamePoints: 0,
+      maxTotalPoints: 0,
+      maxAutoPoints: 0,
+      maxTeleopPoints: 0,
+      maxEndgamePoints: 0,
+      maxAutoFuelScored: 0,
+      maxTeleopFuelScored: 0,
+      maxCycleCount: 0,
+      minTotalPoints: 0,
+      minClimbTime: 0,
       pitData: pitEntry,
     };
   }
@@ -215,6 +243,19 @@ export function calculateTeamStatistics(
     avgAutoPoints: avg(autoPoints),
     avgTeleopPoints: avg(teleopPoints),
     avgEndgamePoints: avg(endgamePoints),
+
+    // Max values (best performances)
+    maxTotalPoints: max(totalPoints),
+    maxAutoPoints: max(autoPoints),
+    maxTeleopPoints: max(teleopPoints),
+    maxEndgamePoints: max(endgamePoints),
+    maxAutoFuelScored: max(autoFuelScored),
+    maxTeleopFuelScored: max(teleopTotalScored),
+    maxCycleCount: max(cycleCount),
+
+    // Min values
+    minTotalPoints: min(totalPoints),
+    minClimbTime: minNonZero(climbTimes),
 
     pitData: pitEntry,
   };

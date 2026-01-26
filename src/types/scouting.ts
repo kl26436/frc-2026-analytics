@@ -171,11 +171,24 @@ export interface TeamStatistics {
   yellowCardRate: number;
   redCardRate: number;
 
-  // OVERALL
+  // OVERALL - Averages
   avgTotalPoints: number; // estimated points per match
   avgAutoPoints: number;
   avgTeleopPoints: number;
   avgEndgamePoints: number;
+
+  // OVERALL - Max values (best performances)
+  maxTotalPoints: number;
+  maxAutoPoints: number;
+  maxTeleopPoints: number;
+  maxEndgamePoints: number;
+  maxAutoFuelScored: number;
+  maxTeleopFuelScored: number;
+  maxCycleCount: number;
+
+  // OVERALL - Min values
+  minTotalPoints: number;
+  minClimbTime: number; // fastest climb
 
   // PIT data (if available)
   pitData?: PitScoutingEntry;
