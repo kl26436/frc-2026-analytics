@@ -311,33 +311,53 @@ export const usePickListStore = create<PickListState>()(
         });
       },
 
-      // Import teams from TBA rankings (top 12 to tier 2)
+      // Import teams from TBA rankings (all teams with ranking info)
       importFromTBARankings: (rankings) => {
         const { pickList } = get();
         if (!pickList) return;
 
-        // Clear tier2 (Potatoes) before importing
-        const teamsNotInTier2 = pickList.teams.filter(t => t.tier !== 'tier2');
+        // Clear tier2 and tier3 before importing
+        const teamsInTier1 = pickList.teams.filter(t => t.tier === 'tier1');
 
+        // Helper to build notes
+        const buildNotes = (ranking: any) => {
+          let notes = `Event Rank ${ranking.rank}`;
+          if (typeof ranking.wins === 'number' && typeof ranking.losses === 'number') {
+            notes += ` - ${ranking.wins}W/${ranking.losses}L`;
+            if (ranking.ties > 0) {
+              notes += `/${ranking.ties}T`;
+            }
+          }
+          return notes;
+        };
+
+        // Top 12 go to tier2 (Potatoes)
         const top12 = rankings.rankings
           .slice(0, 12)
           .map((ranking, index) => {
             const teamNumber = teamKeyToNumber(ranking.team_key);
-
-            // Build notes with ranking info and win/loss record if available
-            let notes = `TBA Rank ${ranking.rank}`;
-            if (typeof ranking.wins === 'number' && typeof ranking.losses === 'number') {
-              notes += ` - ${ranking.wins}W/${ranking.losses}L`;
-              if (ranking.ties > 0) {
-                notes += `/${ranking.ties}T`;
-              }
-            }
-
             const team: PickListTeam = {
               teamNumber,
               tier: 'tier2',
               rank: index + 1,
-              notes,
+              notes: buildNotes(ranking),
+              isPicked: false,
+              tags: [],
+              flagged: false,
+            };
+            return team;
+          });
+
+        // Remaining teams go to tier3 (Chicken Nuggets)
+        const remaining = rankings.rankings
+          .slice(12)
+          .map((ranking, index) => {
+            const teamNumber = teamKeyToNumber(ranking.team_key);
+            const team: PickListTeam = {
+              teamNumber,
+              tier: 'tier3',
+              rank: index + 1,
+              notes: buildNotes(ranking),
               isPicked: false,
               tags: [],
               flagged: false,
@@ -348,7 +368,7 @@ export const usePickListStore = create<PickListState>()(
         set({
           pickList: {
             ...pickList,
-            teams: [...teamsNotInTier2, ...top12],
+            teams: [...teamsInTier1, ...top12, ...remaining],
             config: {
               ...pickList.config,
               lastUpdated: new Date().toISOString(),

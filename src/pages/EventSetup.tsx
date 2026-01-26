@@ -87,7 +87,9 @@ function EventSetup() {
         try {
           const rankings = await getEventRankings(inputEventCode, tbaApiKey);
           importFromTBARankings(rankings);
-          rankingsMessage = ` Top ${Math.min(12, rankings.rankings.length)} teams imported to "Potatoes" tier by ranking.`;
+          const top12Count = Math.min(12, rankings.rankings.length);
+          const remainingCount = Math.max(0, rankings.rankings.length - 12);
+          rankingsMessage = ` ${top12Count} teams imported to "Potatoes", ${remainingCount} to "Chicken Nuggets" by event ranking.`;
         } catch (error) {
           console.error('Failed to import rankings:', error);
           rankingsMessage = ' Rankings import failed - you can import manually from TBA Settings.';
@@ -280,11 +282,11 @@ function EventSetup() {
               <li>Set the new event as active</li>
               <li>Load all teams and match data from TBA</li>
               <li>Generate mock scouting data for the new event</li>
-              <li>Automatically import top 12 teams by ranking (if rankings available)</li>
+              <li>Automatically import ALL teams by event ranking (if rankings available)</li>
             </ul>
           </p>
           <p>
-            <strong className="text-textPrimary">4. Customize Pick List:</strong> Teams are ordered by TBA ranking in the "Potatoes" tier. Move teams to "Steak" or "Chicken Nuggets" as needed.
+            <strong className="text-textPrimary">4. Customize Pick List:</strong> Top 12 teams go to "Potatoes", remaining teams to "Chicken Nuggets". All teams show their event rank and W/L record. Move teams to "Steak" as needed.
           </p>
         </div>
       </div>
