@@ -1,13 +1,45 @@
+import { useState, useEffect } from 'react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
-import { X, AlertCircle } from 'lucide-react';
+import { usePickListStore } from '../store/usePickListStore';
+import { X, AlertCircle, Play } from 'lucide-react';
 import type { TeamStatistics } from '../types/scouting';
+import type { TBAMatch } from '../types/tba';
+import { getTeamEventMatches, getMatchVideoUrl, teamNumberToKey } from '../utils/tbaApi';
 
 function TeamComparison() {
   const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
   const selectedTeams = useAnalyticsStore(state => state.selectedTeams);
   const toggleTeamSelection = useAnalyticsStore(state => state.toggleTeamSelection);
+  const eventCode = useAnalyticsStore(state => state.eventCode);
+  const tbaApiKey = usePickListStore(state => state.tbaApiKey);
+
+  const [selectedVideoTeam, setSelectedVideoTeam] = useState<number | null>(null);
+  const [teamVideos, setTeamVideos] = useState<Record<number, TBAMatch[]>>({});
 
   const selectedTeamStats = teamStatistics.filter(t => selectedTeams.includes(t.teamNumber));
+
+  // Fetch TBA matches for selected teams
+  useEffect(() => {
+    async function fetchAllTeamMatches() {
+      const videos: Record<number, TBAMatch[]> = {};
+      for (const team of selectedTeamStats) {
+        try {
+          const teamKey = teamNumberToKey(team.teamNumber);
+          const matches = await getTeamEventMatches(teamKey, eventCode, tbaApiKey);
+          const matchesWithVideos = matches.filter(m => m.videos && m.videos.length > 0);
+          if (matchesWithVideos.length > 0) {
+            videos[team.teamNumber] = matchesWithVideos;
+          }
+        } catch (error) {
+          console.error(`Failed to load videos for team ${team.teamNumber}:`, error);
+        }
+      }
+      setTeamVideos(videos);
+    }
+    if (selectedTeamStats.length > 0) {
+      fetchAllTeamMatches();
+    }
+  }, [selectedTeamStats, eventCode, tbaApiKey]);
 
   if (selectedTeamStats.length === 0) {
     return (
@@ -94,26 +126,38 @@ function TeamComparison() {
       {/* Team Headers */}
       <div className="grid gap-4" style={{ gridTemplateColumns: `200px repeat(${selectedTeamStats.length}, 1fr)` }}>
         <div></div>
-        {selectedTeamStats.map(team => (
-          <div
-            key={team.teamNumber}
-            className="bg-surface rounded-lg border border-border p-4 relative"
-          >
-            <button
-              onClick={() => toggleTeamSelection(team.teamNumber)}
-              className="absolute top-2 right-2 text-textMuted hover:text-danger transition-colors"
+        {selectedTeamStats.map(team => {
+          const videos = teamVideos[team.teamNumber] || [];
+          return (
+            <div
+              key={team.teamNumber}
+              className="bg-surface rounded-lg border border-border p-4 relative"
             >
-              <X size={20} />
-            </button>
-            <p className="text-2xl font-bold">{team.teamNumber}</p>
-            {team.teamName && (
-              <p className="text-sm text-textSecondary mt-1">{team.teamName}</p>
-            )}
-            <p className="text-xs text-textMuted mt-2">
-              {team.matchesPlayed} matches
-            </p>
-          </div>
-        ))}
+              <button
+                onClick={() => toggleTeamSelection(team.teamNumber)}
+                className="absolute top-2 right-2 text-textMuted hover:text-danger transition-colors"
+              >
+                <X size={20} />
+              </button>
+              <p className="text-2xl font-bold">{team.teamNumber}</p>
+              {team.teamName && (
+                <p className="text-sm text-textSecondary mt-1">{team.teamName}</p>
+              )}
+              <p className="text-xs text-textMuted mt-2">
+                {team.matchesPlayed} matches
+              </p>
+              {videos.length > 0 && (
+                <button
+                  onClick={() => setSelectedVideoTeam(team.teamNumber)}
+                  className="mt-3 flex items-center gap-1 text-xs text-danger hover:underline"
+                >
+                  <Play size={12} fill="currentColor" />
+                  {videos.length} video{videos.length !== 1 ? 's' : ''}
+                </button>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* Comparison Table */}
@@ -258,6 +302,66 @@ function TeamComparison() {
           <span>Worst Performance</span>
         </div>
       </div>
+
+      {/* Video Modal */}
+      {selectedVideoTeam && teamVideos[selectedVideoTeam] && (
+        <div
+          className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
+          onClick={() => setSelectedVideoTeam(null)}
+        >
+          <div
+            className="bg-surface rounded-lg max-w-4xl w-full max-h-[90vh] overflow-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sticky top-0 bg-surface flex items-center justify-between p-4 border-b border-border">
+              <h3 className="font-bold">Team {selectedVideoTeam} - Match Videos</h3>
+              <button
+                onClick={() => setSelectedVideoTeam(null)}
+                className="p-1 hover:bg-interactive rounded transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-4 space-y-3">
+              {teamVideos[selectedVideoTeam]
+                .sort((a, b) => {
+                  const levelOrder = { f: 5, sf: 4, qf: 3, ef: 2, qm: 1 };
+                  if (levelOrder[a.comp_level] !== levelOrder[b.comp_level]) {
+                    return levelOrder[b.comp_level] - levelOrder[a.comp_level];
+                  }
+                  return b.match_number - a.match_number;
+                })
+                .map((match) => {
+                  const videoUrl = getMatchVideoUrl(match);
+                  if (!videoUrl) return null;
+
+                  const matchLabel = match.comp_level === 'qm'
+                    ? `Qual ${match.match_number}`
+                    : `${match.comp_level.toUpperCase()} ${match.set_number}-${match.match_number}`;
+
+                  return (
+                    <a
+                      key={match.key}
+                      href={videoUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-3 p-3 bg-surfaceElevated hover:bg-interactive rounded-lg transition-colors border border-border"
+                    >
+                      <Play size={20} className="text-danger" fill="currentColor" />
+                      <div className="flex-1">
+                        <p className="font-semibold">{matchLabel}</p>
+                        <p className="text-xs text-textSecondary">
+                          {match.alliances.red.score} - {match.alliances.blue.score}
+                        </p>
+                      </div>
+                      <span className="text-xs text-textMuted">Watch on YouTube</span>
+                    </a>
+                  );
+                })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
