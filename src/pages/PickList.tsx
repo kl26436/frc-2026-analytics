@@ -361,15 +361,15 @@ function PickList() {
 
         // If pick list is empty, add top 12 to tier2
         if (pickList.teams.length === 0) {
-          sortedTeams.slice(0, 12).forEach((team) => {
-            addTeamToTier(team.teamNumber, 'tier2');
+          sortedTeams.slice(0, 12).forEach((team, index) => {
+            addTeamToTier(team.teamNumber, 'tier2', `Rank ${index + 1} by points`);
           });
         }
 
-        // Add all remaining teams (not in pick list) to tier3
-        sortedTeams.forEach((team) => {
+        // Add all remaining teams (not in pick list) to tier3 with ranking info
+        sortedTeams.forEach((team, index) => {
           if (!existingTeamNumbers.has(team.teamNumber)) {
-            addTeamToTier(team.teamNumber, 'tier3');
+            addTeamToTier(team.teamNumber, 'tier3', `Rank ${index + 1} by points`);
           }
         });
 
@@ -443,7 +443,8 @@ function PickList() {
     // Only move if it's a different tier
     if (existingTeam.tier !== targetTier) {
       const tierTeams = pickList.teams.filter(t => t.tier === targetTier);
-      const newRank = tierTeams.length + 1;
+      const maxRank = tierTeams.length > 0 ? Math.max(...tierTeams.map(t => t.rank)) : 0;
+      const newRank = maxRank + 1;
       moveTeam(activeTeamNumber, targetTier, newRank);
     }
   };
@@ -451,7 +452,8 @@ function PickList() {
   const handleMoveTier = (teamNumber: number, newTier: 'tier1' | 'tier2' | 'tier3') => {
     if (!pickList) return;
     const tierTeams = pickList.teams.filter(t => t.tier === newTier);
-    const newRank = tierTeams.length + 1;
+    const maxRank = tierTeams.length > 0 ? Math.max(...tierTeams.map(t => t.rank)) : 0;
+    const newRank = maxRank + 1;
     moveTeam(teamNumber, newTier, newRank);
   };
 

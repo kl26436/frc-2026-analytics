@@ -14,7 +14,7 @@ interface PickListState {
   setTBAApiKey: (key: string) => void;
 
   // Team management
-  addTeamToTier: (teamNumber: number, tier: 'tier1' | 'tier2' | 'tier3') => void;
+  addTeamToTier: (teamNumber: number, tier: 'tier1' | 'tier2' | 'tier3', notes?: string) => void;
   moveTeam: (teamNumber: number, newTier: 'tier1' | 'tier2' | 'tier3', newRank: number) => void;
   removeTeam: (teamNumber: number) => void;
   swapTeamRanks: (teamNumber1: number, teamNumber2: number) => void;
@@ -88,7 +88,7 @@ export const usePickListStore = create<PickListState>()(
       },
 
       // Add team to a tier
-      addTeamToTier: (teamNumber, tier) => {
+      addTeamToTier: (teamNumber, tier, notes = '') => {
         const { pickList } = get();
         if (!pickList) return;
 
@@ -105,7 +105,7 @@ export const usePickListStore = create<PickListState>()(
           teamNumber,
           tier,
           rank: maxRank + 1,
-          notes: '',
+          notes,
           isPicked: false,
           tags: [],
           flagged: false,
@@ -328,7 +328,7 @@ export const usePickListStore = create<PickListState>()(
               teamNumber,
               tier: 'tier2',
               rank: index + 1,
-              notes: `Rank ${ranking.rank} - ${ranking.wins}W/${ranking.losses}L`,
+              notes: `Rank ${ranking.rank}${ranking.wins !== undefined && ranking.losses !== undefined ? ` - ${ranking.wins}W/${ranking.losses}L` : ''}`,
               isPicked: false,
               tags: [],
               flagged: false,
