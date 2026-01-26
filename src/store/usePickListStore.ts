@@ -321,6 +321,9 @@ export const usePickListStore = create<PickListState>()(
         // Clear tier2, tier3, and tier4 before importing
         const teamsInTier1 = pickList.teams.filter(t => t.tier === 'tier1');
 
+        // Ensure rankings are sorted by event rank (ascending)
+        const sortedRankings = [...rankings.rankings].sort((a, b) => a.rank - b.rank);
+
         // Helper to build notes
         const buildNotes = (ranking: any) => {
           let notes = `Event Rank ${ranking.rank}`;
@@ -333,8 +336,8 @@ export const usePickListStore = create<PickListState>()(
           return notes;
         };
 
-        // Top 12 go to tier2 (Potatoes)
-        const top12 = rankings.rankings
+        // Top 12 go to tier2 (Potatoes) - preserve event ranking order
+        const top12 = sortedRankings
           .slice(0, 12)
           .map((ranking, index) => {
             const teamNumber = teamKeyToNumber(ranking.team_key);
@@ -350,8 +353,8 @@ export const usePickListStore = create<PickListState>()(
             return team;
           });
 
-        // Remaining teams go to tier3 (Chicken Nuggets)
-        const remaining = rankings.rankings
+        // Remaining teams go to tier3 (Chicken Nuggets) - preserve event ranking order
+        const remaining = sortedRankings
           .slice(12)
           .map((ranking, index) => {
             const teamNumber = teamKeyToNumber(ranking.team_key);

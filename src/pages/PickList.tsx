@@ -407,8 +407,11 @@ function PickList() {
       setTier3Name(pickList.config.tier3Name);
       setTier4Name(pickList.config.tier4Name || 'Do Not Pick'); // Fallback for older pick lists
 
-      // Auto-populate tiers on first load
-      if (!initialized && teamStatistics.length > 0) {
+      // Auto-populate tiers on first load (only if TBA rankings weren't imported)
+      // Skip if teams already have "Event Rank" notes (from TBA import)
+      const hasEventRankings = pickList.teams.some(t => t.notes?.includes('Event Rank'));
+
+      if (!initialized && teamStatistics.length > 0 && !hasEventRankings) {
         const existingTeamNumbers = new Set(pickList.teams.map(t => t.teamNumber));
 
         // If pick list is empty (no TBA rankings imported), add top 12 to tier2 as fallback
@@ -443,6 +446,9 @@ function PickList() {
           addTeamToTier(team.teamNumber, 'tier3');
         });
 
+        setInitialized(true);
+      } else if (!initialized && hasEventRankings) {
+        // TBA rankings were imported, just mark as initialized
         setInitialized(true);
       }
     }

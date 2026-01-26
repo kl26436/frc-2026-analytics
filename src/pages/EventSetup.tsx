@@ -139,7 +139,17 @@ function EventSetup() {
     if (confirm('Are you sure you want to clear the entire pick list? This cannot be undone.')) {
       clearPickList();
       initializePickList(eventCode);
-      setStatus({ type: 'success', message: 'Pick list cleared and reinitialized' });
+
+      // Re-import TBA rankings if available
+      let message = 'Pick list cleared and reinitialized';
+      if (tbaData.rankings && tbaData.rankings.rankings.length > 0) {
+        importFromTBARankings(tbaData.rankings);
+        const top12Count = Math.min(12, tbaData.rankings.rankings.length);
+        const remainingCount = Math.max(0, tbaData.rankings.rankings.length - 12);
+        message += `. ${top12Count} teams imported to tier 2, ${remainingCount} to tier 3 (by event rank).`;
+      }
+
+      setStatus({ type: 'success', message });
     }
   };
 

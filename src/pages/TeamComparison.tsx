@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { usePickListStore } from '../store/usePickListStore';
-import { X, AlertCircle, Play } from 'lucide-react';
+import { X, AlertCircle, Play, ArrowLeft } from 'lucide-react';
 import type { TeamStatistics } from '../types/scouting';
 import type { TBAMatch } from '../types/tba';
 import { getTeamEventMatches, getMatchVideoUrl, teamNumberToKey } from '../utils/tbaApi';
 
 function TeamComparison() {
+  const navigate = useNavigate();
   const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
   const selectedTeams = useAnalyticsStore(state => state.selectedTeams);
   const toggleTeamSelection = useAnalyticsStore(state => state.toggleTeamSelection);
@@ -17,6 +19,13 @@ function TeamComparison() {
   const [teamVideos, setTeamVideos] = useState<Record<number, TBAMatch[]>>({});
 
   const selectedTeamStats = teamStatistics.filter(t => selectedTeams.includes(t.teamNumber));
+
+  // Navigate back to Teams page when all teams are deselected
+  useEffect(() => {
+    if (selectedTeamStats.length === 0) {
+      navigate('/teams');
+    }
+  }, [selectedTeamStats.length, navigate]);
 
   // Fetch TBA matches for selected teams
   useEffect(() => {
@@ -49,12 +58,12 @@ function TeamComparison() {
         <p className="text-textSecondary mb-6">
           Go to the Teams page and select teams to compare
         </p>
-        <a
-          href="/teams"
+        <button
+          onClick={() => navigate('/teams')}
           className="px-6 py-3 bg-white text-background font-semibold rounded-lg hover:bg-textSecondary transition-colors"
         >
           Go to Teams
-        </a>
+        </button>
       </div>
     );
   }
@@ -117,7 +126,16 @@ function TeamComparison() {
     <div className="space-y-4 md:space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <h1 className="text-2xl md:text-3xl font-bold">Team Comparison</h1>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate('/teams')}
+            className="p-2 text-textSecondary hover:text-textPrimary hover:bg-interactive rounded-lg transition-colors"
+            title="Back to Teams"
+          >
+            <ArrowLeft size={24} />
+          </button>
+          <h1 className="text-2xl md:text-3xl font-bold">Team Comparison</h1>
+        </div>
         <p className="text-textSecondary text-sm md:text-base">
           Comparing {selectedTeamStats.length} team{selectedTeamStats.length !== 1 ? 's' : ''}
         </p>

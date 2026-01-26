@@ -9,6 +9,8 @@ interface MetricsState {
   // Actions
   toggleColumn: (columnId: string) => void;
   updateColumn: (columnId: string, updates: Partial<MetricColumn>) => void;
+  addColumn: (column: MetricColumn) => void;
+  deleteColumn: (columnId: string) => void;
   reorderColumns: (fromIndex: number, toIndex: number) => void;
   resetToDefaults: () => void;
   getEnabledColumns: () => MetricColumn[];
@@ -45,6 +47,30 @@ export const useMetricsStore = create<MetricsState>()(
             columns: config.columns.map(col =>
               col.id === columnId ? { ...col, ...updates } : col
             ),
+            lastUpdated: new Date().toISOString(),
+          },
+        });
+      },
+
+      // Add a new column
+      addColumn: (column) => {
+        const { config } = get();
+        set({
+          config: {
+            ...config,
+            columns: [...config.columns, column],
+            lastUpdated: new Date().toISOString(),
+          },
+        });
+      },
+
+      // Delete a column
+      deleteColumn: (columnId) => {
+        const { config } = get();
+        set({
+          config: {
+            ...config,
+            columns: config.columns.filter(col => col.id !== columnId),
             lastUpdated: new Date().toISOString(),
           },
         });

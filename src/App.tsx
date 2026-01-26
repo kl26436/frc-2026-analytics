@@ -1,6 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { BarChart3, Users, GitCompare, ClipboardList, Sliders, Menu, X, Calendar } from 'lucide-react';
+import { BarChart3, Users, ClipboardList, Menu, X, Calendar } from 'lucide-react';
 import { useAnalyticsStore } from './store/useAnalyticsStore';
 import TeamList from './pages/TeamList';
 import TeamComparison from './pages/TeamComparison';
@@ -25,10 +25,8 @@ function App() {
   const navLinks = [
     { to: '/', icon: BarChart3, label: 'Dashboard' },
     { to: '/teams', icon: Users, label: 'Teams' },
-    { to: '/compare', icon: GitCompare, label: 'Compare' },
     { to: '/picklist', icon: ClipboardList, label: 'Pick List' },
     { to: '/event', icon: Calendar, label: 'Event' },
-    { to: '/metrics', icon: Sliders, label: 'Metrics' },
   ];
 
   const closeMobileMenu = () => setMobileMenuOpen(false);

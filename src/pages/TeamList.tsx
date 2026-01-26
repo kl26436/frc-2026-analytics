@@ -1,9 +1,9 @@
 import { useState, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { usePickListStore } from '../store/usePickListStore';
 import { useMetricsStore } from '../store/useMetricsStore';
-import { ArrowUp, ArrowDown, Search, CheckSquare, Square, Plus, Sliders, LayoutGrid, Table2, X } from 'lucide-react';
+import { ArrowUp, ArrowDown, Search, CheckSquare, Square, Plus, Sliders, LayoutGrid, Table2, X, GitCompare } from 'lucide-react';
 import { teamKeyToNumber } from '../utils/tbaApi';
 
 type SortDirection = 'asc' | 'desc';
@@ -11,6 +11,7 @@ type ViewMode = 'table' | 'cards';
 type SortCriteria = { field: string; direction: SortDirection };
 
 function TeamList() {
+  const navigate = useNavigate();
   const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
   const selectedTeams = useAnalyticsStore(state => state.selectedTeams);
   const toggleTeamSelection = useAnalyticsStore(state => state.toggleTeamSelection);
@@ -189,6 +190,18 @@ function TeamList() {
           <span className="text-textSecondary text-sm md:text-base">
             {selectedTeams.length} team{selectedTeams.length !== 1 ? 's' : ''} selected
           </span>
+
+          {/* Compare Selected Button */}
+          {selectedTeams.length >= 2 && (
+            <button
+              onClick={() => navigate('/compare')}
+              className="flex items-center gap-2 px-3 py-2 bg-blueAlliance hover:bg-blueAlliance/80 text-white rounded-lg transition-colors text-sm font-medium"
+            >
+              <GitCompare size={16} />
+              <span className="hidden sm:inline">Compare Selected</span>
+              <span className="sm:hidden">Compare</span>
+            </button>
+          )}
 
           {/* View Toggle */}
           <div className="flex gap-1 bg-surface border border-border rounded-lg p-1">
