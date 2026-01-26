@@ -354,18 +354,23 @@ function PickList() {
       setTier3Name(pickList.config.tier3Name);
 
       // Auto-populate tiers on first load
-      if (!initialized && pickList.teams.length === 0 && teamStatistics.length > 0) {
+      if (!initialized && teamStatistics.length > 0) {
         // Sort teams by total points (TBA ranking approximation)
         const sortedTeams = [...teamStatistics].sort((a, b) => b.avgTotalPoints - a.avgTotalPoints);
+        const existingTeamNumbers = new Set(pickList.teams.map(t => t.teamNumber));
 
-        // Top 12 go to Potatoes (tier2)
-        sortedTeams.slice(0, 12).forEach((team) => {
-          addTeamToTier(team.teamNumber, 'tier2');
-        });
+        // If pick list is empty, add top 12 to tier2
+        if (pickList.teams.length === 0) {
+          sortedTeams.slice(0, 12).forEach((team) => {
+            addTeamToTier(team.teamNumber, 'tier2');
+          });
+        }
 
-        // Rest go to Chicken Nuggets (tier3)
-        sortedTeams.slice(12).forEach((team) => {
-          addTeamToTier(team.teamNumber, 'tier3');
+        // Add all remaining teams (not in pick list) to tier3
+        sortedTeams.forEach((team) => {
+          if (!existingTeamNumbers.has(team.teamNumber)) {
+            addTeamToTier(team.teamNumber, 'tier3');
+          }
         });
 
         setInitialized(true);
