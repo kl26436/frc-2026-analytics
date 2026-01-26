@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { usePickListStore } from '../store/usePickListStore';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
+import { useComparisonMode } from '../hooks/useComparisonMode';
+import ComparisonModal from '../components/ComparisonModal';
 import {
   DndContext,
   DragOverlay,
@@ -29,17 +31,23 @@ import {
   ArrowDown,
   ChevronsUp,
   ChevronsDown,
+  GitCompare,
+  CheckSquare,
+  Square,
 } from 'lucide-react';
 import type { PickListTeam } from '../types/pickList';
 
 // Sortable team card component
-function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onToggleFlag }: {
+function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onToggleFlag, isCompareMode, isSelected, onToggleSelection }: {
   team: PickListTeam | { teamNumber: number; teamName?: string; avgTotalPoints: number; level3ClimbRate: number; avgAutoPoints: number };
   currentTier?: 'tier1' | 'tier2' | 'tier3';
   tierNames?: { tier1: string; tier2: string; tier3: string };
   onMoveTier?: (tier: 'tier1' | 'tier2' | 'tier3') => void;
   onUpdateNotes?: (notes: string) => void;
   onToggleFlag?: () => void;
+  isCompareMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelection?: () => void;
 }) {
   const {
     attributes,
@@ -73,18 +81,30 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onT
       className={`bg-surface border rounded-lg p-2 mb-2 ${
         isPickListTeam && team.flagged
           ? 'border-danger'
+          : isSelected
+          ? 'border-success ring-2 ring-success'
           : 'border-border'
       }`}
     >
       <div className="flex items-start gap-2">
-        {/* Drag handle */}
-        <div
-          {...listeners}
-          {...attributes}
-          className="cursor-grab active:cursor-grabbing text-textMuted hover:text-textPrimary mt-1 touch-none"
-        >
-          <GripVertical size={16} />
-        </div>
+        {/* Checkbox for compare mode or drag handle for normal mode */}
+        {isCompareMode ? (
+          <button
+            onClick={onToggleSelection}
+            className="p-1 mt-1 text-textPrimary hover:text-success transition-colors"
+            title="Select for comparison"
+          >
+            {isSelected ? <CheckSquare size={20} className="text-success" /> : <Square size={20} />}
+          </button>
+        ) : (
+          <div
+            {...listeners}
+            {...attributes}
+            className="cursor-grab active:cursor-grabbing text-textMuted hover:text-textPrimary mt-1 touch-none"
+          >
+            <GripVertical size={16} />
+          </div>
+        )}
 
         {/* Team info */}
         <div className="flex-1 min-w-0">
@@ -226,13 +246,16 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onT
 }
 
 // Droppable column component
-function DroppableColumn({ id, title, teams, tier, tierNames, onMoveTier }: {
+function DroppableColumn({ id, title, teams, tier, tierNames, onMoveTier, isCompareMode, selectedTeams, onToggleTeamSelection }: {
   id: string;
   title: string;
   teams: any[];
   tier?: 'tier1' | 'tier2' | 'tier3';
   tierNames?: { tier1: string; tier2: string; tier3: string };
   onMoveTier?: (teamNumber: number, newTier: 'tier1' | 'tier2' | 'tier3') => void;
+  isCompareMode?: boolean;
+  selectedTeams?: number[];
+  onToggleTeamSelection?: (teamNumber: number) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id });
   const updateNotes = usePickListStore(state => state.updateNotes);
@@ -257,6 +280,9 @@ function DroppableColumn({ id, title, teams, tier, tierNames, onMoveTier }: {
               onMoveTier={tier && onMoveTier ? (newTier) => onMoveTier(team.teamNumber, newTier) : undefined}
               onUpdateNotes={tier ? (notes) => updateNotes(team.teamNumber, notes) : undefined}
               onToggleFlag={tier ? () => toggleFlag(team.teamNumber) : undefined}
+              isCompareMode={isCompareMode}
+              isSelected={selectedTeams?.includes(team.teamNumber)}
+              onToggleSelection={onToggleTeamSelection ? () => onToggleTeamSelection(team.teamNumber) : undefined}
             />
           ))}
           {teams.length === 0 && (
@@ -280,6 +306,7 @@ function PickList() {
   const importPickList = usePickListStore(state => state.importPickList);
   const addTeamToTier = usePickListStore(state => state.addTeamToTier);
   const moveTeam = usePickListStore(state => state.moveTeam);
+  const moveTeamAbove = usePickListStore(state => state.moveTeamAbove);
   const eventCode = useAnalyticsStore(state => state.eventCode);
   const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
 
@@ -289,6 +316,17 @@ function PickList() {
   const [tier3Name, setTier3Name] = useState('Chicken Nuggets');
   const [activeId, setActiveId] = useState<string | null>(null);
   const [initialized, setInitialized] = useState(false);
+
+  // Comparison mode
+  const {
+    isCompareMode,
+    selectedTeams,
+    toggleCompareMode,
+    toggleTeamSelection,
+    clearSelection,
+    canCompare
+  } = useComparisonMode();
+  const [showComparisonModal, setShowComparisonModal] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -436,6 +474,22 @@ function PickList() {
     setShowSettings(false);
   };
 
+  const handleOpenComparison = () => {
+    if (canCompare) {
+      setShowComparisonModal(true);
+    }
+  };
+
+  const handlePickWinner = (winnerTeamNumber: number) => {
+    const loserTeamNumber = selectedTeams.find(t => t !== winnerTeamNumber);
+    if (loserTeamNumber) {
+      moveTeamAbove(winnerTeamNumber, loserTeamNumber);
+    }
+    setShowComparisonModal(false);
+    clearSelection();
+    toggleCompareMode(); // Exit compare mode
+  };
+
   if (!pickList) {
     return <div>Loading...</div>;
   }
@@ -456,6 +510,18 @@ function PickList() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <button
+            onClick={toggleCompareMode}
+            className={`flex items-center gap-2 px-3 md:px-4 py-2 rounded-lg transition-colors text-sm md:text-base ${
+              isCompareMode
+                ? 'bg-success text-background hover:bg-success/90'
+                : 'bg-surface hover:bg-interactive'
+            }`}
+          >
+            <GitCompare size={18} />
+            <span className="hidden sm:inline">Compare Mode</span>
+            <span className="sm:hidden">Compare</span>
+          </button>
           <button
             onClick={() => setShowSettings(!showSettings)}
             className="flex items-center gap-2 px-3 md:px-4 py-2 bg-surface hover:bg-interactive rounded-lg transition-colors text-sm md:text-base"
@@ -526,6 +592,36 @@ function PickList() {
         </div>
       )}
 
+      {/* Compare Mode Status */}
+      {isCompareMode && (
+        <div className="bg-surfaceElevated p-4 rounded-lg border border-border flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <GitCompare size={24} className="text-success" />
+            <div>
+              <p className="font-semibold">Compare Mode Active</p>
+              <p className="text-sm text-textSecondary">
+                {selectedTeams.length === 0
+                  ? 'Select 2 teams to compare'
+                  : selectedTeams.length === 1
+                  ? '1 team selected - select 1 more'
+                  : `2 teams selected - ${selectedTeams[0]} vs ${selectedTeams[1]}`}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={handleOpenComparison}
+            disabled={!canCompare}
+            className={`px-6 py-3 rounded-lg font-semibold transition-colors min-w-[160px] ${
+              canCompare
+                ? 'bg-success text-background hover:bg-success/90'
+                : 'bg-surfaceElevated text-textMuted cursor-not-allowed'
+            }`}
+          >
+            Compare Teams
+          </button>
+        </div>
+      )}
+
       {/* Three-column drag-and-drop layout */}
       <DndContext
         sensors={sensors}
@@ -545,6 +641,9 @@ function PickList() {
               tier3: pickList.config.tier3Name,
             }}
             onMoveTier={handleMoveTier}
+            isCompareMode={isCompareMode}
+            selectedTeams={selectedTeams}
+            onToggleTeamSelection={toggleTeamSelection}
           />
           <DroppableColumn
             id="tier2-column"
@@ -557,6 +656,9 @@ function PickList() {
               tier3: pickList.config.tier3Name,
             }}
             onMoveTier={handleMoveTier}
+            isCompareMode={isCompareMode}
+            selectedTeams={selectedTeams}
+            onToggleTeamSelection={toggleTeamSelection}
           />
           <DroppableColumn
             id="tier3-column"
@@ -569,6 +671,9 @@ function PickList() {
               tier3: pickList.config.tier3Name,
             }}
             onMoveTier={handleMoveTier}
+            isCompareMode={isCompareMode}
+            selectedTeams={selectedTeams}
+            onToggleTeamSelection={toggleTeamSelection}
           />
         </div>
 
@@ -583,6 +688,16 @@ function PickList() {
           ) : null}
         </DragOverlay>
       </DndContext>
+
+      {/* Comparison Modal */}
+      {showComparisonModal && selectedTeams.length === 2 && (
+        <ComparisonModal
+          team1={teamStatistics.find(t => t.teamNumber === selectedTeams[0])!}
+          team2={teamStatistics.find(t => t.teamNumber === selectedTeams[1])!}
+          onPickTeam={handlePickWinner}
+          onClose={() => setShowComparisonModal(false)}
+        />
+      )}
     </div>
   );
 }

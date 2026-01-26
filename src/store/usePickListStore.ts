@@ -18,6 +18,7 @@ interface PickListState {
   moveTeam: (teamNumber: number, newTier: 'tier1' | 'tier2' | 'tier3', newRank: number) => void;
   removeTeam: (teamNumber: number) => void;
   swapTeamRanks: (teamNumber1: number, teamNumber2: number) => void;
+  moveTeamAbove: (winnerTeamNumber: number, loserTeamNumber: number) => void;
 
   // Team metadata
   updateNotes: (teamNumber: number, notes: string) => void;
@@ -193,6 +194,40 @@ export const usePickListStore = create<PickListState>()(
             },
           },
         });
+      },
+
+      // Move winner team above loser team (for comparison feature)
+      moveTeamAbove: (winnerTeamNumber, loserTeamNumber) => {
+        const { pickList, moveTeam } = get();
+        if (!pickList) return;
+
+        const winner = pickList.teams.find(t => t.teamNumber === winnerTeamNumber);
+        const loser = pickList.teams.find(t => t.teamNumber === loserTeamNumber);
+
+        if (!winner || !loser) return;
+
+        const tierHierarchy = { tier1: 1, tier2: 2, tier3: 3 };
+
+        // Same tier: winner moves to loser's rank, loser shifts down
+        if (winner.tier === loser.tier) {
+          const tierTeams = pickList.teams
+            .filter(t => t.tier === winner.tier)
+            .sort((a, b) => a.rank - b.rank);
+
+          const winnerIdx = tierTeams.findIndex(t => t.teamNumber === winnerTeamNumber);
+          const loserIdx = tierTeams.findIndex(t => t.teamNumber === loserTeamNumber);
+
+          // Only move if winner is currently ranked lower (higher rank number)
+          if (winnerIdx > loserIdx) {
+            moveTeam(winnerTeamNumber, winner.tier, loser.rank);
+          }
+        }
+        // Cross-tier: promote winner if from lower tier
+        else if (tierHierarchy[winner.tier] > tierHierarchy[loser.tier]) {
+          // Winner in lower tier, promote to loser's tier at loser's rank
+          moveTeam(winnerTeamNumber, loser.tier, loser.rank);
+        }
+        // Winner already in higher tier, no change needed
       },
 
       // Update team notes
