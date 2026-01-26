@@ -17,7 +17,7 @@ interface AnalyticsState {
   eventCode: string;
 
   // Actions
-  loadMockData: () => void;
+  loadMockData: () => Promise<void>;
   calculateStats: () => void;
   toggleTeamSelection: (teamNumber: number) => void;
   clearTeamSelection: () => void;
@@ -32,11 +32,11 @@ export const useAnalyticsStore = create<AnalyticsState>()(
       pitEntries: [],
       teamStatistics: [],
       selectedTeams: [],
-      eventCode: '2026txgre',
+      eventCode: '2025txcmp1',
 
       // Load mock data
-      loadMockData: () => {
-        const { matchEntries, pitEntries } = generateMockData();
+      loadMockData: async () => {
+        const { matchEntries, pitEntries } = await generateMockData();
         set({ matchEntries, pitEntries });
         get().calculateStats();
       },

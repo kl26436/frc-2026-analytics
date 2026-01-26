@@ -17,7 +17,9 @@ function App() {
 
   // Load mock data on mount
   useEffect(() => {
-    loadMockData();
+    loadMockData().catch(error => {
+      console.error('Failed to load mock data:', error);
+    });
   }, [loadMockData]);
 
   const navLinks = [

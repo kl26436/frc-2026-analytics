@@ -1,39 +1,18 @@
 import type { MatchScoutingEntry, PitScoutingEntry } from '../types/scouting';
+import { getEventTeams, getEventMatches, teamKeyToNumber } from '../utils/tbaApi';
+import type { TBAMatch } from '../types/tba';
 
 // Helper to generate random number in range
 const randInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
 const randChoice = <T,>(arr: T[]): T => arr[randInt(0, arr.length - 1)];
 const randBool = (probability = 0.5) => Math.random() < probability;
 
-// Teams at a typical Texas regional
-const TEAMS = [
-  { number: 148, name: 'Robowranglers' },
-  { number: 118, name: 'Robonauts' },
-  { number: 1477, name: 'Texas Torque' },
-  { number: 2848, name: 'Gear It Forward' },
-  { number: 624, name: 'CRyptonite' },
-  { number: 3310, name: 'Blackhawks' },
-  { number: 3005, name: 'RoboChargers' },
-  { number: 4522, name: 'SCREAM Robotics' },
-  { number: 5549, name: 'Grizzly Robotics' },
-  { number: 6377, name: 'Howdy Bots' },
-  { number: 4639, name: 'The RoboDawgs' },
-  { number: 1296, name: 'Full Metal Jackets' },
-  { number: 3847, name: 'Spectrum' },
-  { number: 5940, name: 'BREAD' },
-  { number: 418, name: 'Purple Haze' },
-  { number: 1429, name: 'The Wyldcats' },
-  { number: 2881, name: 'Lady Cans' },
-  { number: 3200, name: 'STRYKE' },
-  { number: 4206, name: 'Roarbots' },
-  { number: 4587, name: 'Jersey Voltage' },
-  { number: 5431, name: 'Titan Robotics' },
-  { number: 6357, name: 'The Spring Konstant' },
-  { number: 7157, name: 'Bobcat Robotics' },
-  { number: 8230, name: 'Infinity Robotics' },
-];
+// Event to use for mock data - 2025 Texas Championship 1
+const EVENT_CODE = '2025txcmp1';
 
-const EVENT_CODE = '2026txgre';
+// Cache for TBA data
+let cachedTeams: { number: number; name: string }[] | null = null;
+let cachedMatches: TBAMatch[] | null = null;
 const SCOUT_NAMES = ['Alex', 'Jordan', 'Taylor', 'Morgan', 'Casey', 'Riley'];
 
 // Generate a single match entry for a team
@@ -176,28 +155,89 @@ function generatePitEntry(teamNumber: number, teamName: string): PitScoutingEntr
   };
 }
 
-// Generate mock data for all teams
-export function generateMockData(): {
+// Fetch teams from TBA
+async function fetchTeamsFromTBA(): Promise<{ number: number; name: string }[]> {
+  if (cachedTeams) return cachedTeams;
+
+  try {
+    const tbaTeams = await getEventTeams(EVENT_CODE);
+    cachedTeams = tbaTeams.map(team => ({
+      number: team.team_number,
+      name: team.nickname || `Team ${team.team_number}`,
+    }));
+    return cachedTeams;
+  } catch (error) {
+    console.error('Failed to fetch teams from TBA, using fallback:', error);
+    // Fallback to some default teams
+    cachedTeams = [
+      { number: 148, name: 'Robowranglers' },
+      { number: 118, name: 'Robonauts' },
+      { number: 1477, name: 'Texas Torque' },
+    ];
+    return cachedTeams;
+  }
+}
+
+// Fetch matches from TBA
+async function fetchMatchesFromTBA(): Promise<TBAMatch[]> {
+  if (cachedMatches) return cachedMatches;
+
+  try {
+    cachedMatches = await getEventMatches(EVENT_CODE);
+    return cachedMatches;
+  } catch (error) {
+    console.error('Failed to fetch matches from TBA:', error);
+    cachedMatches = [];
+    return cachedMatches;
+  }
+}
+
+// Generate mock data for all teams based on TBA event
+export async function generateMockData(): Promise<{
   matchEntries: MatchScoutingEntry[];
   pitEntries: PitScoutingEntry[];
-} {
+}> {
   const matchEntries: MatchScoutingEntry[] = [];
   const pitEntries: PitScoutingEntry[] = [];
 
+  // Fetch real teams and matches from TBA
+  const teams = await fetchTeamsFromTBA();
+  const tbaMatches = await fetchMatchesFromTBA();
+
   // Generate pit scouting for all teams
-  TEAMS.forEach(team => {
+  teams.forEach(team => {
     pitEntries.push(generatePitEntry(team.number, team.name));
   });
 
-  // Generate 6 qualification matches per team (typical for early in event)
-  TEAMS.forEach(team => {
-    for (let match = 1; match <= 6; match++) {
-      matchEntries.push(generateMatchEntry(team.number, match, 'qualification'));
+  // Generate match entries based on real TBA matches
+  tbaMatches.forEach(match => {
+    // Only process qualification matches for now
+    if (match.comp_level === 'qm') {
+      // Generate entries for all 6 teams in the match (3 red, 3 blue)
+      const allTeamKeys = [...match.alliances.red.team_keys, ...match.alliances.blue.team_keys];
+
+      allTeamKeys.forEach(teamKey => {
+        const teamNumber = teamKeyToNumber(teamKey);
+        if (teams.some(t => t.number === teamNumber)) {
+          matchEntries.push(generateMatchEntry(teamNumber, match.match_number, 'qualification'));
+        }
+      });
     }
   });
+
+  // If no TBA matches, generate fallback data
+  if (matchEntries.length === 0) {
+    teams.forEach(team => {
+      for (let match = 1; match <= 6; match++) {
+        matchEntries.push(generateMatchEntry(team.number, match, 'qualification'));
+      }
+    });
+  }
 
   return { matchEntries, pitEntries };
 }
 
-// Export team list
-export { TEAMS };
+// Export teams getter
+export async function getTeams() {
+  return await fetchTeamsFromTBA();
+}
