@@ -36,7 +36,7 @@ function App() {
   const closeMobileMenu = () => setMobileMenuOpen(false);
 
   return (
-    <Router>
+    <Router basename="/frc-2026-analytics">
       <div className="min-h-screen bg-background text-textPrimary">
         {/* Header */}
         <header className="bg-surface border-b border-border sticky top-0 z-50">

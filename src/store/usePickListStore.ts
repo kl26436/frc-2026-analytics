@@ -9,13 +9,13 @@ interface PickListState {
   tbaApiKey: string;
 
   // Actions
-  initializePickList: (eventKey: string, tier1Name?: string, tier2Name?: string, tier3Name?: string) => void;
-  setTierNames: (tier1: string, tier2: string, tier3: string) => void;
+  initializePickList: (eventKey: string, tier1Name?: string, tier2Name?: string, tier3Name?: string, tier4Name?: string) => void;
+  setTierNames: (tier1: string, tier2: string, tier3: string, tier4: string) => void;
   setTBAApiKey: (key: string) => void;
 
   // Team management
-  addTeamToTier: (teamNumber: number, tier: 'tier1' | 'tier2' | 'tier3', notes?: string) => void;
-  moveTeam: (teamNumber: number, newTier: 'tier1' | 'tier2' | 'tier3', newRank: number) => void;
+  addTeamToTier: (teamNumber: number, tier: 'tier1' | 'tier2' | 'tier3' | 'tier4', notes?: string) => void;
+  moveTeam: (teamNumber: number, newTier: 'tier1' | 'tier2' | 'tier3' | 'tier4', newRank: number) => void;
   removeTeam: (teamNumber: number) => void;
   swapTeamRanks: (teamNumber1: number, teamNumber2: number) => void;
   moveTeamAbove: (winnerTeamNumber: number, loserTeamNumber: number) => void;
@@ -31,7 +31,7 @@ interface PickListState {
   importFromTBARankings: (rankings: TBAEventRankings) => void;
 
   // Sorting
-  sortTier: (tier: 'tier1' | 'tier2' | 'tier3', sortBy: 'rank' | 'teamNumber' | 'points' | 'climb' | 'auto') => void;
+  sortTier: (tier: 'tier1' | 'tier2' | 'tier3' | 'tier4', sortBy: 'rank' | 'teamNumber' | 'points' | 'climb' | 'auto') => void;
 
   // Bulk operations
   clearPickList: () => void;
@@ -46,12 +46,13 @@ export const usePickListStore = create<PickListState>()(
       tbaApiKey: '',
 
       // Initialize a new pick list
-      initializePickList: (eventKey, tier1Name = 'Steak', tier2Name = 'Potatoes', tier3Name = 'Chicken Nuggets') => {
+      initializePickList: (eventKey, tier1Name = 'Steak', tier2Name = 'Potatoes', tier3Name = 'Chicken Nuggets', tier4Name = 'Do Not Pick') => {
         const config: PickListConfig = {
           eventKey,
           tier1Name,
           tier2Name,
           tier3Name,
+          tier4Name,
           lastUpdated: new Date().toISOString(),
         };
 
@@ -64,7 +65,7 @@ export const usePickListStore = create<PickListState>()(
       },
 
       // Set custom tier names
-      setTierNames: (tier1, tier2, tier3) => {
+      setTierNames: (tier1, tier2, tier3, tier4) => {
         const { pickList } = get();
         if (!pickList) return;
 
@@ -76,6 +77,7 @@ export const usePickListStore = create<PickListState>()(
               tier1Name: tier1,
               tier2Name: tier2,
               tier3Name: tier3,
+              tier4Name: tier4,
               lastUpdated: new Date().toISOString(),
             },
           },
@@ -206,7 +208,7 @@ export const usePickListStore = create<PickListState>()(
 
         if (!winner || !loser) return;
 
-        const tierHierarchy = { tier1: 1, tier2: 2, tier3: 3 };
+        const tierHierarchy = { tier1: 1, tier2: 2, tier3: 3, tier4: 4 };
 
         // Same tier: winner moves to loser's rank, loser shifts down
         if (winner.tier === loser.tier) {
@@ -316,7 +318,7 @@ export const usePickListStore = create<PickListState>()(
         const { pickList } = get();
         if (!pickList) return;
 
-        // Clear tier2 and tier3 before importing
+        // Clear tier2, tier3, and tier4 before importing
         const teamsInTier1 = pickList.teams.filter(t => t.tier === 'tier1');
 
         // Helper to build notes

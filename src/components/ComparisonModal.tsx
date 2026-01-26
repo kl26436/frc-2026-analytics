@@ -65,7 +65,7 @@ function ComparisonModal({ team1, team2, onPickTeam, onClose }: ComparisonModalP
     };
 
     return (
-      <div className="grid grid-cols-[1fr_100px_100px] gap-2 py-2 border-b border-border">
+      <div className="grid grid-cols-[1fr_80px_80px] sm:grid-cols-[1fr_100px_100px] gap-2 py-2 border-b border-border">
         <div className="text-sm text-textSecondary">{label}</div>
         <div className={`text-sm text-center ${getColorClass(value1)}`}>
           {formatValue(value1)}
@@ -89,11 +89,12 @@ function ComparisonModal({ team1, team2, onPickTeam, onClose }: ComparisonModalP
       onClick={onClose}
     >
       <div
-        className="bg-surface rounded-lg w-full max-w-[900px] max-h-[90vh] overflow-hidden flex flex-col"
+        className="bg-surface rounded-lg w-full max-w-[900px] max-h-[90vh] relative flex flex-col"
         onClick={e => e.stopPropagation()}
+        style={{ WebkitOverflowScrolling: 'touch' }}
       >
-        {/* Header */}
-        <div className="sticky top-0 bg-surfaceElevated p-4 border-b border-border flex justify-between items-center">
+        {/* Header - fixed at top */}
+        <div className="flex-shrink-0 bg-surfaceElevated p-4 border-b border-border flex justify-between items-center rounded-t-lg">
           <h2 className="text-xl font-bold">Team Comparison</h2>
           <button
             onClick={onClose}
@@ -104,8 +105,8 @@ function ComparisonModal({ team1, team2, onPickTeam, onClose }: ComparisonModalP
           </button>
         </div>
 
-        {/* Team Headers */}
-        <div className="grid grid-cols-[1fr_100px_100px] gap-2 p-4 border-b border-border bg-surface sticky top-[60px]">
+        {/* Team Headers - fixed below header */}
+        <div className="flex-shrink-0 grid grid-cols-[1fr_80px_80px] sm:grid-cols-[1fr_100px_100px] gap-2 p-4 border-b border-border bg-surface">
           <div className="text-sm font-semibold text-textSecondary">Metric</div>
           <div className="text-center">
             <div className="text-lg font-bold">{team1.teamNumber}</div>
@@ -121,8 +122,11 @@ function ComparisonModal({ team1, team2, onPickTeam, onClose }: ComparisonModalP
           </div>
         </div>
 
-        {/* Scrollable Content */}
-        <div className="overflow-y-auto flex-1 p-4">
+        {/* Scrollable Content - takes remaining space */}
+        <div
+          className="flex-1 overflow-y-auto p-4 min-h-0"
+          style={{ WebkitOverflowScrolling: 'touch' }}
+        >
           {/* Overall Scoring */}
           <CategoryHeader title="Overall Scoring" />
           <StatRow label="Avg Total Points" getValue={t => t.avgTotalPoints} />
@@ -206,20 +210,20 @@ function ComparisonModal({ team1, team2, onPickTeam, onClose }: ComparisonModalP
           />
         </div>
 
-        {/* Footer with action buttons */}
-        <div className="sticky bottom-0 bg-surfaceElevated p-4 border-t border-border">
+        {/* Footer with action buttons - fixed at bottom */}
+        <div className="flex-shrink-0 bg-surfaceElevated p-4 border-t border-border rounded-b-lg">
           <div className="grid grid-cols-2 gap-4">
             <button
               onClick={() => onPickTeam(team1.teamNumber)}
-              className="px-6 py-3 bg-success text-background font-semibold rounded-lg hover:bg-success/90 transition-colors min-h-[48px]"
+              className="px-4 sm:px-6 py-3 bg-success text-background font-semibold rounded-lg hover:bg-success/90 transition-colors min-h-[48px] text-sm sm:text-base"
             >
-              Pick Team {team1.teamNumber}
+              Pick {team1.teamNumber}
             </button>
             <button
               onClick={() => onPickTeam(team2.teamNumber)}
-              className="px-6 py-3 bg-success text-background font-semibold rounded-lg hover:bg-success/90 transition-colors min-h-[48px]"
+              className="px-4 sm:px-6 py-3 bg-success text-background font-semibold rounded-lg hover:bg-success/90 transition-colors min-h-[48px] text-sm sm:text-base"
             >
-              Pick Team {team2.teamNumber}
+              Pick {team2.teamNumber}
             </button>
           </div>
         </div>

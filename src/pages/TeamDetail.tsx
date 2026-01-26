@@ -1,4 +1,4 @@
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { usePickListStore } from '../store/usePickListStore';
@@ -9,6 +9,7 @@ import { getTeamEventMatches, getMatchVideoUrl, teamNumberToKey } from '../utils
 
 function TeamDetail() {
   const { teamNumber } = useParams<{ teamNumber: string }>();
+  const navigate = useNavigate();
   const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
   const matchEntries = useAnalyticsStore(state => state.matchEntries);
   const pitEntries = useAnalyticsStore(state => state.pitEntries);
@@ -43,9 +44,12 @@ function TeamDetail() {
     return (
       <div className="text-center py-20">
         <h2 className="text-2xl font-bold mb-4">Team Not Found</h2>
-        <Link to="/teams" className="text-blueAlliance hover:underline">
-          Back to Teams
-        </Link>
+        <button
+          onClick={() => navigate(-1)}
+          className="text-blueAlliance hover:underline"
+        >
+          Go Back
+        </button>
       </div>
     );
   }
@@ -100,12 +104,13 @@ function TeamDetail() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Link
-          to="/teams"
+        <button
+          onClick={() => navigate(-1)}
           className="p-2 bg-surface hover:bg-interactive rounded-lg transition-colors"
+          title="Go back"
         >
           <ArrowLeft size={20} />
-        </Link>
+        </button>
         <div className="flex-1">
           <div className="flex items-center gap-4">
             <h1 className="text-4xl font-bold">{teamStats.teamNumber}</h1>
