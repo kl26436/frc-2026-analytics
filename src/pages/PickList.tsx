@@ -355,28 +355,40 @@ function PickList() {
 
       // Auto-populate tiers on first load
       if (!initialized && teamStatistics.length > 0) {
-        // Sort teams by total points (TBA ranking approximation)
-        const sortedTeams = [...teamStatistics].sort((a, b) => b.avgTotalPoints - a.avgTotalPoints);
         const existingTeamNumbers = new Set(pickList.teams.map(t => t.teamNumber));
 
-        // If pick list is empty, add top 12 to tier2
-        if (pickList.teams.length === 0) {
-          sortedTeams.slice(0, 12).forEach((team, index) => {
-            addTeamToTier(team.teamNumber, 'tier2', `Rank ${index + 1} by points`);
+        // Sort remaining teams by: points -> level3ClimbRate -> autoPoints
+        const sortedTeams = [...teamStatistics]
+          .filter(team => !existingTeamNumbers.has(team.teamNumber))
+          .sort((a, b) => {
+            // Primary: Total points
+            if (b.avgTotalPoints !== a.avgTotalPoints) {
+              return b.avgTotalPoints - a.avgTotalPoints;
+            }
+            // Secondary: Level 3 climb rate
+            if (b.level3ClimbRate !== a.level3ClimbRate) {
+              return b.level3ClimbRate - a.level3ClimbRate;
+            }
+            // Tertiary: Auto points
+            return b.avgAutoPoints - a.avgAutoPoints;
           });
-        }
 
-        // Add all remaining teams (not in pick list) to tier3 with ranking info
-        sortedTeams.forEach((team, index) => {
-          if (!existingTeamNumbers.has(team.teamNumber)) {
-            addTeamToTier(team.teamNumber, 'tier3', `Rank ${index + 1} by points`);
-          }
+        // Add all remaining teams to tier3 (no notes - only TBA rankings get notes)
+        sortedTeams.forEach((team) => {
+          addTeamToTier(team.teamNumber, 'tier3');
         });
 
         setInitialized(true);
       }
     }
   }, [pickList, eventCode, initializePickList, teamStatistics, addTeamToTier, initialized]);
+
+  // Auto-open comparison modal when 2 teams are selected
+  useEffect(() => {
+    if (canCompare && isCompareMode) {
+      setShowComparisonModal(true);
+    }
+  }, [canCompare, isCompareMode]);
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id.toString());
@@ -488,12 +500,6 @@ function PickList() {
   const handleSaveTierNames = () => {
     setTierNames(tier1Name, tier2Name, tier3Name);
     setShowSettings(false);
-  };
-
-  const handleOpenComparison = () => {
-    if (canCompare) {
-      setShowComparisonModal(true);
-    }
   };
 
   const handlePickWinner = (winnerTeamNumber: number) => {
@@ -610,31 +616,20 @@ function PickList() {
 
       {/* Compare Mode Status */}
       {isCompareMode && (
-        <div className="bg-surfaceElevated p-4 rounded-lg border border-border flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="bg-surfaceElevated p-4 rounded-lg border border-success">
           <div className="flex items-center gap-3">
             <GitCompare size={24} className="text-success" />
             <div>
-              <p className="font-semibold">Compare Mode Active</p>
+              <p className="font-semibold text-success">Compare Mode Active</p>
               <p className="text-sm text-textSecondary">
                 {selectedTeams.length === 0
-                  ? 'Select 2 teams to compare'
+                  ? 'Click on any 2 teams to compare them'
                   : selectedTeams.length === 1
-                  ? '1 team selected - select 1 more'
-                  : `2 teams selected - ${selectedTeams[0]} vs ${selectedTeams[1]}`}
+                  ? '1 team selected - click 1 more to compare'
+                  : `Comparing Team ${selectedTeams[0]} vs Team ${selectedTeams[1]}`}
               </p>
             </div>
           </div>
-          <button
-            onClick={handleOpenComparison}
-            disabled={!canCompare}
-            className={`px-6 py-3 rounded-lg font-semibold transition-colors min-w-[160px] ${
-              canCompare
-                ? 'bg-success text-background hover:bg-success/90'
-                : 'bg-surfaceElevated text-textMuted cursor-not-allowed'
-            }`}
-          >
-            Compare Teams
-          </button>
         </div>
       )}
 

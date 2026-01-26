@@ -324,11 +324,20 @@ export const usePickListStore = create<PickListState>()(
           .map((ranking, index) => {
             const teamNumber = teamKeyToNumber(ranking.team_key);
 
+            // Build notes with ranking info and win/loss record if available
+            let notes = `TBA Rank ${ranking.rank}`;
+            if (typeof ranking.wins === 'number' && typeof ranking.losses === 'number') {
+              notes += ` - ${ranking.wins}W/${ranking.losses}L`;
+              if (ranking.ties > 0) {
+                notes += `/${ranking.ties}T`;
+              }
+            }
+
             const team: PickListTeam = {
               teamNumber,
               tier: 'tier2',
               rank: index + 1,
-              notes: `Rank ${ranking.rank}${ranking.wins !== undefined && ranking.losses !== undefined ? ` - ${ranking.wins}W/${ranking.losses}L` : ''}`,
+              notes,
               isPicked: false,
               tags: [],
               flagged: false,
