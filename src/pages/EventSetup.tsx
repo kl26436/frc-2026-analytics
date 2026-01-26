@@ -11,6 +11,7 @@ function EventSetup() {
   const tbaApiKey = usePickListStore(state => state.tbaApiKey);
   const clearPickList = usePickListStore(state => state.clearPickList);
   const initializePickList = usePickListStore(state => state.initializePickList);
+  const importFromTBARankings = usePickListStore(state => state.importFromTBARankings);
 
   const [inputEventCode, setInputEventCode] = useState(eventCode);
   const [isLoading, setIsLoading] = useState(false);
@@ -81,12 +82,24 @@ function EventSetup() {
       initializePickList(inputEventCode);
 
       // Step 4: Clear mock data cache and reload
-      // Force cache clear by reloading the page data
       await loadMockData();
+
+      // Step 5: Import rankings if available
+      let rankingsMessage = '';
+      if (eventInfo.hasRankings) {
+        try {
+          const rankings = await getEventRankings(inputEventCode, tbaApiKey);
+          importFromTBARankings(rankings);
+          rankingsMessage = ` Top ${Math.min(12, rankings.rankings.length)} teams imported to "Potatoes" tier by ranking.`;
+        } catch (error) {
+          console.error('Failed to import rankings:', error);
+          rankingsMessage = ' Rankings import failed - you can import manually from TBA Settings.';
+        }
+      }
 
       setStatus({
         type: 'success',
-        message: `Event ${inputEventCode} initialized successfully! Pick list cleared and data loaded.`,
+        message: `Event ${inputEventCode} initialized successfully! Pick list cleared and data loaded.${rankingsMessage}`,
       });
     } catch (error) {
       setStatus({
@@ -267,10 +280,11 @@ function EventSetup() {
               <li>Set the new event as active</li>
               <li>Load all teams and match data from TBA</li>
               <li>Generate mock scouting data for the new event</li>
+              <li>Automatically import top 12 teams by ranking (if rankings available)</li>
             </ul>
           </p>
           <p>
-            <strong className="text-textPrimary">4. Import Rankings:</strong> After initialization, go to TBA Settings to import the top 12 teams into your pick list
+            <strong className="text-textPrimary">4. Customize Pick List:</strong> Teams are ordered by TBA ranking in the "Potatoes" tier. Move teams to "Steak" or "Chicken Nuggets" as needed.
           </p>
         </div>
       </div>
