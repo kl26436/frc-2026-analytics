@@ -1,6 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { BarChart3, Users, GitCompare, ClipboardList, Settings, Sliders, Menu, X } from 'lucide-react';
+import { BarChart3, Users, GitCompare, ClipboardList, Settings, Sliders, Menu, X, Calendar } from 'lucide-react';
 import { useAnalyticsStore } from './store/useAnalyticsStore';
 import TeamList from './pages/TeamList';
 import TeamComparison from './pages/TeamComparison';
@@ -9,6 +9,7 @@ import TeamDetail from './pages/TeamDetail';
 import PickList from './pages/PickList';
 import TBASettings from './pages/TBASettings';
 import MetricsSettings from './pages/MetricsSettings';
+import EventSetup from './pages/EventSetup';
 
 function App() {
   const loadMockData = useAnalyticsStore(state => state.loadMockData);
@@ -27,6 +28,7 @@ function App() {
     { to: '/teams', icon: Users, label: 'Teams' },
     { to: '/compare', icon: GitCompare, label: 'Compare' },
     { to: '/picklist', icon: ClipboardList, label: 'Pick List' },
+    { to: '/event', icon: Calendar, label: 'Event' },
     { to: '/settings', icon: Settings, label: 'TBA' },
     { to: '/metrics', icon: Sliders, label: 'Metrics' },
   ];
@@ -100,6 +102,7 @@ function App() {
             <Route path="/teams/:teamNumber" element={<TeamDetail />} />
             <Route path="/compare" element={<TeamComparison />} />
             <Route path="/picklist" element={<PickList />} />
+            <Route path="/event" element={<EventSetup />} />
             <Route path="/settings" element={<TBASettings />} />
             <Route path="/metrics" element={<MetricsSettings />} />
           </Routes>

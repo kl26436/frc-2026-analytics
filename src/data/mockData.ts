@@ -7,18 +7,24 @@ const randInt = (min: number, max: number) => Math.floor(Math.random() * (max - 
 const randChoice = <T,>(arr: T[]): T => arr[randInt(0, arr.length - 1)];
 const randBool = (probability = 0.5) => Math.random() < probability;
 
-// Event to use for mock data - 2025 Texas Championship 1
-const EVENT_CODE = '2025txcmp1';
-
 // Cache for TBA data
 let cachedTeams: { number: number; name: string }[] | null = null;
 let cachedMatches: TBAMatch[] | null = null;
+let cachedEventCode: string | null = null;
 const SCOUT_NAMES = ['Alex', 'Jordan', 'Taylor', 'Morgan', 'Casey', 'Riley'];
+
+// Clear the cache (used when changing events)
+export function clearMockDataCache() {
+  cachedTeams = null;
+  cachedMatches = null;
+  cachedEventCode = null;
+}
 
 // Generate a single match entry for a team
 function generateMatchEntry(
   teamNumber: number,
   matchNumber: number,
+  eventCode: string,
   matchType: 'practice' | 'qualification' | 'playoff' = 'qualification'
 ): MatchScoutingEntry {
   const alliance = randChoice(['red', 'blue'] as const);
@@ -40,7 +46,7 @@ function generateMatchEntry(
 
   return {
     id: `${teamNumber}-${matchType}-${matchNumber}-${Date.now()}-${Math.random()}`,
-    eventCode: EVENT_CODE,
+    eventCode,
     matchType,
     matchNumber,
     teamNumber,
@@ -156,15 +162,21 @@ function generatePitEntry(teamNumber: number, teamName: string): PitScoutingEntr
 }
 
 // Fetch teams from TBA
-async function fetchTeamsFromTBA(): Promise<{ number: number; name: string }[]> {
-  if (cachedTeams) return cachedTeams;
+async function fetchTeamsFromTBA(eventCode: string): Promise<{ number: number; name: string }[]> {
+  // Clear cache if event changed
+  if (cachedEventCode && cachedEventCode !== eventCode) {
+    clearMockDataCache();
+  }
+
+  if (cachedTeams && cachedEventCode === eventCode) return cachedTeams;
 
   try {
-    const tbaTeams = await getEventTeams(EVENT_CODE);
+    const tbaTeams = await getEventTeams(eventCode);
     cachedTeams = tbaTeams.map(team => ({
       number: team.team_number,
       name: team.nickname || `Team ${team.team_number}`,
     }));
+    cachedEventCode = eventCode;
     return cachedTeams;
   } catch (error) {
     console.error('Failed to fetch teams from TBA, using fallback:', error);
@@ -174,16 +186,22 @@ async function fetchTeamsFromTBA(): Promise<{ number: number; name: string }[]> 
       { number: 118, name: 'Robonauts' },
       { number: 1477, name: 'Texas Torque' },
     ];
+    cachedEventCode = eventCode;
     return cachedTeams;
   }
 }
 
 // Fetch matches from TBA
-async function fetchMatchesFromTBA(): Promise<TBAMatch[]> {
-  if (cachedMatches) return cachedMatches;
+async function fetchMatchesFromTBA(eventCode: string): Promise<TBAMatch[]> {
+  // Clear cache if event changed
+  if (cachedEventCode && cachedEventCode !== eventCode) {
+    clearMockDataCache();
+  }
+
+  if (cachedMatches && cachedEventCode === eventCode) return cachedMatches;
 
   try {
-    cachedMatches = await getEventMatches(EVENT_CODE);
+    cachedMatches = await getEventMatches(eventCode);
     return cachedMatches;
   } catch (error) {
     console.error('Failed to fetch matches from TBA:', error);
@@ -193,7 +211,7 @@ async function fetchMatchesFromTBA(): Promise<TBAMatch[]> {
 }
 
 // Generate mock data for all teams based on TBA event
-export async function generateMockData(): Promise<{
+export async function generateMockData(eventCode: string): Promise<{
   matchEntries: MatchScoutingEntry[];
   pitEntries: PitScoutingEntry[];
 }> {
@@ -201,8 +219,8 @@ export async function generateMockData(): Promise<{
   const pitEntries: PitScoutingEntry[] = [];
 
   // Fetch real teams and matches from TBA
-  const teams = await fetchTeamsFromTBA();
-  const tbaMatches = await fetchMatchesFromTBA();
+  const teams = await fetchTeamsFromTBA(eventCode);
+  const tbaMatches = await fetchMatchesFromTBA(eventCode);
 
   // Generate pit scouting for all teams
   teams.forEach(team => {
@@ -219,7 +237,7 @@ export async function generateMockData(): Promise<{
       allTeamKeys.forEach(teamKey => {
         const teamNumber = teamKeyToNumber(teamKey);
         if (teams.some(t => t.number === teamNumber)) {
-          matchEntries.push(generateMatchEntry(teamNumber, match.match_number, 'qualification'));
+          matchEntries.push(generateMatchEntry(teamNumber, match.match_number, eventCode, 'qualification'));
         }
       });
     }
@@ -229,7 +247,7 @@ export async function generateMockData(): Promise<{
   if (matchEntries.length === 0) {
     teams.forEach(team => {
       for (let match = 1; match <= 6; match++) {
-        matchEntries.push(generateMatchEntry(team.number, match, 'qualification'));
+        matchEntries.push(generateMatchEntry(team.number, match, eventCode, 'qualification'));
       }
     });
   }
@@ -238,6 +256,6 @@ export async function generateMockData(): Promise<{
 }
 
 // Export teams getter
-export async function getTeams() {
-  return await fetchTeamsFromTBA();
+export async function getTeams(eventCode: string) {
+  return await fetchTeamsFromTBA(eventCode);
 }

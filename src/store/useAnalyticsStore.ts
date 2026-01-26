@@ -36,7 +36,8 @@ export const useAnalyticsStore = create<AnalyticsState>()(
 
       // Load mock data
       loadMockData: async () => {
-        const { matchEntries, pitEntries } = await generateMockData();
+        const { eventCode } = get();
+        const { matchEntries, pitEntries } = await generateMockData(eventCode);
         set({ matchEntries, pitEntries });
         get().calculateStats();
       },
