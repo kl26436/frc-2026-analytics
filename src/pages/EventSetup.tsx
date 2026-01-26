@@ -81,10 +81,7 @@ function EventSetup() {
       // Step 3: Initialize new pick list
       initializePickList(inputEventCode);
 
-      // Step 4: Clear mock data cache and reload
-      await loadMockData();
-
-      // Step 5: Import rankings if available
+      // Step 4: Import rankings if available (BEFORE loading mock data)
       let rankingsMessage = '';
       if (eventInfo.hasRankings) {
         try {
@@ -96,6 +93,9 @@ function EventSetup() {
           rankingsMessage = ' Rankings import failed - you can import manually from TBA Settings.';
         }
       }
+
+      // Step 5: Clear mock data cache and reload (after rankings imported)
+      await loadMockData();
 
       setStatus({
         type: 'success',

@@ -357,6 +357,17 @@ function PickList() {
       if (!initialized && teamStatistics.length > 0) {
         const existingTeamNumbers = new Set(pickList.teams.map(t => t.teamNumber));
 
+        // If pick list is empty (no TBA rankings imported), add top 12 to tier2 as fallback
+        if (pickList.teams.length === 0) {
+          const sortedByPoints = [...teamStatistics]
+            .sort((a, b) => b.avgTotalPoints - a.avgTotalPoints);
+
+          sortedByPoints.slice(0, 12).forEach((team) => {
+            addTeamToTier(team.teamNumber, 'tier2');
+            existingTeamNumbers.add(team.teamNumber);
+          });
+        }
+
         // Sort remaining teams by: points -> level3ClimbRate -> autoPoints
         const sortedTeams = [...teamStatistics]
           .filter(team => !existingTeamNumbers.has(team.teamNumber))
