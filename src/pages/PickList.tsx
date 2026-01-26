@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { usePickListStore } from '../store/usePickListStore';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { useComparisonMode } from '../hooks/useComparisonMode';
@@ -34,6 +35,7 @@ import {
   GitCompare,
   CheckSquare,
   Square,
+  Play,
 } from 'lucide-react';
 import type { PickListTeam } from '../types/pickList';
 
@@ -222,6 +224,13 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onT
         {/* Actions - only show for teams in tiers */}
         {currentTier && (
           <div className="flex flex-col gap-1">
+            <Link
+              to={`/teams/${team.teamNumber}`}
+              className="p-1 text-textMuted hover:text-danger rounded transition-colors"
+              title="View match videos"
+            >
+              <Play size={14} />
+            </Link>
             <button
               onClick={() => onToggleFlag?.()}
               className={`p-1 rounded transition-colors ${

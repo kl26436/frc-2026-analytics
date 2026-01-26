@@ -2,6 +2,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { ArrowLeft, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import type { MatchScoutingEntry } from '../types/scouting';
+import MatchVideos from '../components/MatchVideos';
 
 function TeamDetail() {
   const { teamNumber } = useParams<{ teamNumber: string }>();
@@ -162,6 +163,11 @@ function TeamDetail() {
           )}
         </div>
       )}
+
+      {/* Match Videos from TBA */}
+      <div className="bg-surface p-6 rounded-lg border border-border">
+        <MatchVideos teamNumber={teamNum} />
+      </div>
 
       {/* Match History */}
       <div className="bg-surface rounded-lg border border-border">

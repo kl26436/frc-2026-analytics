@@ -38,7 +38,7 @@ function TBASettings() {
       setEventCode(event);
 
       // Fetch rankings from TBA
-      const rankings = await getEventRankings(event);
+      const rankings = await getEventRankings(event, apiKey);
 
       // Import top 12 into pick list
       importFromTBARankings(rankings);
@@ -190,15 +190,15 @@ function TBASettings() {
         </div>
       </div>
 
-      {/* Future Features */}
+      {/* Features */}
       <div className="bg-surfaceElevated p-6 rounded-lg border border-border">
-        <h2 className="text-xl font-bold mb-4">Coming Soon</h2>
-        <ul className="space-y-2 text-sm text-textMuted">
-          <li>• Match schedule import</li>
-          <li>• Match video links</li>
-          <li>• Team photos and descriptions</li>
-          <li>• OPR/DPR/CCWM stats</li>
-          <li>• Historical performance data</li>
+        <h2 className="text-xl font-bold mb-4">Features & Coming Soon</h2>
+        <ul className="space-y-2 text-sm">
+          <li className="text-success">✓ Match video links (view on team detail pages)</li>
+          <li className="text-textMuted">• Match schedule import</li>
+          <li className="text-textMuted">• Team photos and descriptions</li>
+          <li className="text-textMuted">• OPR/DPR/CCWM stats</li>
+          <li className="text-textMuted">• Historical performance data</li>
         </ul>
       </div>
     </div>

@@ -9,13 +9,12 @@ import type {
 } from '../types/tba';
 
 const TBA_API_BASE = 'https://www.thebluealliance.com/api/v3';
-const TBA_AUTH_KEY = 'YOUR_TBA_API_KEY'; // TODO: Move to env variable
 
 // Helper to fetch from TBA
-async function fetchTBA<T>(endpoint: string): Promise<T> {
+async function fetchTBA<T>(endpoint: string, apiKey: string): Promise<T> {
   const response = await fetch(`${TBA_API_BASE}${endpoint}`, {
     headers: {
-      'X-TBA-Auth-Key': TBA_AUTH_KEY,
+      'X-TBA-Auth-Key': apiKey,
     },
   });
 
@@ -27,28 +26,33 @@ async function fetchTBA<T>(endpoint: string): Promise<T> {
 }
 
 // Get event information
-export async function getEvent(eventKey: string): Promise<TBAEvent> {
-  return fetchTBA<TBAEvent>(`/event/${eventKey}`);
+export async function getEvent(eventKey: string, apiKey: string): Promise<TBAEvent> {
+  return fetchTBA<TBAEvent>(`/event/${eventKey}`, apiKey);
 }
 
 // Get teams at an event
-export async function getEventTeams(eventKey: string): Promise<TBAEventTeam[]> {
-  return fetchTBA<TBAEventTeam[]>(`/event/${eventKey}/teams/simple`);
+export async function getEventTeams(eventKey: string, apiKey: string): Promise<TBAEventTeam[]> {
+  return fetchTBA<TBAEventTeam[]>(`/event/${eventKey}/teams/simple`, apiKey);
 }
 
 // Get event rankings
-export async function getEventRankings(eventKey: string): Promise<TBAEventRankings> {
-  return fetchTBA<TBAEventRankings>(`/event/${eventKey}/rankings`);
+export async function getEventRankings(eventKey: string, apiKey: string): Promise<TBAEventRankings> {
+  return fetchTBA<TBAEventRankings>(`/event/${eventKey}/rankings`, apiKey);
 }
 
 // Get all matches at an event
-export async function getEventMatches(eventKey: string): Promise<TBAMatch[]> {
-  return fetchTBA<TBAMatch[]>(`/event/${eventKey}/matches`);
+export async function getEventMatches(eventKey: string, apiKey: string): Promise<TBAMatch[]> {
+  return fetchTBA<TBAMatch[]>(`/event/${eventKey}/matches`, apiKey);
 }
 
 // Get team information
-export async function getTeam(teamKey: string): Promise<TBATeam> {
-  return fetchTBA<TBATeam>(`/team/${teamKey}`);
+export async function getTeam(teamKey: string, apiKey: string): Promise<TBATeam> {
+  return fetchTBA<TBATeam>(`/team/${teamKey}`, apiKey);
+}
+
+// Get matches for a specific team at an event
+export async function getTeamEventMatches(teamKey: string, eventKey: string, apiKey: string): Promise<TBAMatch[]> {
+  return fetchTBA<TBAMatch[]>(`/team/${teamKey}/event/${eventKey}/matches`, apiKey);
 }
 
 // Get match video URL (YouTube)
