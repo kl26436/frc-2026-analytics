@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <script>
+      // GitHub Pages SPA redirect
+      // Save the full URL, then redirect to the app root so index.html loads
+      sessionStorage.redirect = location.href;
+      location.replace(location.pathname.split('/').slice(0, 2).join('/') + '/');
+    </script>
+  </head>
+  <body></body>
+</html>
