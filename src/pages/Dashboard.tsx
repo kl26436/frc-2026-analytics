@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
-import { Trophy, Target, TrendingUp, Users, Calendar, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
+import { Trophy, Target, TrendingUp, Users, Calendar, RefreshCw, ChevronDown, ChevronUp, Swords } from 'lucide-react';
 import { teamKeyToNumber } from '../utils/tbaApi';
+import { computeMatchup } from '../utils/predictions';
 
 const OUR_TEAM = 148;
 const MATCHES_TO_SHOW = 3; // Show last 3 completed + next 3 upcoming
@@ -82,6 +83,18 @@ function Dashboard() {
 
   const [showAllMatches, setShowAllMatches] = useState(false);
 
+  // Match predictions cache
+  const matchPredictions = useMemo(() => {
+    if (!teamStatistics.length || !team148Matches.length) return new Map();
+    const map = new Map<string, ReturnType<typeof computeMatchup>>();
+    for (const match of team148Matches) {
+      const redNums = match.alliances.red.team_keys.map(teamKeyToNumber);
+      const blueNums = match.alliances.blue.team_keys.map(teamKeyToNumber);
+      map.set(match.key, computeMatchup(redNums, blueNums, teamStatistics));
+    }
+    return map;
+  }, [team148Matches, teamStatistics]);
+
   // Format match label
   const getMatchLabel = (match: typeof team148Matches[0]) => {
     const prefixes = { qm: 'Q', ef: 'E', qf: 'QF', sf: 'SF', f: 'F' };
@@ -104,6 +117,10 @@ function Dashboard() {
     const theirScore = isRed ? match.alliances.blue.score : match.alliances.red.score;
     const won = ourScore > theirScore;
     const lost = ourScore < theirScore;
+
+    const prediction = matchPredictions.get(match.key);
+    const ourRP = prediction ? (isRed ? prediction.redRP : prediction.blueRP) : null;
+    const ourWinProb = ourRP?.winProbability ?? 0;
 
     return (
       <tr
@@ -165,6 +182,28 @@ function Dashboard() {
           ) : (
             <span className="text-textMuted text-xs">Upcoming</span>
           )}
+        </td>
+        {/* Prediction columns */}
+        <td className="py-2 px-2 text-center font-mono text-xs">
+          {prediction ? (
+            <span>
+              <span className="text-redAlliance">{prediction.red.totalScore.toFixed(0)}</span>
+              <span className="text-textMuted">-</span>
+              <span className="text-blueAlliance">{prediction.blue.totalScore.toFixed(0)}</span>
+            </span>
+          ) : <span className="text-textMuted">--</span>}
+        </td>
+        <td className="py-2 px-2 text-center text-xs">
+          {ourRP ? (
+            <span className={`font-medium ${ourWinProb >= 0.6 ? 'text-success' : ourWinProb <= 0.4 ? 'text-danger' : 'text-warning'}`}>
+              {(ourWinProb * 100).toFixed(0)}%
+            </span>
+          ) : <span className="text-textMuted">--</span>}
+        </td>
+        <td className="py-2 px-2 text-center text-xs">
+          {ourRP ? (
+            <span className="text-warning font-medium">{ourRP.expectedTotalRP.toFixed(1)}</span>
+          ) : <span className="text-textMuted">--</span>}
         </td>
       </tr>
     );
@@ -268,6 +307,11 @@ function Dashboard() {
                   <th className="text-center py-2 px-2">Score</th>
                   <th className="text-center py-2 px-2 text-blueAlliance">Blue Alliance</th>
                   <th className="text-center py-2 px-2">Result</th>
+                  <th className="text-center py-2 px-2 text-textSecondary">
+                    <span className="flex items-center justify-center gap-1"><Swords size={12} />Pred.</span>
+                  </th>
+                  <th className="text-center py-2 px-2 text-textSecondary">Win%</th>
+                  <th className="text-center py-2 px-2 text-textSecondary">xRP</th>
                 </tr>
               </thead>
               <tbody>
