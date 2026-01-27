@@ -47,6 +47,7 @@ import {
   Trash2,
   Plus,
   AlertTriangle,
+  Handshake,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { PickListTeam } from '../types/pickList';
@@ -751,6 +752,14 @@ function PickList() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Link
+            to="/alliance-selection"
+            className="flex items-center gap-2 px-3 md:px-4 py-2 bg-success/20 text-success hover:bg-success/30 rounded-lg transition-colors text-sm md:text-base font-semibold"
+          >
+            <Handshake size={18} />
+            <span className="hidden sm:inline">Alliance Selection</span>
+            <span className="sm:hidden">Alliance</span>
+          </Link>
           <button
             onClick={toggleCompareMode}
             className={`flex items-center gap-2 px-3 md:px-4 py-2 rounded-lg transition-colors text-sm md:text-base ${
