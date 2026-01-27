@@ -41,12 +41,66 @@ import {
   Zap,
   Shield,
   Trophy,
-  UserX,
+  Target,
+  Wrench,
+  SlidersHorizontal,
+  Trash2,
+  Plus,
+  AlertTriangle,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import type { PickListTeam } from '../types/pickList';
+import type { TeamStatistics } from '../types/scouting';
+
+// Filter configuration
+interface FilterConfig {
+  id: string;
+  label: string;
+  icon: string;
+  field: keyof TeamStatistics;
+  operator: '>=' | '<=' | '>' | '<';
+  threshold: number;
+  active: boolean;
+}
+
+const FILTER_ICONS: Record<string, LucideIcon> = {
+  mountain: Mountain,
+  zap: Zap,
+  shield: Shield,
+  trophy: Trophy,
+  target: Target,
+  wrench: Wrench,
+};
+
+const STAT_OPTIONS: { value: keyof TeamStatistics; label: string }[] = [
+  { value: 'avgTotalPoints', label: 'Avg Total Points' },
+  { value: 'avgAutoPoints', label: 'Avg Auto Points' },
+  { value: 'avgTeleopPoints', label: 'Avg Teleop Points' },
+  { value: 'avgEndgamePoints', label: 'Avg Endgame Points' },
+  { value: 'level3ClimbRate', label: 'L3 Climb Rate (%)' },
+  { value: 'level2ClimbRate', label: 'L2 Climb Rate (%)' },
+  { value: 'climbAttemptRate', label: 'Climb Attempt Rate (%)' },
+  { value: 'avgClimbTime', label: 'Avg Climb Time (s)' },
+  { value: 'autoMobilityRate', label: 'Auto Mobility Rate (%)' },
+  { value: 'autoAccuracy', label: 'Auto Accuracy (%)' },
+  { value: 'avgAutoFuelScored', label: 'Avg Auto Fuel Scored' },
+  { value: 'diedRate', label: 'Died Rate (%)' },
+  { value: 'noShowRate', label: 'No Show Rate (%)' },
+  { value: 'mechanicalIssuesRate', label: 'Mech Issues Rate (%)' },
+  { value: 'tippedRate', label: 'Tipped Rate (%)' },
+  { value: 'avgDriverSkill', label: 'Avg Driver Skill (1-5)' },
+  { value: 'avgDefenseEffectiveness', label: 'Avg Defense (0-4)' },
+];
+
+const DEFAULT_FILTERS: FilterConfig[] = [
+  { id: 'l3Climber', label: 'L3 Climber', icon: 'mountain', field: 'level3ClimbRate', operator: '>=', threshold: 20, active: false },
+  { id: 'strongAuto', label: 'Strong Auto', icon: 'zap', field: 'avgAutoPoints', operator: '>=', threshold: 10, active: false },
+  { id: 'reliable', label: 'Reliable', icon: 'shield', field: 'diedRate', operator: '<=', threshold: 15, active: false },
+  { id: 'highScorer', label: 'High Scorer', icon: 'trophy', field: 'avgTotalPoints', operator: '>=', threshold: 35, active: false },
+];
 
 // Sortable team card component
-function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onToggleFlag, isCompareMode, isSelected, onToggleSelection, passesFilters, onTogglePicked }: {
+function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onToggleFlag, isCompareMode, isSelected, onToggleSelection, passesFilters, hasActiveFilters }: {
   team: PickListTeam | { teamNumber: number; teamName?: string; avgTotalPoints: number; level3ClimbRate: number; avgAutoPoints: number };
   currentTier?: 'tier1' | 'tier2' | 'tier3' | 'tier4';
   tierNames?: { tier1: string; tier2: string; tier3: string; tier4: string };
@@ -57,7 +111,7 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onT
   isSelected?: boolean;
   onToggleSelection?: () => void;
   passesFilters?: boolean;
-  onTogglePicked?: () => void;
+  hasActiveFilters?: boolean;
 }) {
   const {
     attributes,
@@ -84,21 +138,19 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onT
 
   const displayStats = teamStats || team;
 
-  const isPicked = isPickListTeam && team.isPicked;
-
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`bg-surface border rounded-lg p-2 mb-2 transition-opacity ${
+      className={`border rounded-lg p-2 mb-2 transition-all ${
         isPickListTeam && team.flagged
-          ? 'border-danger'
-          : isPicked
-          ? 'border-warning bg-warning/10'
+          ? 'bg-surface border-danger'
           : isSelected
-          ? 'border-success ring-2 ring-success'
-          : 'border-border'
-      } ${passesFilters === false ? 'opacity-30' : ''}`}
+          ? 'bg-surface border-success ring-2 ring-success'
+          : hasActiveFilters && passesFilters !== false
+          ? 'bg-success/10 border-success'
+          : 'bg-surface border-border'
+      } ${passesFilters === false ? 'opacity-20' : ''}`}
     >
       <div className="flex items-start gap-2">
         {/* Checkbox for compare mode or drag handle for normal mode */}
@@ -296,18 +348,6 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onT
         {/* Actions - only show for teams in tiers */}
         {currentTier && (
           <div className="flex flex-col gap-1">
-            {/* Picked toggle - only for tier1/tier2 */}
-            {(currentTier === 'tier1' || currentTier === 'tier2') && (
-              <button
-                onClick={() => onTogglePicked?.()}
-                className={`p-1 rounded transition-colors ${
-                  isPicked ? 'text-warning' : 'text-textMuted hover:text-warning'
-                }`}
-                title={isPicked ? 'Mark as available' : 'Mark as picked'}
-              >
-                <UserX size={14} />
-              </button>
-            )}
             <button
               onClick={() => onToggleFlag?.()}
               className={`p-1 rounded transition-colors ${
@@ -332,7 +372,7 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onT
 }
 
 // Droppable column component
-function DroppableColumn({ id, title, teams, tier, tierNames, onMoveTier, isCompareMode, selectedTeams, onToggleTeamSelection, teamPassesFilters, onTogglePicked }: {
+function DroppableColumn({ id, title, teams, tier, tierNames, onMoveTier, isCompareMode, selectedTeams, onToggleTeamSelection, teamPassesFilters, hasActiveFilters }: {
   id: string;
   title: string;
   teams: any[];
@@ -343,7 +383,7 @@ function DroppableColumn({ id, title, teams, tier, tierNames, onMoveTier, isComp
   selectedTeams?: number[];
   onToggleTeamSelection?: (teamNumber: number) => void;
   teamPassesFilters?: (teamNumber: number) => boolean;
-  onTogglePicked?: (teamNumber: number) => void;
+  hasActiveFilters?: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id });
   const updateNotes = usePickListStore(state => state.updateNotes);
@@ -372,7 +412,7 @@ function DroppableColumn({ id, title, teams, tier, tierNames, onMoveTier, isComp
               isSelected={selectedTeams?.includes(team.teamNumber)}
               onToggleSelection={onToggleTeamSelection ? () => onToggleTeamSelection(team.teamNumber) : undefined}
               passesFilters={teamPassesFilters ? teamPassesFilters(team.teamNumber) : true}
-              onTogglePicked={onTogglePicked ? () => onTogglePicked(team.teamNumber) : undefined}
+              hasActiveFilters={hasActiveFilters}
             />
           ))}
           {teams.length === 0 && (
@@ -397,7 +437,7 @@ function PickList() {
   const addTeamToTier = usePickListStore(state => state.addTeamToTier);
   const moveTeam = usePickListStore(state => state.moveTeam);
   const moveTeamAbove = usePickListStore(state => state.moveTeamAbove);
-  const togglePicked = usePickListStore(state => state.togglePicked);
+
   const eventCode = useAnalyticsStore(state => state.eventCode);
   const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
 
@@ -409,52 +449,77 @@ function PickList() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [initialized, setInitialized] = useState(false);
 
-  // Capability filters
-  const [filters, setFilters] = useState({
-    l3Climber: false,    // level3ClimbRate > 50%
-    strongAuto: false,   // avgAutoPoints > 15 or autoMobilityRate > 80%
-    reliable: false,     // diedRate < 10% AND noShowRate < 5%
-    highScorer: false,   // avgTotalPoints > 40
-  });
+  // Customizable capability filters
+  const [filterConfigs, setFilterConfigs] = useState<FilterConfig[]>(DEFAULT_FILTERS);
+  const [showFilterSettings, setShowFilterSettings] = useState(false);
 
+  // Toggle a filter's active state
+  const toggleFilter = (id: string) => {
+    setFilterConfigs(prev => prev.map(f => f.id === id ? { ...f, active: !f.active } : f));
+  };
 
-  // Toggle a filter
-  const toggleFilter = (filter: keyof typeof filters) => {
-    setFilters(prev => ({ ...prev, [filter]: !prev[filter] }));
+  // Update a filter's config
+  const updateFilter = (id: string, updates: Partial<FilterConfig>) => {
+    setFilterConfigs(prev => prev.map(f => f.id === id ? { ...f, ...updates } : f));
+  };
+
+  // Add a new custom filter
+  const addFilter = () => {
+    const newId = `custom-${Date.now()}`;
+    setFilterConfigs(prev => [...prev, {
+      id: newId,
+      label: 'New Filter',
+      icon: 'target',
+      field: 'avgTotalPoints',
+      operator: '>=',
+      threshold: 0,
+      active: false,
+    }]);
+  };
+
+  // Remove a filter
+  const removeFilter = (id: string) => {
+    setFilterConfigs(prev => prev.filter(f => f.id !== id));
+  };
+
+  // Count teams passing a specific filter
+  const countPassingTeams = (filter: FilterConfig): number => {
+    if (!pickList) return 0;
+    return pickList.teams.filter(t => {
+      const stats = teamStatistics.find(s => s.teamNumber === t.teamNumber);
+      if (!stats) return false;
+      const value = stats[filter.field] as number;
+      switch (filter.operator) {
+        case '>=': return value >= filter.threshold;
+        case '<=': return value <= filter.threshold;
+        case '>': return value > filter.threshold;
+        case '<': return value < filter.threshold;
+      }
+    }).length;
   };
 
   // Check if a team passes all active filters
   const teamPassesFilters = (teamNumber: number): boolean => {
-    const activeFilters = Object.entries(filters).filter(([_, active]) => active);
-    if (activeFilters.length === 0) return true; // No filters active
+    const activeFilters = filterConfigs.filter(f => f.active);
+    if (activeFilters.length === 0) return true;
 
     const stats = teamStatistics.find(t => t.teamNumber === teamNumber);
-    if (!stats) return false; // No stats = can't verify capability, gray out when filtering
+    if (!stats) return false;
 
-    for (const [filter] of activeFilters) {
-      switch (filter) {
-        case 'l3Climber':
-          if (stats.level3ClimbRate < 50) return false;
-          break;
-        case 'strongAuto':
-          if (stats.avgAutoPoints < 15 && stats.autoMobilityRate < 80) return false;
-          break;
-        case 'reliable':
-          if (stats.diedRate > 10 || stats.noShowRate > 5) return false;
-          break;
-        case 'highScorer':
-          if (stats.avgTotalPoints < 40) return false;
-          break;
+    return activeFilters.every(filter => {
+      const value = stats[filter.field] as number;
+      switch (filter.operator) {
+        case '>=': return value >= filter.threshold;
+        case '<=': return value <= filter.threshold;
+        case '>': return value > filter.threshold;
+        case '<': return value < filter.threshold;
       }
-    }
-    return true;
+    });
   };
 
-  // Count picked teams in tier1 + tier2
-  const pickedCount = pickList?.teams.filter(t =>
-    (t.tier === 'tier1' || t.tier === 'tier2') && t.isPicked
-  ).length || 0;
+  const hasActiveFilters = filterConfigs.some(f => f.active);
 
+  // Count picked teams in tier1 + tier2
   const tier1And2Count = pickList?.teams.filter(t =>
     t.tier === 'tier1' || t.tier === 'tier2'
   ).length || 0;
@@ -788,11 +853,6 @@ function PickList() {
             <span className="text-2xl font-bold text-success">{tier1And2Count}</span>
             <span className="text-textSecondary">teams</span>
           </div>
-          {pickedCount > 0 && (
-            <div className="text-sm text-textSecondary">
-              ({pickedCount} marked as picked)
-            </div>
-          )}
         </div>
 
         {/* Capability Filters Row */}
@@ -800,60 +860,116 @@ function PickList() {
           <div className="flex items-center gap-2 mr-2">
             <Filter size={16} className="text-textSecondary" />
             <span className="text-sm text-textSecondary">Highlight:</span>
-          </div>
-          <button
-            onClick={() => toggleFilter('l3Climber')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-colors ${
-              filters.l3Climber
-                ? 'bg-success text-background'
-                : 'bg-surfaceElevated hover:bg-interactive'
-            }`}
-          >
-            <Mountain size={14} />
-            L3 Climber
-          </button>
-          <button
-            onClick={() => toggleFilter('strongAuto')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-colors ${
-              filters.strongAuto
-                ? 'bg-success text-background'
-                : 'bg-surfaceElevated hover:bg-interactive'
-            }`}
-          >
-            <Zap size={14} />
-            Strong Auto
-          </button>
-          <button
-            onClick={() => toggleFilter('reliable')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-colors ${
-              filters.reliable
-                ? 'bg-success text-background'
-                : 'bg-surfaceElevated hover:bg-interactive'
-            }`}
-          >
-            <Shield size={14} />
-            Reliable
-          </button>
-          <button
-            onClick={() => toggleFilter('highScorer')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-colors ${
-              filters.highScorer
-                ? 'bg-success text-background'
-                : 'bg-surfaceElevated hover:bg-interactive'
-            }`}
-          >
-            <Trophy size={14} />
-            High Scorer
-          </button>
-          {Object.values(filters).some(f => f) && (
             <button
-              onClick={() => setFilters({ l3Climber: false, strongAuto: false, reliable: false, highScorer: false })}
+              onClick={() => setShowFilterSettings(!showFilterSettings)}
+              className={`p-1 rounded transition-colors ${showFilterSettings ? 'text-success' : 'text-textMuted hover:text-textPrimary'}`}
+              title="Edit filter settings"
+            >
+              <SlidersHorizontal size={14} />
+            </button>
+          </div>
+          {filterConfigs.map(filter => {
+            const IconComponent = FILTER_ICONS[filter.icon] || Target;
+            const count = filter.active ? countPassingTeams(filter) : null;
+            return (
+              <button
+                key={filter.id}
+                onClick={() => toggleFilter(filter.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-colors ${
+                  filter.active
+                    ? 'bg-success text-background'
+                    : 'bg-surfaceElevated hover:bg-interactive'
+                }`}
+              >
+                <IconComponent size={14} />
+                {filter.label}
+                {count !== null && <span className="ml-1 font-bold">({count})</span>}
+              </button>
+            );
+          })}
+          {filterConfigs.some(f => f.active) && (
+            <button
+              onClick={() => setFilterConfigs(prev => prev.map(f => ({ ...f, active: false })))}
               className="text-xs text-textMuted hover:text-danger ml-2"
             >
               Clear all
             </button>
           )}
         </div>
+
+        {/* No stats warning */}
+        {filterConfigs.some(f => f.active) && teamStatistics.length === 0 && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-warning/10 border border-warning/30 rounded-lg">
+            <AlertTriangle size={16} className="text-warning" />
+            <span className="text-sm text-warning">No scouting data loaded. Filters require team statistics to work.</span>
+          </div>
+        )}
+
+        {/* Filter Settings Panel */}
+        {showFilterSettings && (
+          <div className="bg-surfaceElevated rounded-lg border border-border p-4 space-y-3">
+            <h3 className="text-sm font-bold text-textSecondary uppercase tracking-wider">Filter Settings</h3>
+            {filterConfigs.map(filter => (
+              <div key={filter.id} className="flex flex-wrap items-center gap-2">
+                <select
+                  value={filter.icon}
+                  onChange={e => updateFilter(filter.id, { icon: e.target.value })}
+                  className="w-20 px-2 py-1.5 bg-background border border-border rounded text-sm"
+                >
+                  {Object.keys(FILTER_ICONS).map(iconKey => (
+                    <option key={iconKey} value={iconKey}>{iconKey}</option>
+                  ))}
+                </select>
+                <input
+                  type="text"
+                  value={filter.label}
+                  onChange={e => updateFilter(filter.id, { label: e.target.value })}
+                  className="w-28 px-2 py-1.5 bg-background border border-border rounded text-sm"
+                  placeholder="Filter name"
+                />
+                <select
+                  value={filter.field}
+                  onChange={e => updateFilter(filter.id, { field: e.target.value as keyof TeamStatistics })}
+                  className="flex-1 min-w-[140px] px-2 py-1.5 bg-background border border-border rounded text-sm"
+                >
+                  {STAT_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+                <select
+                  value={filter.operator}
+                  onChange={e => updateFilter(filter.id, { operator: e.target.value as FilterConfig['operator'] })}
+                  className="w-16 px-2 py-1.5 bg-background border border-border rounded text-sm"
+                >
+                  <option value=">=">&gt;=</option>
+                  <option value="<=">&lt;=</option>
+                  <option value=">">&gt;</option>
+                  <option value="<">&lt;</option>
+                </select>
+                <input
+                  type="number"
+                  value={filter.threshold}
+                  onChange={e => updateFilter(filter.id, { threshold: parseFloat(e.target.value) || 0 })}
+                  className="w-20 px-2 py-1.5 bg-background border border-border rounded text-sm"
+                />
+                <button
+                  onClick={() => removeFilter(filter.id)}
+                  className="p-1.5 text-textMuted hover:text-danger rounded transition-colors"
+                  title="Remove filter"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+            <button
+              onClick={addFilter}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-success hover:bg-interactive rounded transition-colors"
+            >
+              <Plus size={14} />
+              Add Filter
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Compare Mode Status */}
@@ -899,7 +1015,8 @@ function PickList() {
             selectedTeams={selectedTeams}
             onToggleTeamSelection={toggleTeamSelection}
             teamPassesFilters={teamPassesFilters}
-            onTogglePicked={togglePicked}
+            hasActiveFilters={hasActiveFilters}
+
           />
           <DroppableColumn
             id="tier2-column"
@@ -917,7 +1034,8 @@ function PickList() {
             selectedTeams={selectedTeams}
             onToggleTeamSelection={toggleTeamSelection}
             teamPassesFilters={teamPassesFilters}
-            onTogglePicked={togglePicked}
+            hasActiveFilters={hasActiveFilters}
+
           />
           <DroppableColumn
             id="tier3-column"
@@ -935,7 +1053,8 @@ function PickList() {
             selectedTeams={selectedTeams}
             onToggleTeamSelection={toggleTeamSelection}
             teamPassesFilters={teamPassesFilters}
-            onTogglePicked={togglePicked}
+            hasActiveFilters={hasActiveFilters}
+
           />
           {/* Only show tier4 if it has teams */}
           {tier4Teams.length > 0 && (
@@ -955,7 +1074,8 @@ function PickList() {
               selectedTeams={selectedTeams}
               onToggleTeamSelection={toggleTeamSelection}
               teamPassesFilters={teamPassesFilters}
-              onTogglePicked={togglePicked}
+            hasActiveFilters={hasActiveFilters}
+  
             />
           )}
         </div>
