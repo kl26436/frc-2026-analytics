@@ -1,6 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { BarChart3, Users, ClipboardList, Menu, X, Calendar } from 'lucide-react';
+import { BarChart3, Users, ClipboardList, Menu, X, Calendar, Swords } from 'lucide-react';
 import { useAnalyticsStore } from './store/useAnalyticsStore';
 import TeamList from './pages/TeamList';
 import TeamComparison from './pages/TeamComparison';
@@ -9,6 +9,7 @@ import TeamDetail from './pages/TeamDetail';
 import PickList from './pages/PickList';
 import MetricsSettings from './pages/MetricsSettings';
 import EventSetup from './pages/EventSetup';
+import AlliancePredictor from './pages/AlliancePredictor';
 
 function App() {
   const loadMockData = useAnalyticsStore(state => state.loadMockData);
@@ -26,6 +27,7 @@ function App() {
     { to: '/', icon: BarChart3, label: 'Dashboard' },
     { to: '/teams', icon: Users, label: 'Teams' },
     { to: '/picklist', icon: ClipboardList, label: 'Pick List' },
+    { to: '/predict', icon: Swords, label: 'Predict' },
     { to: '/event', icon: Calendar, label: 'Event' },
   ];
 
@@ -98,6 +100,7 @@ function App() {
             <Route path="/teams/:teamNumber" element={<TeamDetail />} />
             <Route path="/compare" element={<TeamComparison />} />
             <Route path="/picklist" element={<PickList />} />
+            <Route path="/predict" element={<AlliancePredictor />} />
             <Route path="/event" element={<EventSetup />} />
             <Route path="/metrics" element={<MetricsSettings />} />
           </Routes>

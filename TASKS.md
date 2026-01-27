@@ -8,8 +8,8 @@
 - [x] Team Comparison page (side-by-side stats from Teams page)
 - [x] Pick List with 4 tiers, drag-and-drop, notes, flags
 - [x] Pick List compare mode (select 2 teams, pick winner, auto-rank)
-- [x] Pick List capability filters (L3 Climber, Strong Auto, Reliable, High Scorer)
-- [x] Pick List tracker (tier1+tier2 count, picked count)
+- [x] Pick List capability filters (customizable thresholds, match counts, settings panel)
+- [x] Pick List tracker (tier1+tier2 count)
 - [x] DNP button styling (red, Ban icon)
 - [x] Tier button icons (correct chevrons for tier distance)
 - [x] Event Setup with TBA integration, auto-refresh
@@ -44,8 +44,6 @@
 - WebSocket or Firebase for live sync between devices
 
 ### Future Ideas
-- Scouting data entry forms (match + pit)
-- Data sync between scouts (QR code / local network)
 - OPR/DPR/CCWM calculations from TBA match results
 - PWA / offline support for events with bad wifi
 - Alliance simulator (build hypothetical 3-team alliances)
