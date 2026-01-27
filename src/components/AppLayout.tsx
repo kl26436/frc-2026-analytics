@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, Outlet } from 'react-router-dom';
 import { BarChart3, Users, ClipboardList, Menu, X, Calendar, Swords, Handshake } from 'lucide-react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
+import ActiveSessionBanner from './ActiveSessionBanner';
 
 const navLinks = [
   { to: '/', icon: BarChart3, label: 'Dashboard' },
@@ -78,6 +79,7 @@ function AppLayout() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-4 md:py-8">
+        <ActiveSessionBanner />
         <Outlet />
       </main>
     </div>
