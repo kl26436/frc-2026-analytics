@@ -189,7 +189,7 @@ function MetricsSettings() {
 
   const enabledCount = config.columns.filter(c => c.enabled).length;
 
-  const renderColumn = (column: MetricColumn, index: number) => (
+  const renderColumn = (column: MetricColumn) => (
     <div
       key={column.id}
       draggable={editingColumn !== column.id}
@@ -516,7 +516,7 @@ function MetricsSettings() {
           <p className="text-sm text-textSecondary mt-1">Drag to reorder. Order here = column order on Teams page.</p>
         </div>
         <div>
-          {config.columns.map((col, idx) => renderColumn(col, idx))}
+          {config.columns.map((col) => renderColumn(col))}
         </div>
       </div>
 

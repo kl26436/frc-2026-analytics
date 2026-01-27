@@ -28,7 +28,6 @@ function EventSetup() {
   const fetchTBAData = useAnalyticsStore(state => state.fetchTBAData);
   const autoRefreshEnabled = useAnalyticsStore(state => state.autoRefreshEnabled);
   const setAutoRefresh = useAnalyticsStore(state => state.setAutoRefresh);
-  const clearTBAData = useAnalyticsStore(state => state.clearTBAData);
 
   const clearPickList = usePickListStore(state => state.clearPickList);
   const initializePickList = usePickListStore(state => state.initializePickList);
@@ -41,7 +40,7 @@ function EventSetup() {
     message: '',
   });
 
-  const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Auto-refresh effect
   useEffect(() => {
@@ -142,7 +141,7 @@ function EventSetup() {
 
       // Re-import TBA rankings if available
       let message = 'Pick list cleared and reinitialized';
-      if (tbaData.rankings && tbaData.rankings.rankings.length > 0) {
+      if (tbaData?.rankings && tbaData.rankings.rankings.length > 0) {
         importFromTBARankings(tbaData.rankings);
         const top12Count = Math.min(12, tbaData.rankings.rankings.length);
         const remainingCount = Math.max(0, tbaData.rankings.rankings.length - 12);
