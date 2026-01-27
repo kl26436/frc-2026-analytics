@@ -3,6 +3,7 @@ import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { Trophy, Target, TrendingUp, Users, Calendar, RefreshCw, ChevronDown, ChevronUp, Swords } from 'lucide-react';
 import { teamKeyToNumber } from '../utils/tbaApi';
 import { computeMatchup } from '../utils/predictions';
+import ActiveSessionBanner from '../components/ActiveSessionBanner';
 
 const OUR_TEAM = 148;
 const MATCHES_TO_SHOW = 3; // Show last 3 completed + next 3 upcoming
@@ -211,6 +212,9 @@ function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {/* Active Alliance Selection Session */}
+      <ActiveSessionBanner />
+
       {/* Team 148 Status Card */}
       {tbaData && (
         <div className="bg-gradient-to-r from-warning/20 to-warning/5 p-6 rounded-lg border border-warning/30">

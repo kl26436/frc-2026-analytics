@@ -21,6 +21,7 @@ import {
 } from '@dnd-kit/sortable';
 import { useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
+import ActiveSessionBanner from '../components/ActiveSessionBanner';
 import {
   Settings,
   Download,
@@ -743,6 +744,9 @@ function PickList() {
 
   return (
     <div className="space-y-4 md:space-y-6">
+      {/* Active Alliance Selection Session */}
+      <ActiveSessionBanner />
+
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
