@@ -33,13 +33,20 @@ import {
   ChevronsUp,
   ChevronsDown,
   GitCompare,
+  Ban,
   CheckSquare,
   Square,
+  Filter,
+  Mountain,
+  Zap,
+  Shield,
+  Trophy,
+  UserX,
 } from 'lucide-react';
 import type { PickListTeam } from '../types/pickList';
 
 // Sortable team card component
-function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onToggleFlag, isCompareMode, isSelected, onToggleSelection }: {
+function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onToggleFlag, isCompareMode, isSelected, onToggleSelection, passesFilters, onTogglePicked }: {
   team: PickListTeam | { teamNumber: number; teamName?: string; avgTotalPoints: number; level3ClimbRate: number; avgAutoPoints: number };
   currentTier?: 'tier1' | 'tier2' | 'tier3' | 'tier4';
   tierNames?: { tier1: string; tier2: string; tier3: string; tier4: string };
@@ -49,6 +56,8 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onT
   isCompareMode?: boolean;
   isSelected?: boolean;
   onToggleSelection?: () => void;
+  passesFilters?: boolean;
+  onTogglePicked?: () => void;
 }) {
   const {
     attributes,
@@ -75,17 +84,21 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onT
 
   const displayStats = teamStats || team;
 
+  const isPicked = isPickListTeam && team.isPicked;
+
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`bg-surface border rounded-lg p-2 mb-2 ${
+      className={`bg-surface border rounded-lg p-2 mb-2 transition-opacity ${
         isPickListTeam && team.flagged
           ? 'border-danger'
+          : isPicked
+          ? 'border-warning bg-warning/10'
           : isSelected
           ? 'border-success ring-2 ring-success'
           : 'border-border'
-      }`}
+      } ${passesFilters === false ? 'opacity-30' : ''}`}
     >
       <div className="flex items-start gap-2">
         {/* Checkbox for compare mode or drag handle for normal mode */}
@@ -173,16 +186,16 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onT
                     className="flex items-center gap-1 px-2 py-1 text-xs bg-surfaceElevated hover:bg-interactive rounded transition-colors"
                     title={`Demote to ${tierNames.tier3}`}
                   >
-                    <ArrowDown size={14} />
+                    <ChevronsDown size={14} />
                     <span className="truncate max-w-[60px]">{tierNames.tier3}</span>
                   </button>
                   <button
                     onClick={() => onMoveTier('tier4')}
-                    className="flex items-center gap-1 px-2 py-1 text-xs bg-surfaceElevated hover:bg-interactive rounded transition-colors"
+                    className="flex items-center gap-1 px-2 py-1 text-xs bg-danger/20 text-danger hover:bg-danger/30 rounded transition-colors"
                     title={`Demote to ${tierNames.tier4}`}
                   >
-                    <ChevronsDown size={14} />
-                    <span className="truncate max-w-[60px]">{tierNames.tier4}</span>
+                    <Ban size={14} />
+                    <span>DNP</span>
                   </button>
                 </>
               )}
@@ -208,11 +221,11 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onT
                   </button>
                   <button
                     onClick={() => onMoveTier('tier4')}
-                    className="flex items-center gap-1 px-2 py-1 text-xs bg-surfaceElevated hover:bg-interactive rounded transition-colors"
+                    className="flex items-center gap-1 px-2 py-1 text-xs bg-danger/20 text-danger hover:bg-danger/30 rounded transition-colors"
                     title={`Demote to ${tierNames.tier4}`}
                   >
-                    <ArrowDown size={14} />
-                    <span className="truncate max-w-[60px]">{tierNames.tier4}</span>
+                    <Ban size={14} />
+                    <span>DNP</span>
                   </button>
                 </>
               )}
@@ -238,11 +251,11 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onT
                   </button>
                   <button
                     onClick={() => onMoveTier('tier4')}
-                    className="flex items-center gap-1 px-2 py-1 text-xs bg-surfaceElevated hover:bg-interactive rounded transition-colors"
+                    className="flex items-center gap-1 px-2 py-1 text-xs bg-danger/20 text-danger hover:bg-danger/30 rounded transition-colors"
                     title={`Demote to ${tierNames.tier4}`}
                   >
-                    <ArrowDown size={14} />
-                    <span className="truncate max-w-[60px]">{tierNames.tier4}</span>
+                    <Ban size={14} />
+                    <span>DNP</span>
                   </button>
                 </>
               )}
@@ -283,6 +296,18 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onT
         {/* Actions - only show for teams in tiers */}
         {currentTier && (
           <div className="flex flex-col gap-1">
+            {/* Picked toggle - only for tier1/tier2 */}
+            {(currentTier === 'tier1' || currentTier === 'tier2') && (
+              <button
+                onClick={() => onTogglePicked?.()}
+                className={`p-1 rounded transition-colors ${
+                  isPicked ? 'text-warning' : 'text-textMuted hover:text-warning'
+                }`}
+                title={isPicked ? 'Mark as available' : 'Mark as picked'}
+              >
+                <UserX size={14} />
+              </button>
+            )}
             <button
               onClick={() => onToggleFlag?.()}
               className={`p-1 rounded transition-colors ${
@@ -307,7 +332,7 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onT
 }
 
 // Droppable column component
-function DroppableColumn({ id, title, teams, tier, tierNames, onMoveTier, isCompareMode, selectedTeams, onToggleTeamSelection }: {
+function DroppableColumn({ id, title, teams, tier, tierNames, onMoveTier, isCompareMode, selectedTeams, onToggleTeamSelection, teamPassesFilters, onTogglePicked }: {
   id: string;
   title: string;
   teams: any[];
@@ -317,6 +342,8 @@ function DroppableColumn({ id, title, teams, tier, tierNames, onMoveTier, isComp
   isCompareMode?: boolean;
   selectedTeams?: number[];
   onToggleTeamSelection?: (teamNumber: number) => void;
+  teamPassesFilters?: (teamNumber: number) => boolean;
+  onTogglePicked?: (teamNumber: number) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id });
   const updateNotes = usePickListStore(state => state.updateNotes);
@@ -344,6 +371,8 @@ function DroppableColumn({ id, title, teams, tier, tierNames, onMoveTier, isComp
               isCompareMode={isCompareMode}
               isSelected={selectedTeams?.includes(team.teamNumber)}
               onToggleSelection={onToggleTeamSelection ? () => onToggleTeamSelection(team.teamNumber) : undefined}
+              passesFilters={teamPassesFilters ? teamPassesFilters(team.teamNumber) : true}
+              onTogglePicked={onTogglePicked ? () => onTogglePicked(team.teamNumber) : undefined}
             />
           ))}
           {teams.length === 0 && (
@@ -368,6 +397,7 @@ function PickList() {
   const addTeamToTier = usePickListStore(state => state.addTeamToTier);
   const moveTeam = usePickListStore(state => state.moveTeam);
   const moveTeamAbove = usePickListStore(state => state.moveTeamAbove);
+  const togglePicked = usePickListStore(state => state.togglePicked);
   const eventCode = useAnalyticsStore(state => state.eventCode);
   const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
 
@@ -378,6 +408,56 @@ function PickList() {
   const [tier4Name, setTier4Name] = useState('Do Not Pick');
   const [activeId, setActiveId] = useState<string | null>(null);
   const [initialized, setInitialized] = useState(false);
+
+  // Capability filters
+  const [filters, setFilters] = useState({
+    l3Climber: false,    // level3ClimbRate > 50%
+    strongAuto: false,   // avgAutoPoints > 15 or autoMobilityRate > 80%
+    reliable: false,     // diedRate < 10% AND noShowRate < 5%
+    highScorer: false,   // avgTotalPoints > 40
+  });
+
+
+  // Toggle a filter
+  const toggleFilter = (filter: keyof typeof filters) => {
+    setFilters(prev => ({ ...prev, [filter]: !prev[filter] }));
+  };
+
+  // Check if a team passes all active filters
+  const teamPassesFilters = (teamNumber: number): boolean => {
+    const activeFilters = Object.entries(filters).filter(([_, active]) => active);
+    if (activeFilters.length === 0) return true; // No filters active
+
+    const stats = teamStatistics.find(t => t.teamNumber === teamNumber);
+    if (!stats) return false; // No stats = can't verify capability, gray out when filtering
+
+    for (const [filter] of activeFilters) {
+      switch (filter) {
+        case 'l3Climber':
+          if (stats.level3ClimbRate < 50) return false;
+          break;
+        case 'strongAuto':
+          if (stats.avgAutoPoints < 15 && stats.autoMobilityRate < 80) return false;
+          break;
+        case 'reliable':
+          if (stats.diedRate > 10 || stats.noShowRate > 5) return false;
+          break;
+        case 'highScorer':
+          if (stats.avgTotalPoints < 40) return false;
+          break;
+      }
+    }
+    return true;
+  };
+
+  // Count picked teams in tier1 + tier2
+  const pickedCount = pickList?.teams.filter(t =>
+    (t.tier === 'tier1' || t.tier === 'tier2') && t.isPicked
+  ).length || 0;
+
+  const tier1And2Count = pickList?.teams.filter(t =>
+    t.tier === 'tier1' || t.tier === 'tier2'
+  ).length || 0;
 
   // Comparison mode
   const {
@@ -698,6 +778,84 @@ function PickList() {
         </div>
       )}
 
+      {/* Pick List Tracker & Filters */}
+      <div className="bg-surface p-4 rounded-lg border border-border space-y-4">
+        {/* Tracker Row */}
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Trophy size={20} className="text-warning" />
+            <span className="font-semibold">Pick List:</span>
+            <span className="text-2xl font-bold text-success">{tier1And2Count}</span>
+            <span className="text-textSecondary">teams</span>
+          </div>
+          {pickedCount > 0 && (
+            <div className="text-sm text-textSecondary">
+              ({pickedCount} marked as picked)
+            </div>
+          )}
+        </div>
+
+        {/* Capability Filters Row */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 mr-2">
+            <Filter size={16} className="text-textSecondary" />
+            <span className="text-sm text-textSecondary">Highlight:</span>
+          </div>
+          <button
+            onClick={() => toggleFilter('l3Climber')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-colors ${
+              filters.l3Climber
+                ? 'bg-success text-background'
+                : 'bg-surfaceElevated hover:bg-interactive'
+            }`}
+          >
+            <Mountain size={14} />
+            L3 Climber
+          </button>
+          <button
+            onClick={() => toggleFilter('strongAuto')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-colors ${
+              filters.strongAuto
+                ? 'bg-success text-background'
+                : 'bg-surfaceElevated hover:bg-interactive'
+            }`}
+          >
+            <Zap size={14} />
+            Strong Auto
+          </button>
+          <button
+            onClick={() => toggleFilter('reliable')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-colors ${
+              filters.reliable
+                ? 'bg-success text-background'
+                : 'bg-surfaceElevated hover:bg-interactive'
+            }`}
+          >
+            <Shield size={14} />
+            Reliable
+          </button>
+          <button
+            onClick={() => toggleFilter('highScorer')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-colors ${
+              filters.highScorer
+                ? 'bg-success text-background'
+                : 'bg-surfaceElevated hover:bg-interactive'
+            }`}
+          >
+            <Trophy size={14} />
+            High Scorer
+          </button>
+          {Object.values(filters).some(f => f) && (
+            <button
+              onClick={() => setFilters({ l3Climber: false, strongAuto: false, reliable: false, highScorer: false })}
+              className="text-xs text-textMuted hover:text-danger ml-2"
+            >
+              Clear all
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Compare Mode Status */}
       {isCompareMode && (
         <div className="bg-surfaceElevated p-4 rounded-lg border border-success">
@@ -740,6 +898,8 @@ function PickList() {
             isCompareMode={isCompareMode}
             selectedTeams={selectedTeams}
             onToggleTeamSelection={toggleTeamSelection}
+            teamPassesFilters={teamPassesFilters}
+            onTogglePicked={togglePicked}
           />
           <DroppableColumn
             id="tier2-column"
@@ -756,6 +916,8 @@ function PickList() {
             isCompareMode={isCompareMode}
             selectedTeams={selectedTeams}
             onToggleTeamSelection={toggleTeamSelection}
+            teamPassesFilters={teamPassesFilters}
+            onTogglePicked={togglePicked}
           />
           <DroppableColumn
             id="tier3-column"
@@ -772,6 +934,8 @@ function PickList() {
             isCompareMode={isCompareMode}
             selectedTeams={selectedTeams}
             onToggleTeamSelection={toggleTeamSelection}
+            teamPassesFilters={teamPassesFilters}
+            onTogglePicked={togglePicked}
           />
           {/* Only show tier4 if it has teams */}
           {tier4Teams.length > 0 && (
@@ -790,6 +954,8 @@ function PickList() {
               isCompareMode={isCompareMode}
               selectedTeams={selectedTeams}
               onToggleTeamSelection={toggleTeamSelection}
+              teamPassesFilters={teamPassesFilters}
+              onTogglePicked={togglePicked}
             />
           )}
         </div>
