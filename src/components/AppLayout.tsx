@@ -1,24 +1,85 @@
-import { useState } from 'react';
-import { Link, Outlet } from 'react-router-dom';
-import { BarChart3, Users, ClipboardList, Menu, X, Calendar, Swords, Handshake, ClipboardCheck } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Link, Outlet, useLocation } from 'react-router-dom';
+import { BarChart3, Users, ClipboardList, Menu, X, Calendar, Swords, Handshake, ClipboardCheck, ChevronDown, Search, Target } from 'lucide-react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import ActiveSessionBanner from './ActiveSessionBanner';
 
-const navLinks = [
-  { to: '/', icon: BarChart3, label: 'Dashboard' },
+interface NavDropdownProps {
+  label: string;
+  icon: React.ElementType;
+  items: { to: string; icon: React.ElementType; label: string }[];
+  isActive: boolean;
+}
+
+function NavDropdown({ label, icon: Icon, items, isActive }: NavDropdownProps) {
+  const [open, setOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        onClick={() => setOpen(!open)}
+        className={`flex items-center gap-2 px-3 xl:px-4 py-2 rounded transition-colors text-sm xl:text-base ${
+          isActive ? 'bg-success/20 text-success' : 'bg-surfaceElevated hover:bg-interactive'
+        }`}
+      >
+        <Icon size={20} />
+        <span>{label}</span>
+        <ChevronDown size={16} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="absolute top-full left-0 mt-1 bg-surface border border-border rounded-lg shadow-lg py-1 min-w-[160px] z-50">
+          {items.map(({ to, icon: ItemIcon, label: itemLabel }) => (
+            <Link
+              key={to}
+              to={to}
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-3 px-4 py-2.5 hover:bg-interactive transition-colors"
+            >
+              <ItemIcon size={18} />
+              <span>{itemLabel}</span>
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Navigation structure
+const scoutingItems = [
   { to: '/teams', icon: Users, label: 'Teams' },
   { to: '/pit-scouting', icon: ClipboardCheck, label: 'Pit Scout' },
+];
+
+const strategyItems = [
   { to: '/picklist', icon: ClipboardList, label: 'Pick List' },
   { to: '/predict', icon: Swords, label: 'Predict' },
   { to: '/alliance-selection', icon: Handshake, label: 'Alliance' },
-  { to: '/event', icon: Calendar, label: 'Event' },
 ];
 
 function AppLayout() {
   const eventCode = useAnalyticsStore(state => state.eventCode);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const location = useLocation();
 
   const closeMobileMenu = () => setMobileMenuOpen(false);
+
+  // Check if current path is in a group
+  const isScoutingActive = scoutingItems.some(item => location.pathname === item.to || location.pathname.startsWith(item.to + '/'));
+  const isStrategyActive = strategyItems.some(item => location.pathname === item.to || location.pathname.startsWith(item.to + '/'));
 
   return (
     <div className="min-h-screen bg-background text-textPrimary">
@@ -36,17 +97,44 @@ function AppLayout() {
             </div>
 
             {/* Desktop Navigation */}
-            <nav className="hidden lg:flex gap-2 xl:gap-4">
-              {navLinks.map(({ to, icon: Icon, label }) => (
-                <Link
-                  key={to}
-                  to={to}
-                  className="flex items-center gap-2 px-3 xl:px-4 py-2 rounded bg-surfaceElevated hover:bg-interactive transition-colors text-sm xl:text-base"
-                >
-                  <Icon size={20} />
-                  <span>{label}</span>
-                </Link>
-              ))}
+            <nav className="hidden lg:flex gap-2 xl:gap-3">
+              {/* Dashboard - standalone */}
+              <Link
+                to="/"
+                className={`flex items-center gap-2 px-3 xl:px-4 py-2 rounded transition-colors text-sm xl:text-base ${
+                  location.pathname === '/' ? 'bg-success/20 text-success' : 'bg-surfaceElevated hover:bg-interactive'
+                }`}
+              >
+                <BarChart3 size={20} />
+                <span>Dashboard</span>
+              </Link>
+
+              {/* Scouting dropdown */}
+              <NavDropdown
+                label="Scouting"
+                icon={Search}
+                items={scoutingItems}
+                isActive={isScoutingActive}
+              />
+
+              {/* Strategy dropdown */}
+              <NavDropdown
+                label="Strategy"
+                icon={Target}
+                items={strategyItems}
+                isActive={isStrategyActive}
+              />
+
+              {/* Event - standalone */}
+              <Link
+                to="/event"
+                className={`flex items-center gap-2 px-3 xl:px-4 py-2 rounded transition-colors text-sm xl:text-base ${
+                  location.pathname === '/event' ? 'bg-success/20 text-success' : 'bg-surfaceElevated hover:bg-interactive'
+                }`}
+              >
+                <Calendar size={20} />
+                <span>Event</span>
+              </Link>
             </nav>
 
             {/* Mobile Menu Button */}
@@ -59,20 +147,70 @@ function AppLayout() {
             </button>
           </div>
 
-          {/* Mobile Navigation */}
+          {/* Mobile Navigation - flat list with section headers */}
           {mobileMenuOpen && (
-            <nav className="lg:hidden mt-4 pt-4 border-t border-border space-y-2">
-              {navLinks.map(({ to, icon: Icon, label }) => (
+            <nav className="lg:hidden mt-4 pt-4 border-t border-border space-y-1">
+              {/* Dashboard */}
+              <Link
+                to="/"
+                onClick={closeMobileMenu}
+                className={`flex items-center gap-3 px-4 py-3 rounded transition-colors ${
+                  location.pathname === '/' ? 'bg-success/20 text-success' : 'bg-surfaceElevated hover:bg-interactive'
+                }`}
+              >
+                <BarChart3 size={20} />
+                <span>Dashboard</span>
+              </Link>
+
+              {/* Scouting section */}
+              <div className="pt-2">
+                <p className="px-4 py-1 text-xs font-semibold text-textMuted uppercase tracking-wider">Scouting</p>
+                {scoutingItems.map(({ to, icon: Icon, label }) => (
+                  <Link
+                    key={to}
+                    to={to}
+                    onClick={closeMobileMenu}
+                    className={`flex items-center gap-3 px-4 py-3 rounded transition-colors ${
+                      location.pathname === to ? 'bg-success/20 text-success' : 'hover:bg-interactive'
+                    }`}
+                  >
+                    <Icon size={20} />
+                    <span>{label}</span>
+                  </Link>
+                ))}
+              </div>
+
+              {/* Strategy section */}
+              <div className="pt-2">
+                <p className="px-4 py-1 text-xs font-semibold text-textMuted uppercase tracking-wider">Strategy</p>
+                {strategyItems.map(({ to, icon: Icon, label }) => (
+                  <Link
+                    key={to}
+                    to={to}
+                    onClick={closeMobileMenu}
+                    className={`flex items-center gap-3 px-4 py-3 rounded transition-colors ${
+                      location.pathname === to || location.pathname.startsWith(to + '/') ? 'bg-success/20 text-success' : 'hover:bg-interactive'
+                    }`}
+                  >
+                    <Icon size={20} />
+                    <span>{label}</span>
+                  </Link>
+                ))}
+              </div>
+
+              {/* Event */}
+              <div className="pt-2">
                 <Link
-                  key={to}
-                  to={to}
+                  to="/event"
                   onClick={closeMobileMenu}
-                  className="flex items-center gap-3 px-4 py-3 rounded bg-surfaceElevated hover:bg-interactive transition-colors"
+                  className={`flex items-center gap-3 px-4 py-3 rounded transition-colors ${
+                    location.pathname === '/event' ? 'bg-success/20 text-success' : 'hover:bg-interactive'
+                  }`}
                 >
-                  <Icon size={20} />
-                  <span>{label}</span>
+                  <Calendar size={20} />
+                  <span>Event Setup</span>
                 </Link>
-              ))}
+              </div>
             </nav>
           )}
         </div>
