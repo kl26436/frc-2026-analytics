@@ -107,6 +107,7 @@ function AllianceSelectionBoard({
   const availableCount = session.teams.filter(t => t.status === 'available' && (session.showTier3 || t.originalTier !== 'tier3')).length;
   const pickedCount = session.teams.filter(t => t.status === 'picked').length;
   const tier3Count = session.teams.filter(t => t.originalTier === 'tier3').length;
+  const unrankedCount = session.teams.filter(t => t.originalTier === 'unranked').length;
 
   // Comparison modal data
   const compareTeam1 = teamStatistics.find(t => t.teamNumber === selectedTeamsForCompare[0]);
@@ -140,13 +141,18 @@ function AllianceSelectionBoard({
           />
 
           {/* Stats bar */}
-          <div className="flex items-center gap-4 text-sm">
+          <div className="flex items-center gap-4 text-sm flex-wrap">
             <span className="text-textSecondary">
               <span className="font-bold text-textPrimary">{availableCount}</span> available
             </span>
             <span className="text-textSecondary">
               <span className="font-bold text-success">{pickedCount}</span> picked
             </span>
+            {unrankedCount > 0 && (
+              <span className="text-textSecondary">
+                <span className="font-bold text-textMuted">{unrankedCount}</span> unranked
+              </span>
+            )}
             {selectedTeamsForCompare.length > 0 && (
               <span className="text-blueAlliance text-xs">
                 Click teams to compare ({selectedTeamsForCompare.length}/2)

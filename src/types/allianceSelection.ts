@@ -6,7 +6,7 @@ export type SessionStatus = 'active' | 'completed';
 
 export interface SelectionTeam {
   teamNumber: number;
-  originalTier: 'tier1' | 'tier2' | 'tier3';
+  originalTier: 'tier1' | 'tier2' | 'tier3' | 'unranked';
   originalRank: number;
   globalRank: number;
   status: SelectionTeamStatus;

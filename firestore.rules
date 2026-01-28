@@ -9,12 +9,9 @@ service cloud.firestore {
       allow create: if request.auth != null
                     && request.resource.data.createdBy == request.auth.uid;
 
-      // Creator or editors can update
-      allow update: if request.auth != null
-                    && (
-                      resource.data.createdBy == request.auth.uid
-                      || request.auth.uid in resource.data.editorUids
-                    );
+      // Any authenticated user can update (joining adds them to participants,
+      // editors/admin make game-state changes — all require write access)
+      allow update: if request.auth != null;
 
       // Only creator can delete
       allow delete: if request.auth != null

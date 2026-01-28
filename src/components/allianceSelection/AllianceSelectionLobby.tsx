@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, LogIn, RotateCcw, Loader2 } from 'lucide-react';
+import { Plus, LogIn, RotateCcw, Loader2, AlertCircle } from 'lucide-react';
 import { usePickListStore } from '../../store/usePickListStore';
 import { useAnalyticsStore } from '../../store/useAnalyticsStore';
 import { useAllianceSelectionStore } from '../../store/useAllianceSelectionStore';
@@ -14,9 +14,11 @@ interface AllianceSelectionLobbyProps {
 function AllianceSelectionLobby({ onCreateSession, onJoinSession, loading, error }: AllianceSelectionLobbyProps) {
   const pickList = usePickListStore(state => state.pickList);
   const eventCode = useAnalyticsStore(state => state.eventCode);
+  const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
   const lastSessionCode = useAllianceSelectionStore(state => state.lastSessionCode);
   const lastDisplayName = useAllianceSelectionStore(state => state.lastDisplayName);
   const lastTeamNumber = useAllianceSelectionStore(state => state.lastTeamNumber);
+  const activeSessionId = useAllianceSelectionStore(state => state.activeSessionId);
   const setLastDisplayName = useAllianceSelectionStore(state => state.setLastDisplayName);
   const setLastTeamNumber = useAllianceSelectionStore(state => state.setLastTeamNumber);
 
@@ -28,7 +30,13 @@ function AllianceSelectionLobby({ onCreateSession, onJoinSession, loading, error
 
   const tier1Count = pickList?.teams.filter(t => t.tier === 'tier1').length ?? 0;
   const tier2Count = pickList?.teams.filter(t => t.tier === 'tier2').length ?? 0;
-  const totalImport = tier1Count + tier2Count;
+  const tier3Count = pickList?.teams.filter(t => t.tier === 'tier3').length ?? 0;
+  const rankedCount = tier1Count + tier2Count + tier3Count;
+  const totalEventTeams = teamStatistics.length;
+  const unrankedCount = totalEventTeams - rankedCount;
+
+  // Check if there's already an active session
+  const hasActiveSession = !!activeSessionId;
 
   const parseTeamNum = (val: string): number | undefined => {
     const num = parseInt(val.trim(), 10);
@@ -77,13 +85,25 @@ function AllianceSelectionLobby({ onCreateSession, onJoinSession, loading, error
             Create New Session
           </h2>
 
-          {!eventCode ? (
+          {hasActiveSession ? (
+            <div className="space-y-4">
+              <div className="flex items-start gap-3 bg-warning/10 border border-warning/30 text-warning px-4 py-3 rounded-lg">
+                <AlertCircle size={20} className="flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold">Session Already Active</p>
+                  <p className="text-sm text-textSecondary mt-1">
+                    You already have an active session. Use the "Live Alliance Selection" banner at the top of any page to rejoin, or use the Rejoin button below.
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : !eventCode ? (
             <p className="text-textSecondary">
               No event loaded. Go to the Event page to set up an event first.
             </p>
-          ) : !pickList || totalImport === 0 ? (
+          ) : totalEventTeams === 0 ? (
             <p className="text-textSecondary">
-              No pick list found. Build your pick list first — tier 1 and tier 2 teams will be imported.
+              No teams loaded. Go to the Event page to load event data first.
             </p>
           ) : (
             <div className="space-y-4">
@@ -92,7 +112,7 @@ function AllianceSelectionLobby({ onCreateSession, onJoinSession, loading, error
                 <p className="font-semibold">{eventCode}</p>
               </div>
 
-              <div className="flex gap-4">
+              <div className="flex gap-4 flex-wrap">
                 <div>
                   <p className="text-sm text-textSecondary">Tier 1</p>
                   <p className="text-lg font-bold text-success">{tier1Count}</p>
@@ -102,8 +122,16 @@ function AllianceSelectionLobby({ onCreateSession, onJoinSession, loading, error
                   <p className="text-lg font-bold text-warning">{tier2Count}</p>
                 </div>
                 <div>
+                  <p className="text-sm text-textSecondary">Tier 3</p>
+                  <p className="text-lg font-bold text-blueAlliance">{tier3Count}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-textSecondary">Unranked</p>
+                  <p className="text-lg font-bold text-textSecondary">{unrankedCount}</p>
+                </div>
+                <div>
                   <p className="text-sm text-textSecondary">Total</p>
-                  <p className="text-lg font-bold">{totalImport}</p>
+                  <p className="text-lg font-bold">{totalEventTeams}</p>
                 </div>
               </div>
 
@@ -137,7 +165,7 @@ function AllianceSelectionLobby({ onCreateSession, onJoinSession, loading, error
                 className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-success text-background font-semibold rounded-lg hover:bg-success/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
-                Create Session ({totalImport} teams)
+                Create Session ({totalEventTeams} teams)
               </button>
             </div>
           )}

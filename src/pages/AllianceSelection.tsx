@@ -5,6 +5,7 @@ import { useFirebaseAuth } from '../hooks/useFirebaseAuth';
 import { useAllianceSession } from '../hooks/useAllianceSession';
 import { useAllianceSelectionStore } from '../store/useAllianceSelectionStore';
 import { usePickListStore } from '../store/usePickListStore';
+import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import AllianceSelectionLobby from '../components/allianceSelection/AllianceSelectionLobby';
 import AllianceSelectionBoard from '../components/allianceSelection/AllianceSelectionBoard';
 
@@ -13,6 +14,7 @@ function AllianceSelection() {
   const navigate = useNavigate();
   const { user, loading: authLoading, signIn } = useFirebaseAuth();
   const pickList = usePickListStore(state => state.pickList);
+  const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
   const setLastSessionCode = useAllianceSelectionStore(state => state.setLastSessionCode);
   const setLastDisplayName = useAllianceSelectionStore(state => state.setLastDisplayName);
   const setLastTeamNumber = useAllianceSelectionStore(state => state.setLastTeamNumber);
@@ -75,9 +77,13 @@ function AllianceSelection() {
     }
     if (!pickList) return;
 
+    // Get all event team numbers from teamStatistics
+    const allEventTeamNumbers = teamStatistics.map(t => t.teamNumber);
+
     const result = await createSession({
       eventKey,
       teams: pickList.teams,
+      allEventTeamNumbers,
       displayName,
       teamNumber,
     });
@@ -85,7 +91,7 @@ function AllianceSelection() {
     setLastSessionCode(result.sessionCode);
     setActiveSessionId(result.sessionId);
     navigate(`/alliance-selection/${result.sessionCode}`);
-  }, [user, signIn, pickList, createSession, setLastSessionCode, setActiveSessionId, navigate]);
+  }, [user, signIn, pickList, teamStatistics, createSession, setLastSessionCode, setActiveSessionId, navigate]);
 
   const handleJoinSession = useCallback(async (code: string, displayName: string, teamNumber?: number) => {
     if (!user) {

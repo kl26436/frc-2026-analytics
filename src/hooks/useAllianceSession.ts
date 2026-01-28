@@ -25,8 +25,8 @@ function generateSessionCode(): string {
   return code;
 }
 
-// Build the selection team list from pick list teams
-function buildSelectionTeams(pickListTeams: PickListTeam[]): SelectionTeam[] {
+// Build the selection team list from pick list teams + all event teams
+function buildSelectionTeams(pickListTeams: PickListTeam[], allEventTeamNumbers: number[]): SelectionTeam[] {
   const tier1 = pickListTeams
     .filter(t => t.tier === 'tier1')
     .sort((a, b) => a.rank - b.rank);
@@ -37,9 +37,18 @@ function buildSelectionTeams(pickListTeams: PickListTeam[]): SelectionTeam[] {
     .filter(t => t.tier === 'tier3')
     .sort((a, b) => a.rank - b.rank);
 
+  // Get team numbers in pick list
+  const pickListTeamNumbers = new Set(pickListTeams.map(t => t.teamNumber));
+
+  // Find teams not in pick list (unranked)
+  const unrankedTeamNumbers = allEventTeamNumbers
+    .filter(num => !pickListTeamNumbers.has(num))
+    .sort((a, b) => a - b); // Sort by team number
+
   let globalRank = 1;
   const result: SelectionTeam[] = [];
 
+  // Add pick list teams (tier1, tier2, tier3)
   for (const team of [...tier1, ...tier2, ...tier3]) {
     result.push({
       teamNumber: team.teamNumber,
@@ -51,6 +60,22 @@ function buildSelectionTeams(pickListTeams: PickListTeam[]): SelectionTeam[] {
       notes: team.notes,
       tags: team.tags,
       flagged: team.flagged,
+    });
+  }
+
+  // Add unranked teams (not in pick list)
+  let unrankedRank = 1;
+  for (const teamNumber of unrankedTeamNumbers) {
+    result.push({
+      teamNumber,
+      originalTier: 'unranked',
+      originalRank: unrankedRank++,
+      globalRank: globalRank++,
+      status: 'available',
+      pickedByAlliance: null,
+      notes: '',
+      tags: [],
+      flagged: false,
     });
   }
 
@@ -90,6 +115,7 @@ function docToSession(docId: string, data: Record<string, unknown>): AllianceSel
 interface CreateSessionParams {
   eventKey: string;
   teams: PickListTeam[];
+  allEventTeamNumbers: number[];
   displayName: string;
   teamNumber?: number;
 }
@@ -170,7 +196,7 @@ export function useAllianceSession(userId: string | null) {
       }
 
       const sessionRef = doc(collection(db, 'sessions'));
-      const teams = buildSelectionTeams(params.teams);
+      const teams = buildSelectionTeams(params.teams, params.allEventTeamNumbers);
       const alliances = buildEmptyAlliances();
 
       const participant: Record<string, unknown> = {

@@ -34,12 +34,17 @@ function SelectionTeamCard({
   const isPicked = team.status === 'picked';
   const isDeclined = team.status === 'declined';
 
-  const tierLabel = team.originalTier === 'tier1' ? 'T1' : team.originalTier === 'tier2' ? 'T2' : 'T3';
+  const tierLabel = team.originalTier === 'tier1' ? 'T1'
+    : team.originalTier === 'tier2' ? 'T2'
+    : team.originalTier === 'tier3' ? 'T3'
+    : '—';
   const tierColor = team.originalTier === 'tier1'
     ? 'bg-success/20 text-success'
     : team.originalTier === 'tier2'
     ? 'bg-warning/20 text-warning'
-    : 'bg-textMuted/20 text-textMuted';
+    : team.originalTier === 'tier3'
+    ? 'bg-blueAlliance/20 text-blueAlliance'
+    : 'bg-surfaceElevated text-textMuted';
 
   return (
     <div
