@@ -12,6 +12,7 @@ import EventSetup from './pages/EventSetup';
 import AlliancePredictor from './pages/AlliancePredictor';
 import AllianceSelection from './pages/AllianceSelection';
 import AllianceSelectionJoin from './pages/AllianceSelectionJoin';
+import PitScouting from './pages/PitScouting';
 
 function App() {
   const loadMockData = useAnalyticsStore(state => state.loadMockData);
@@ -39,6 +40,7 @@ function App() {
           <Route path="/predict" element={<AlliancePredictor />} />
           <Route path="/alliance-selection" element={<AllianceSelection />} />
           <Route path="/alliance-selection/:sessionCode" element={<AllianceSelection />} />
+          <Route path="/pit-scouting" element={<PitScouting />} />
           <Route path="/event" element={<EventSetup />} />
           <Route path="/metrics" element={<MetricsSettings />} />
         </Route>

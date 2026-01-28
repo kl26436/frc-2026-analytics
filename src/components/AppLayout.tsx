@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Link, Outlet } from 'react-router-dom';
-import { BarChart3, Users, ClipboardList, Menu, X, Calendar, Swords, Handshake } from 'lucide-react';
+import { BarChart3, Users, ClipboardList, Menu, X, Calendar, Swords, Handshake, ClipboardCheck } from 'lucide-react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import ActiveSessionBanner from './ActiveSessionBanner';
 
 const navLinks = [
   { to: '/', icon: BarChart3, label: 'Dashboard' },
   { to: '/teams', icon: Users, label: 'Teams' },
+  { to: '/pit-scouting', icon: ClipboardCheck, label: 'Pit Scout' },
   { to: '/picklist', icon: ClipboardList, label: 'Pick List' },
   { to: '/predict', icon: Swords, label: 'Predict' },
   { to: '/alliance-selection', icon: Handshake, label: 'Alliance' },
