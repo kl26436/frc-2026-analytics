@@ -1,0 +1,10 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Pit scouting photos
+    match /pitPhotos/{eventCode}/{fileName} {
+      // Any authenticated user can read/write pit photos
+      allow read, write: if request.auth != null;
+    }
+  }
+}

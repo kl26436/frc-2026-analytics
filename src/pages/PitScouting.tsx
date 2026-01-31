@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Camera, Upload, Save, Loader2, CheckCircle, ChevronLeft, Trash2 } from 'lucide-react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { usePitScoutStore } from '../store/usePitScoutStore';
+import { useFirebaseAuth } from '../hooks/useFirebaseAuth';
 import { createEmptyPitScoutEntry } from '../types/pitScouting';
 import type { PitScoutEntry, DriveType, ClimbLevel, VibeCheck } from '../types/pitScouting';
 
@@ -9,6 +10,14 @@ function PitScouting() {
   const eventCode = useAnalyticsStore(state => state.eventCode);
   const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
   const { entries, error, lastScoutName, setLastScoutName, addEntry, uploadPhoto, loadEntriesFromFirestore } = usePitScoutStore();
+  const { user, loading: authLoading, signIn } = useFirebaseAuth();
+
+  // Auto sign-in on mount
+  useEffect(() => {
+    if (!user && !authLoading) {
+      signIn();
+    }
+  }, [user, authLoading, signIn]);
 
   const [scoutName, setScoutName] = useState(lastScoutName);
   const [selectedTeam, setSelectedTeam] = useState<number | null>(null);
@@ -21,12 +30,12 @@ function PitScouting() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
-  // Load entries on mount
+  // Load entries once authenticated
   useEffect(() => {
-    if (eventCode) {
+    if (eventCode && user) {
       loadEntriesFromFirestore(eventCode).catch(console.error);
     }
-  }, [eventCode, loadEntriesFromFirestore]);
+  }, [eventCode, user, loadEntriesFromFirestore]);
 
   // Initialize form when team is selected
   useEffect(() => {
@@ -107,6 +116,15 @@ function PitScouting() {
   const scoutedTeams = teamStatistics.filter(
     t => entries.some(e => e.teamNumber === t.teamNumber)
   );
+
+  // Auth loading
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 size={32} className="animate-spin text-textSecondary" />
+      </div>
+    );
+  }
 
   // Scout name entry
   if (!scoutName.trim()) {

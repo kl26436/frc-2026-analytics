@@ -1,6 +1,7 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Alliance Selection sessions
     match /sessions/{sessionId} {
       // Any authenticated user can read (they need the sessionId/code to access)
       allow read: if request.auth != null;
@@ -16,6 +17,12 @@ service cloud.firestore {
       // Only creator can delete
       allow delete: if request.auth != null
                     && resource.data.createdBy == request.auth.uid;
+    }
+
+    // Pit Scouting entries
+    match /pitScouting/{entryId} {
+      // Any authenticated user can read/write pit scouting data
+      allow read, write: if request.auth != null;
     }
   }
 }
