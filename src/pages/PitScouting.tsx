@@ -20,6 +20,7 @@ function PitScouting() {
   }, [user, authLoading, signIn]);
 
   const [scoutName, setScoutName] = useState(lastScoutName);
+  const [scoutNameConfirmed, setScoutNameConfirmed] = useState(!!lastScoutName);
   const [selectedTeam, setSelectedTeam] = useState<number | null>(null);
   const [formData, setFormData] = useState<Omit<PitScoutEntry, 'id' | 'timestamp'> | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -127,7 +128,14 @@ function PitScouting() {
   }
 
   // Scout name entry
-  if (!scoutName.trim()) {
+  if (!scoutNameConfirmed) {
+    const handleConfirmName = () => {
+      if (scoutName.trim()) {
+        setScoutNameConfirmed(true);
+        setLastScoutName(scoutName.trim());
+      }
+    };
+
     return (
       <div className="space-y-6">
         <div>
@@ -141,6 +149,7 @@ function PitScouting() {
             type="text"
             value={scoutName}
             onChange={e => setScoutName(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleConfirmName()}
             placeholder="Scout name"
             className="w-full bg-card border border-border rounded-lg px-4 py-3 text-textPrimary placeholder-textMuted focus:outline-none focus:border-success text-lg"
             autoFocus
@@ -148,6 +157,13 @@ function PitScouting() {
           <p className="text-textSecondary text-sm mt-2">
             Your name will be saved with each pit scout entry.
           </p>
+          <button
+            onClick={handleConfirmName}
+            disabled={!scoutName.trim()}
+            className="mt-4 w-full px-4 py-3 bg-success text-background font-bold rounded-lg hover:bg-success/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            Continue
+          </button>
         </div>
       </div>
     );
@@ -161,7 +177,7 @@ function PitScouting() {
           <h1 className="text-2xl md:text-3xl font-bold">Pit Scouting</h1>
           <p className="text-textSecondary mt-1">
             Scout: <span className="text-textPrimary font-semibold">{scoutName}</span>
-            <button onClick={() => setScoutName('')} className="text-blueAlliance ml-2 text-sm">(change)</button>
+            <button onClick={() => setScoutNameConfirmed(false)} className="text-blueAlliance ml-2 text-sm">(change)</button>
           </p>
         </div>
 
