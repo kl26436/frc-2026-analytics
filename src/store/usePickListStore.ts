@@ -46,7 +46,7 @@ export const usePickListStore = create<PickListState>()(
       tbaApiKey: '',
 
       // Initialize a new pick list
-      initializePickList: (eventKey, tier1Name = 'Steak', tier2Name = 'Potatoes', tier3Name = 'Chicken Nuggets', tier4Name = 'Do Not Pick') => {
+      initializePickList: (eventKey, tier1Name = 'Steak', tier2Name = 'Potatoes', tier3Name = 'Chicken Nuggets', tier4Name = 'All Teams') => {
         const config: PickListConfig = {
           eventKey,
           tier1Name,
