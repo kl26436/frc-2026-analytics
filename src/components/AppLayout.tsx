@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
-import { BarChart3, Users, ClipboardList, Menu, X, Calendar, Swords, Handshake, ClipboardCheck, ChevronDown, Search, Target } from 'lucide-react';
+import { BarChart3, Users, ClipboardList, Menu, X, Calendar, Swords, Handshake, ClipboardCheck, ChevronDown, Search, Target, Shield, LogOut } from 'lucide-react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
+import { useAuth } from '../contexts/AuthContext';
 import ActiveSessionBanner from './ActiveSessionBanner';
 
 interface NavDropdownProps {
@@ -72,6 +73,7 @@ const strategyItems = [
 
 function AppLayout() {
   const eventCode = useAnalyticsStore(state => state.eventCode);
+  const { user, isAdmin, signOut } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
 
@@ -135,6 +137,34 @@ function AppLayout() {
                 <Calendar size={20} />
                 <span>Event</span>
               </Link>
+
+              {/* Admin link (admins only) */}
+              {isAdmin && (
+                <Link
+                  to="/admin"
+                  className={`flex items-center gap-2 px-3 xl:px-4 py-2 rounded transition-colors text-sm xl:text-base ${
+                    location.pathname === '/admin' ? 'bg-success/20 text-success' : 'bg-surfaceElevated hover:bg-interactive'
+                  }`}
+                >
+                  <Shield size={20} />
+                  <span>Admin</span>
+                </Link>
+              )}
+
+              {/* User + Sign out */}
+              <div className="flex items-center gap-2 pl-2 border-l border-border ml-1">
+                {user?.photoURL && (
+                  <img src={user.photoURL} alt="" className="h-7 w-7 rounded-full" />
+                )}
+                <span className="text-xs text-textSecondary max-w-[100px] truncate">{user?.email}</span>
+                <button
+                  onClick={signOut}
+                  className="p-2 rounded hover:bg-interactive text-textMuted hover:text-danger transition-colors"
+                  title="Sign out"
+                >
+                  <LogOut size={16} />
+                </button>
+              </div>
             </nav>
 
             {/* Mobile Menu Button */}
@@ -210,6 +240,39 @@ function AppLayout() {
                   <Calendar size={20} />
                   <span>Event Setup</span>
                 </Link>
+              </div>
+
+              {/* Admin (admins only) */}
+              {isAdmin && (
+                <div className="pt-2">
+                  <Link
+                    to="/admin"
+                    onClick={closeMobileMenu}
+                    className={`flex items-center gap-3 px-4 py-3 rounded transition-colors ${
+                      location.pathname === '/admin' ? 'bg-success/20 text-success' : 'hover:bg-interactive'
+                    }`}
+                  >
+                    <Shield size={20} />
+                    <span>Admin</span>
+                  </Link>
+                </div>
+              )}
+
+              {/* User info + sign out */}
+              <div className="pt-4 mt-2 border-t border-border">
+                <div className="flex items-center gap-3 px-4 py-3">
+                  {user?.photoURL && (
+                    <img src={user.photoURL} alt="" className="h-8 w-8 rounded-full" />
+                  )}
+                  <span className="flex-1 text-sm text-textSecondary truncate">{user?.email}</span>
+                  <button
+                    onClick={() => { closeMobileMenu(); signOut(); }}
+                    className="flex items-center gap-2 px-3 py-2 text-danger hover:bg-danger/10 rounded transition-colors text-sm"
+                  >
+                    <LogOut size={16} />
+                    Sign out
+                  </button>
+                </div>
               </div>
             </nav>
           )}

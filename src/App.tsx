@@ -1,6 +1,8 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { useEffect } from 'react';
 import { useAnalyticsStore } from './store/useAnalyticsStore';
+import { AuthProvider } from './contexts/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
 import AppLayout from './components/AppLayout';
 import TeamList from './pages/TeamList';
 import TeamComparison from './pages/TeamComparison';
@@ -13,8 +15,9 @@ import AlliancePredictor from './pages/AlliancePredictor';
 import AllianceSelection from './pages/AllianceSelection';
 import AllianceSelectionJoin from './pages/AllianceSelectionJoin';
 import PitScouting from './pages/PitScouting';
+import AdminSettings from './pages/AdminSettings';
 
-function App() {
+function AppContent() {
   const loadMockData = useAnalyticsStore(state => state.loadMockData);
 
   // Load event data on mount
@@ -25,26 +28,39 @@ function App() {
   }, [loadMockData]);
 
   return (
-    <Router basename="/frc-2026-analytics">
-      <Routes>
-        {/* Guest route — standalone page, no nav shell */}
-        <Route path="/alliance-selection/join/:sessionCode" element={<AllianceSelectionJoin />} />
+    <Routes>
+      {/* Guest route — standalone page, no nav shell, no auth required */}
+      <Route path="/alliance-selection/join/:sessionCode" element={<AllianceSelectionJoin />} />
 
-        {/* All other routes — wrapped in nav shell */}
-        <Route element={<AppLayout />}>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/teams" element={<TeamList />} />
-          <Route path="/teams/:teamNumber" element={<TeamDetail />} />
-          <Route path="/compare" element={<TeamComparison />} />
-          <Route path="/picklist" element={<PickList />} />
-          <Route path="/predict" element={<AlliancePredictor />} />
-          <Route path="/alliance-selection" element={<AllianceSelection />} />
-          <Route path="/alliance-selection/:sessionCode" element={<AllianceSelection />} />
-          <Route path="/pit-scouting" element={<PitScouting />} />
-          <Route path="/event" element={<EventSetup />} />
-          <Route path="/metrics" element={<MetricsSettings />} />
-        </Route>
-      </Routes>
+      {/* All other routes — protected + wrapped in nav shell */}
+      <Route element={
+        <ProtectedRoute>
+          <AppLayout />
+        </ProtectedRoute>
+      }>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/teams" element={<TeamList />} />
+        <Route path="/teams/:teamNumber" element={<TeamDetail />} />
+        <Route path="/compare" element={<TeamComparison />} />
+        <Route path="/picklist" element={<PickList />} />
+        <Route path="/predict" element={<AlliancePredictor />} />
+        <Route path="/alliance-selection" element={<AllianceSelection />} />
+        <Route path="/alliance-selection/:sessionCode" element={<AllianceSelection />} />
+        <Route path="/pit-scouting" element={<PitScouting />} />
+        <Route path="/event" element={<EventSetup />} />
+        <Route path="/metrics" element={<MetricsSettings />} />
+        <Route path="/admin" element={<AdminSettings />} />
+      </Route>
+    </Routes>
+  );
+}
+
+function App() {
+  return (
+    <Router basename="/frc-2026-analytics">
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
     </Router>
   );
 }
