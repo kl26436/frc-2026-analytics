@@ -2,11 +2,28 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { PickList, PickListTeam, PickListConfig } from '../types/pickList';
 import type { TBAEventRankings } from '../types/tba';
+import type { TeamStatistics } from '../types/scouting';
 import { teamKeyToNumber } from '../utils/tbaApi';
+
+// Red flag auto-detection thresholds
+export interface RedFlagThresholds {
+  diedRate: number; // Flag if >= this percentage
+  mechanicalIssuesRate: number;
+  tippedRate: number;
+  noShowRate: number;
+}
+
+export const DEFAULT_RED_FLAG_THRESHOLDS: RedFlagThresholds = {
+  diedRate: 20, // Flag if died 20% or more of matches
+  mechanicalIssuesRate: 25, // Flag if mechanical issues 25% or more
+  tippedRate: 15, // Flag if tipped 15% or more
+  noShowRate: 10, // Flag if no-showed 10% or more
+};
 
 interface PickListState {
   pickList: PickList | null;
   tbaApiKey: string;
+  redFlagThresholds: RedFlagThresholds;
 
   // Actions
   initializePickList: (eventKey: string, tier1Name?: string, tier2Name?: string, tier3Name?: string, tier4Name?: string) => void;
@@ -27,14 +44,27 @@ interface PickListState {
   removeTag: (teamNumber: number, tag: string) => void;
   toggleFlag: (teamNumber: number) => void;
 
+  // Red flag auto-detection
+  setRedFlagThresholds: (thresholds: RedFlagThresholds) => void;
+  autoFlagTeams: (teamStatistics: TeamStatistics[]) => number; // Returns count of newly flagged teams
+
   // TBA integration
   importFromTBARankings: (rankings: TBAEventRankings) => void;
 
   // Sorting
   sortTier: (tier: 'tier1' | 'tier2' | 'tier3' | 'tier4', sortBy: 'rank' | 'teamNumber' | 'points' | 'climb' | 'auto') => void;
 
+  // Watchlist - for tracking final morning teams
+  toggleWatchlist: (teamNumber: number) => void;
+  updateWatchlistNotes: (teamNumber: number, notes: string) => void;
+  reorderWatchlist: (teamNumber: number, newRank: number) => void;
+  finalizeWatchlist: (insertAtRank: number) => void; // Insert watchlist teams into Potatoes at position
+  clearWatchlist: () => void;
+  getWatchlistTeams: () => PickListTeam[];
+
   // Bulk operations
   clearPickList: () => void;
+  clearAllFlags: () => void;
   exportPickList: () => string; // Returns JSON string
   importPickList: (jsonString: string) => void;
 }
@@ -44,6 +74,7 @@ export const usePickListStore = create<PickListState>()(
     (set, get) => ({
       pickList: null,
       tbaApiKey: '',
+      redFlagThresholds: DEFAULT_RED_FLAG_THRESHOLDS,
 
       // Initialize a new pick list
       initializePickList: (eventKey, tier1Name = 'Steak', tier2Name = 'Potatoes', tier3Name = 'Chicken Nuggets', tier4Name = 'All Teams') => {
@@ -111,6 +142,7 @@ export const usePickListStore = create<PickListState>()(
           isPicked: false,
           tags: [],
           flagged: false,
+          onWatchlist: false,
         };
 
         set({
@@ -313,6 +345,240 @@ export const usePickListStore = create<PickListState>()(
         });
       },
 
+      // Set red flag auto-detection thresholds
+      setRedFlagThresholds: (thresholds) => {
+        set({ redFlagThresholds: thresholds });
+      },
+
+      // Auto-flag teams based on reliability thresholds
+      autoFlagTeams: (teamStatistics) => {
+        const { pickList, redFlagThresholds } = get();
+        if (!pickList) return 0;
+
+        let newlyFlaggedCount = 0;
+
+        const updatedTeams = pickList.teams.map(team => {
+          const stats = teamStatistics.find(s => s.teamNumber === team.teamNumber);
+          if (!stats) return team;
+
+          // Check if team exceeds any threshold
+          const shouldFlag =
+            stats.diedRate >= redFlagThresholds.diedRate ||
+            stats.mechanicalIssuesRate >= redFlagThresholds.mechanicalIssuesRate ||
+            stats.tippedRate >= redFlagThresholds.tippedRate ||
+            stats.noShowRate >= redFlagThresholds.noShowRate;
+
+          // Only count as newly flagged if it wasn't already flagged
+          if (shouldFlag && !team.flagged) {
+            newlyFlaggedCount++;
+          }
+
+          return shouldFlag ? { ...team, flagged: true } : team;
+        });
+
+        set({
+          pickList: {
+            ...pickList,
+            teams: updatedTeams,
+          },
+        });
+
+        return newlyFlaggedCount;
+      },
+
+      // Clear all flags
+      clearAllFlags: () => {
+        const { pickList } = get();
+        if (!pickList) return;
+
+        set({
+          pickList: {
+            ...pickList,
+            teams: pickList.teams.map(t => ({ ...t, flagged: false })),
+          },
+        });
+      },
+
+      // ========== WATCHLIST FUNCTIONS ==========
+
+      // Toggle team on/off watchlist
+      toggleWatchlist: (teamNumber) => {
+        const { pickList } = get();
+        if (!pickList) return;
+
+        const team = pickList.teams.find(t => t.teamNumber === teamNumber);
+        if (!team) return;
+
+        const isCurrentlyOnWatchlist = team.onWatchlist;
+
+        if (isCurrentlyOnWatchlist) {
+          // Remove from watchlist
+          set({
+            pickList: {
+              ...pickList,
+              teams: pickList.teams.map(t =>
+                t.teamNumber === teamNumber
+                  ? { ...t, onWatchlist: false, watchlistRank: undefined, watchlistNotes: undefined }
+                  : t
+              ),
+            },
+          });
+        } else {
+          // Add to watchlist - assign next rank
+          const watchlistTeams = pickList.teams.filter(t => t.onWatchlist);
+          const nextRank = watchlistTeams.length + 1;
+
+          set({
+            pickList: {
+              ...pickList,
+              teams: pickList.teams.map(t =>
+                t.teamNumber === teamNumber
+                  ? { ...t, onWatchlist: true, watchlistRank: nextRank, watchlistNotes: '' }
+                  : t
+              ),
+            },
+          });
+        }
+      },
+
+      // Update watchlist notes for a team
+      updateWatchlistNotes: (teamNumber, notes) => {
+        const { pickList } = get();
+        if (!pickList) return;
+
+        set({
+          pickList: {
+            ...pickList,
+            teams: pickList.teams.map(t =>
+              t.teamNumber === teamNumber ? { ...t, watchlistNotes: notes } : t
+            ),
+          },
+        });
+      },
+
+      // Reorder watchlist team to new rank
+      reorderWatchlist: (teamNumber, newRank) => {
+        const { pickList } = get();
+        if (!pickList) return;
+
+        const watchlistTeams = pickList.teams
+          .filter(t => t.onWatchlist)
+          .sort((a, b) => (a.watchlistRank || 0) - (b.watchlistRank || 0));
+
+        const teamIndex = watchlistTeams.findIndex(t => t.teamNumber === teamNumber);
+        if (teamIndex === -1) return;
+
+        // Remove team from current position
+        const [movedTeam] = watchlistTeams.splice(teamIndex, 1);
+        // Insert at new position (newRank is 1-indexed)
+        watchlistTeams.splice(newRank - 1, 0, movedTeam);
+
+        // Update all watchlist ranks
+        const watchlistRanks: Record<number, number> = {};
+        watchlistTeams.forEach((team, index) => {
+          watchlistRanks[team.teamNumber] = index + 1;
+        });
+
+        set({
+          pickList: {
+            ...pickList,
+            teams: pickList.teams.map(t =>
+              t.onWatchlist ? { ...t, watchlistRank: watchlistRanks[t.teamNumber] } : t
+            ),
+          },
+        });
+      },
+
+      // Finalize watchlist - insert teams into Potatoes (tier2) at specified position
+      finalizeWatchlist: (insertAtRank) => {
+        const { pickList } = get();
+        if (!pickList) return;
+
+        // Get watchlist teams sorted by rank
+        const watchlistTeams = pickList.teams
+          .filter(t => t.onWatchlist)
+          .sort((a, b) => (a.watchlistRank || 0) - (b.watchlistRank || 0));
+
+        if (watchlistTeams.length === 0) return;
+
+        // Get current tier2 teams
+        const tier2Teams = pickList.teams
+          .filter(t => t.tier === 'tier2' && !t.onWatchlist)
+          .sort((a, b) => a.rank - b.rank);
+
+        // Split tier2 at insertion point
+        const beforeInsertion = tier2Teams.slice(0, insertAtRank - 1);
+        const afterInsertion = tier2Teams.slice(insertAtRank - 1);
+
+        // Create new tier2 order: before + watchlist + after
+        const newTier2Order = [...beforeInsertion, ...watchlistTeams, ...afterInsertion];
+
+        // Build updated teams array
+        const updatedTeams = pickList.teams.map(team => {
+          // If team is on watchlist, move to tier2 and clear watchlist status
+          if (team.onWatchlist) {
+            const newRank = newTier2Order.findIndex(t => t.teamNumber === team.teamNumber) + 1;
+            return {
+              ...team,
+              tier: 'tier2' as const,
+              rank: newRank,
+              onWatchlist: false,
+              watchlistRank: undefined,
+              // Keep watchlist notes as regular notes if they had any
+              notes: team.watchlistNotes ? `${team.notes}\n[Watchlist] ${team.watchlistNotes}`.trim() : team.notes,
+              watchlistNotes: undefined,
+            };
+          }
+
+          // If team is in tier2 (not watchlist), update rank
+          if (team.tier === 'tier2') {
+            const newRank = newTier2Order.findIndex(t => t.teamNumber === team.teamNumber) + 1;
+            return { ...team, rank: newRank };
+          }
+
+          return team;
+        });
+
+        set({
+          pickList: {
+            ...pickList,
+            teams: updatedTeams,
+            config: {
+              ...pickList.config,
+              lastUpdated: new Date().toISOString(),
+            },
+          },
+        });
+      },
+
+      // Clear all teams from watchlist
+      clearWatchlist: () => {
+        const { pickList } = get();
+        if (!pickList) return;
+
+        set({
+          pickList: {
+            ...pickList,
+            teams: pickList.teams.map(t => ({
+              ...t,
+              onWatchlist: false,
+              watchlistRank: undefined,
+              watchlistNotes: undefined,
+            })),
+          },
+        });
+      },
+
+      // Get watchlist teams sorted by rank
+      getWatchlistTeams: () => {
+        const { pickList } = get();
+        if (!pickList) return [];
+
+        return pickList.teams
+          .filter(t => t.onWatchlist)
+          .sort((a, b) => (a.watchlistRank || 0) - (b.watchlistRank || 0));
+      },
+
       // Import teams from TBA rankings (all teams with ranking info)
       importFromTBARankings: (rankings) => {
         const { pickList } = get();
@@ -349,6 +615,7 @@ export const usePickListStore = create<PickListState>()(
               isPicked: false,
               tags: [],
               flagged: false,
+              onWatchlist: false,
             };
             return team;
           });
@@ -366,6 +633,7 @@ export const usePickListStore = create<PickListState>()(
               isPicked: false,
               tags: [],
               flagged: false,
+              onWatchlist: false,
             };
             return team;
           });

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { usePickListStore } from '../store/usePickListStore';
+import { usePickListStore, DEFAULT_RED_FLAG_THRESHOLDS, type RedFlagThresholds } from '../store/usePickListStore';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { useComparisonMode } from '../hooks/useComparisonMode';
 import ComparisonModal from '../components/ComparisonModal';
@@ -48,6 +48,10 @@ import {
   Plus,
   AlertTriangle,
   Handshake,
+  Eye,
+  ChevronDown,
+  ChevronUp,
+  Check,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { PickListTeam } from '../types/pickList';
@@ -101,13 +105,14 @@ const DEFAULT_FILTERS: FilterConfig[] = [
 ];
 
 // Sortable team card component
-function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onToggleFlag, isCompareMode, isSelected, onToggleSelection, passesFilters, hasActiveFilters }: {
+function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onToggleFlag, onToggleWatchlist, isCompareMode, isSelected, onToggleSelection, passesFilters, hasActiveFilters }: {
   team: PickListTeam | { teamNumber: number; teamName?: string; avgTotalPoints: number; level3ClimbRate: number; avgAutoPoints: number };
   currentTier?: 'tier1' | 'tier2' | 'tier3' | 'tier4';
   tierNames?: { tier1: string; tier2: string; tier3: string; tier4: string };
   onMoveTier?: (tier: 'tier1' | 'tier2' | 'tier3' | 'tier4') => void;
   onUpdateNotes?: (notes: string) => void;
   onToggleFlag?: () => void;
+  onToggleWatchlist?: () => void;
   isCompareMode?: boolean;
   isSelected?: boolean;
   onToggleSelection?: () => void;
@@ -144,7 +149,9 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onT
       ref={setNodeRef}
       style={style}
       className={`border rounded-lg p-2 mb-2 transition-all ${
-        isPickListTeam && team.flagged
+        isPickListTeam && team.onWatchlist
+          ? 'bg-warning/10 border-warning ring-1 ring-warning'
+          : isPickListTeam && team.flagged
           ? 'bg-surface border-danger'
           : isSelected
           ? 'bg-surface border-success ring-2 ring-success'
@@ -350,9 +357,18 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onT
         {currentTier && (
           <div className="flex flex-col gap-1">
             <button
+              onClick={() => onToggleWatchlist?.()}
+              className={`p-1 rounded transition-colors ${
+                isPickListTeam && team.onWatchlist ? 'text-warning' : 'text-textMuted hover:text-warning'
+              }`}
+              title={isPickListTeam && team.onWatchlist ? "Remove from watchlist" : "Add to watchlist"}
+            >
+              <Eye size={14} />
+            </button>
+            <button
               onClick={() => onToggleFlag?.()}
               className={`p-1 rounded transition-colors ${
-                isPickListTeam && team.flagged ? 'text-danger' : 'text-textMuted hover:text-warning'
+                isPickListTeam && team.flagged ? 'text-danger' : 'text-textMuted hover:text-danger'
               }`}
               title="Flag team"
             >
@@ -389,6 +405,7 @@ function DroppableColumn({ id, title, teams, tier, tierNames, onMoveTier, isComp
   const { setNodeRef, isOver } = useDroppable({ id });
   const updateNotes = usePickListStore(state => state.updateNotes);
   const toggleFlag = usePickListStore(state => state.toggleFlag);
+  const toggleWatchlist = usePickListStore(state => state.toggleWatchlist);
 
   return (
     <div
@@ -409,6 +426,7 @@ function DroppableColumn({ id, title, teams, tier, tierNames, onMoveTier, isComp
               onMoveTier={tier && onMoveTier ? (newTier) => onMoveTier(team.teamNumber, newTier) : undefined}
               onUpdateNotes={tier ? (notes) => updateNotes(team.teamNumber, notes) : undefined}
               onToggleFlag={tier ? () => toggleFlag(team.teamNumber) : undefined}
+              onToggleWatchlist={tier ? () => toggleWatchlist(team.teamNumber) : undefined}
               isCompareMode={isCompareMode}
               isSelected={selectedTeams?.includes(team.teamNumber)}
               onToggleSelection={onToggleTeamSelection ? () => onToggleTeamSelection(team.teamNumber) : undefined}
@@ -438,6 +456,18 @@ function PickList() {
   const addTeamToTier = usePickListStore(state => state.addTeamToTier);
   const moveTeam = usePickListStore(state => state.moveTeam);
   const moveTeamAbove = usePickListStore(state => state.moveTeamAbove);
+  const redFlagThresholds = usePickListStore(state => state.redFlagThresholds);
+  const setRedFlagThresholds = usePickListStore(state => state.setRedFlagThresholds);
+  const autoFlagTeams = usePickListStore(state => state.autoFlagTeams);
+  const clearAllFlags = usePickListStore(state => state.clearAllFlags);
+
+  // Watchlist functions
+  const toggleWatchlist = usePickListStore(state => state.toggleWatchlist);
+  const updateWatchlistNotes = usePickListStore(state => state.updateWatchlistNotes);
+  const reorderWatchlist = usePickListStore(state => state.reorderWatchlist);
+  const finalizeWatchlist = usePickListStore(state => state.finalizeWatchlist);
+  const clearWatchlist = usePickListStore(state => state.clearWatchlist);
+  const getWatchlistTeams = usePickListStore(state => state.getWatchlistTeams);
 
   const eventCode = useAnalyticsStore(state => state.eventCode);
   const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
@@ -449,6 +479,14 @@ function PickList() {
   const [tier4Name, setTier4Name] = useState('All Teams');
   const [activeId, setActiveId] = useState<string | null>(null);
   const [initialized, setInitialized] = useState(false);
+
+  // Red flag thresholds state
+  const [localThresholds, setLocalThresholds] = useState<RedFlagThresholds>(redFlagThresholds || DEFAULT_RED_FLAG_THRESHOLDS);
+  const [autoFlagStatus, setAutoFlagStatus] = useState<string | null>(null);
+
+  // Watchlist state
+  const [showWatchlist, setShowWatchlist] = useState(true);
+  const [insertAtRank, setInsertAtRank] = useState(1);
 
   // Customizable capability filters
   const [filterConfigs, setFilterConfigs] = useState<FilterConfig[]>(DEFAULT_FILTERS);
@@ -856,8 +894,113 @@ function PickList() {
             onClick={handleSaveTierNames}
             className="px-4 py-2 bg-success text-background font-semibold rounded-lg hover:bg-success/90 transition-colors"
           >
-            Save Changes
+            Save Tier Names
           </button>
+
+          {/* Red Flag Auto-Detection */}
+          <div className="border-t border-border mt-6 pt-6">
+            <h3 className="text-lg font-bold mb-3 flex items-center gap-2">
+              <Flag size={20} className="text-danger" />
+              Red Flag Auto-Detection
+            </h3>
+            <p className="text-sm text-textSecondary mb-4">
+              Automatically flag teams that exceed reliability thresholds. Flagged teams have a red indicator.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+              <div>
+                <label className="block text-sm text-textSecondary mb-2">
+                  Died Rate (%)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={localThresholds.diedRate}
+                  onChange={e => setLocalThresholds(prev => ({ ...prev, diedRate: Number(e.target.value) }))}
+                  className="w-full px-3 py-2 bg-background border border-border rounded-lg"
+                />
+                <p className="text-xs text-textMuted mt-1">Flag if robot died {'>'}= this %</p>
+              </div>
+              <div>
+                <label className="block text-sm text-textSecondary mb-2">
+                  Mechanical Issues (%)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={localThresholds.mechanicalIssuesRate}
+                  onChange={e => setLocalThresholds(prev => ({ ...prev, mechanicalIssuesRate: Number(e.target.value) }))}
+                  className="w-full px-3 py-2 bg-background border border-border rounded-lg"
+                />
+                <p className="text-xs text-textMuted mt-1">Flag if mech issues {'>'}= this %</p>
+              </div>
+              <div>
+                <label className="block text-sm text-textSecondary mb-2">
+                  Tipped Rate (%)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={localThresholds.tippedRate}
+                  onChange={e => setLocalThresholds(prev => ({ ...prev, tippedRate: Number(e.target.value) }))}
+                  className="w-full px-3 py-2 bg-background border border-border rounded-lg"
+                />
+                <p className="text-xs text-textMuted mt-1">Flag if tipped {'>'}= this %</p>
+              </div>
+              <div>
+                <label className="block text-sm text-textSecondary mb-2">
+                  No-Show Rate (%)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={localThresholds.noShowRate}
+                  onChange={e => setLocalThresholds(prev => ({ ...prev, noShowRate: Number(e.target.value) }))}
+                  className="w-full px-3 py-2 bg-background border border-border rounded-lg"
+                />
+                <p className="text-xs text-textMuted mt-1">Flag if no-showed {'>'}= this %</p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={() => {
+                  setRedFlagThresholds(localThresholds);
+                  const count = autoFlagTeams(teamStatistics);
+                  setAutoFlagStatus(`Auto-flagged ${count} team${count !== 1 ? 's' : ''} based on reliability thresholds`);
+                  setTimeout(() => setAutoFlagStatus(null), 4000);
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-danger text-white font-semibold rounded-lg hover:bg-danger/90 transition-colors"
+              >
+                <Flag size={18} />
+                Run Auto-Flag
+              </button>
+              <button
+                onClick={() => {
+                  clearAllFlags();
+                  setAutoFlagStatus('Cleared all flags');
+                  setTimeout(() => setAutoFlagStatus(null), 3000);
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-textMuted text-background font-semibold rounded-lg hover:bg-textMuted/80 transition-colors"
+              >
+                <Trash2 size={18} />
+                Clear All Flags
+              </button>
+              <button
+                onClick={() => setLocalThresholds(DEFAULT_RED_FLAG_THRESHOLDS)}
+                className="px-4 py-2 text-textSecondary hover:text-textPrimary transition-colors"
+              >
+                Reset to Defaults
+              </button>
+            </div>
+            {autoFlagStatus && (
+              <div className="mt-3 p-3 bg-danger/20 border border-danger rounded-lg text-danger text-sm">
+                {autoFlagStatus}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -1008,6 +1151,146 @@ function PickList() {
           </div>
         </div>
       )}
+
+      {/* Watchlist Panel - for final morning tracking */}
+      {(() => {
+        const watchlistTeams = getWatchlistTeams();
+        if (watchlistTeams.length === 0) return null;
+
+        const tier2Teams = pickList?.teams.filter(t => t.tier === 'tier2' && !t.onWatchlist).sort((a, b) => a.rank - b.rank) || [];
+
+        return (
+          <div className="bg-warning/10 border-2 border-warning rounded-lg overflow-hidden">
+            {/* Header */}
+            <div
+              className="flex items-center justify-between p-4 bg-warning/20 cursor-pointer"
+              onClick={() => setShowWatchlist(!showWatchlist)}
+            >
+              <div className="flex items-center gap-3">
+                <Eye size={20} className="text-warning" />
+                <h2 className="text-lg font-bold">
+                  Final Morning Watchlist ({watchlistTeams.length})
+                </h2>
+                <span className="text-sm text-textSecondary">
+                  Rank these teams, then finalize into {tier2Name}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (confirm('Clear all teams from watchlist?')) {
+                      clearWatchlist();
+                    }
+                  }}
+                  className="p-2 text-textMuted hover:text-danger transition-colors"
+                  title="Clear watchlist"
+                >
+                  <Trash2 size={18} />
+                </button>
+                {showWatchlist ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+              </div>
+            </div>
+
+            {/* Watchlist Content */}
+            {showWatchlist && (
+              <div className="p-4 space-y-4">
+                {/* Watchlist Teams - Ranked */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+                  {watchlistTeams.map((team, index) => {
+                    const stats = teamStatistics.find(s => s.teamNumber === team.teamNumber);
+                    return (
+                      <div
+                        key={team.teamNumber}
+                        className="bg-surface border border-border rounded-lg p-3"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xl font-bold text-warning">#{index + 1}</span>
+                            <span className="text-lg font-bold">{team.teamNumber}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            {index > 0 && (
+                              <button
+                                onClick={() => reorderWatchlist(team.teamNumber, index)}
+                                className="p-1 hover:bg-interactive rounded"
+                                title="Move up"
+                              >
+                                <ArrowUp size={16} />
+                              </button>
+                            )}
+                            {index < watchlistTeams.length - 1 && (
+                              <button
+                                onClick={() => reorderWatchlist(team.teamNumber, index + 2)}
+                                className="p-1 hover:bg-interactive rounded"
+                                title="Move down"
+                              >
+                                <ArrowDown size={16} />
+                              </button>
+                            )}
+                            <button
+                              onClick={() => toggleWatchlist(team.teamNumber)}
+                              className="p-1 hover:bg-danger/20 text-danger rounded"
+                              title="Remove from watchlist"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </div>
+                        {stats && (
+                          <div className="text-xs text-textSecondary mb-2">
+                            {stats.avgTotalPoints.toFixed(1)} pts • L3: {stats.level3ClimbRate.toFixed(0)}%
+                          </div>
+                        )}
+                        <textarea
+                          value={team.watchlistNotes || ''}
+                          onChange={(e) => updateWatchlistNotes(team.teamNumber, e.target.value)}
+                          placeholder="Notes from final matches..."
+                          className="w-full px-2 py-1 text-sm bg-background border border-border rounded resize-none"
+                          rows={2}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Finalize Controls */}
+                <div className="flex flex-wrap items-center gap-4 pt-4 border-t border-warning/30">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium">Insert at position:</span>
+                    <select
+                      value={insertAtRank}
+                      onChange={(e) => setInsertAtRank(Number(e.target.value))}
+                      className="px-3 py-1.5 bg-background border border-border rounded-lg text-sm"
+                    >
+                      <option value={1}>Top of {tier2Name}</option>
+                      {tier2Teams.map((team, index) => (
+                        <option key={team.teamNumber} value={index + 2}>
+                          After #{index + 1} ({team.teamNumber})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (confirm(`This will move ${watchlistTeams.length} teams into ${tier2Name} at position ${insertAtRank}. Continue?`)) {
+                        finalizeWatchlist(insertAtRank);
+                      }
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 bg-success text-background font-semibold rounded-lg hover:bg-success/90 transition-colors"
+                  >
+                    <Check size={18} />
+                    Finalize to {tier2Name}
+                  </button>
+                  <p className="text-xs text-textSecondary">
+                    Teams will be inserted in watchlist order (#{1} first)
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Drag-and-drop layout - always show 4 columns */}
       <DndContext

@@ -1,11 +1,21 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { usePickListStore } from '../store/usePickListStore';
-import { X, AlertCircle, Play, ArrowLeft } from 'lucide-react';
+import { useMetricsStore } from '../store/useMetricsStore';
+import { X, AlertCircle, Play, ArrowLeft, Sliders } from 'lucide-react';
 import type { TeamStatistics } from '../types/scouting';
 import type { TBAMatch } from '../types/tba';
+import type { MetricColumn, MetricCategory } from '../types/metrics';
+import { CATEGORY_LABELS } from '../types/metrics';
 import { getTeamEventMatches, getMatchVideoUrl, teamNumberToKey } from '../utils/tbaApi';
+
+// Fields where lower is better (for coloring)
+const LOWER_IS_BETTER_FIELDS = [
+  'noShowRate', 'diedRate', 'tippedRate', 'mechanicalIssuesRate',
+  'yellowCardRate', 'redCardRate', 'avgClimbTime', 'minClimbTime',
+  'avgAutoFuelMissed', 'avgTeleopFuelMissed', 'wasDefendedRate'
+];
 
 function TeamComparison() {
   const navigate = useNavigate();
@@ -14,11 +24,32 @@ function TeamComparison() {
   const toggleTeamSelection = useAnalyticsStore(state => state.toggleTeamSelection);
   const eventCode = useAnalyticsStore(state => state.eventCode);
   const tbaApiKey = usePickListStore(state => state.tbaApiKey);
+  const getEnabledColumns = useMetricsStore(state => state.getEnabledColumns);
 
   const [selectedVideoTeam, setSelectedVideoTeam] = useState<number | null>(null);
   const [teamVideos, setTeamVideos] = useState<Record<number, TBAMatch[]>>({});
 
   const selectedTeamStats = teamStatistics.filter(t => selectedTeams.includes(t.teamNumber));
+
+  // Get enabled metrics grouped by category
+  const enabledColumns = getEnabledColumns();
+  const metricsByCategory = useMemo(() => {
+    const grouped: Record<MetricCategory, MetricColumn[]> = {
+      overall: [],
+      auto: [],
+      teleop: [],
+      endgame: [],
+      defense: [],
+      performance: [],
+      reliability: [],
+    };
+
+    enabledColumns.forEach(col => {
+      grouped[col.category].push(col);
+    });
+
+    return grouped;
+  }, [enabledColumns]);
 
   // Navigate back to Teams page when all teams are deselected
   useEffect(() => {
@@ -68,24 +99,26 @@ function TeamComparison() {
     );
   }
 
-  const StatRow = ({ label, getValue, format = 'number', higherIsBetter = true }: {
-    label: string;
-    getValue: (team: TeamStatistics) => number;
-    format?: 'number' | 'percentage' | 'time';
-    higherIsBetter?: boolean;
-  }) => {
+  // Dynamic stat row based on metric column config
+  const MetricStatRow = ({ column }: { column: MetricColumn }) => {
+    const higherIsBetter = !LOWER_IS_BETTER_FIELDS.includes(column.field);
+
+    const getValue = (team: TeamStatistics): number => {
+      return (team as unknown as Record<string, number>)[column.field] || 0;
+    };
+
     const values = selectedTeamStats.map(getValue);
     const maxValue = Math.max(...values);
     const minValue = Math.min(...values);
 
     const formatValue = (value: number) => {
-      switch (format) {
+      switch (column.format) {
         case 'percentage':
-          return `${value.toFixed(1)}%`;
+          return `${value.toFixed(column.decimals)}%`;
         case 'time':
-          return `${value.toFixed(1)}s`;
+          return `${value.toFixed(column.decimals)}s`;
         default:
-          return value.toFixed(1);
+          return value.toFixed(column.decimals);
       }
     };
 
@@ -106,7 +139,9 @@ function TeamComparison() {
 
     return (
       <tr className="border-b border-border hover:bg-interactive">
-        <td className="px-4 py-3 font-medium text-textSecondary">{label}</td>
+        <td className="px-4 py-3 font-medium text-textSecondary" title={column.description}>
+          {column.label}
+        </td>
         {selectedTeamStats.map(team => {
           const value = getValue(team);
           return (
@@ -136,9 +171,18 @@ function TeamComparison() {
           </button>
           <h1 className="text-2xl md:text-3xl font-bold">Team Comparison</h1>
         </div>
-        <p className="text-textSecondary text-sm md:text-base">
-          Comparing {selectedTeamStats.length} team{selectedTeamStats.length !== 1 ? 's' : ''}
-        </p>
+        <div className="flex items-center gap-4">
+          <p className="text-textSecondary text-sm md:text-base">
+            Comparing {selectedTeamStats.length} team{selectedTeamStats.length !== 1 ? 's' : ''} • {enabledColumns.length} metrics
+          </p>
+          <Link
+            to="/settings/metrics"
+            className="flex items-center gap-2 px-3 py-1.5 text-sm bg-surface border border-border rounded-lg hover:bg-interactive transition-colors"
+          >
+            <Sliders size={16} />
+            Customize
+          </Link>
+        </div>
       </div>
 
       {/* Team Headers */}
@@ -178,7 +222,7 @@ function TeamComparison() {
         })}
       </div>
 
-      {/* Comparison Table */}
+      {/* Comparison Table - Using Customizable Metrics */}
       <div className="bg-surface rounded-lg border border-border overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -189,122 +233,42 @@ function TeamComparison() {
               ))}
             </colgroup>
 
-            {/* Overall Performance */}
-            <thead className="bg-surfaceElevated">
-              <tr>
-                <th className="px-4 py-3 text-left text-sm font-bold">Overall Performance</th>
-                {selectedTeamStats.map(team => (
-                  <th key={team.teamNumber} className="px-4 py-3"></th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              <StatRow label="Avg Total Points" getValue={t => t.avgTotalPoints} />
-              <StatRow label="Avg Auto Points" getValue={t => t.avgAutoPoints} />
-              <StatRow label="Avg Teleop Points" getValue={t => t.avgTeleopPoints} />
-              <StatRow label="Avg Endgame Points" getValue={t => t.avgEndgamePoints} />
-            </tbody>
+            {/* Dynamically render each category that has enabled metrics */}
+            {(Object.keys(metricsByCategory) as MetricCategory[]).map(category => {
+              const columns = metricsByCategory[category];
+              if (columns.length === 0) return null;
 
-            {/* Auto Performance */}
-            <thead className="bg-surfaceElevated">
-              <tr>
-                <th className="px-4 py-3 text-left text-sm font-bold">Auto Performance</th>
-                {selectedTeamStats.map(team => (
-                  <th key={team.teamNumber} className="px-4 py-3"></th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              <StatRow label="Avg FUEL Scored" getValue={t => t.avgAutoFuelScored} />
-              <StatRow label="Auto Accuracy" getValue={t => t.autoAccuracy} format="percentage" />
-              <StatRow label="Mobility Rate" getValue={t => t.autoMobilityRate} format="percentage" />
-              <StatRow label="Auto Climb Rate" getValue={t => t.autoClimbRate} format="percentage" />
-            </tbody>
+              return (
+                <React.Fragment key={category}>
+                  <thead className="bg-surfaceElevated">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-sm font-bold">
+                        {CATEGORY_LABELS[category]}
+                      </th>
+                      {selectedTeamStats.map(team => (
+                        <th key={team.teamNumber} className="px-4 py-3"></th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {columns.map(column => (
+                      <MetricStatRow key={column.id} column={column} />
+                    ))}
+                  </tbody>
+                </React.Fragment>
+              );
+            })}
 
-            {/* Teleop Performance */}
-            <thead className="bg-surfaceElevated">
-              <tr>
-                <th className="px-4 py-3 text-left text-sm font-bold">Teleop Performance</th>
-                {selectedTeamStats.map(team => (
-                  <th key={team.teamNumber} className="px-4 py-3"></th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              <StatRow label="Avg FUEL Scored" getValue={t => t.avgTeleopFuelScored} />
-              <StatRow label="Teleop Accuracy" getValue={t => t.teleopAccuracy} format="percentage" />
-              <StatRow label="Avg Cycle Count" getValue={t => t.avgCycleCount} />
-              <StatRow label="Active HUB Scores" getValue={t => t.avgActiveHubScores} />
-              <StatRow label="Inactive HUB Scores" getValue={t => t.avgInactiveHubScores} />
-            </tbody>
-
-            {/* Endgame Performance */}
-            <thead className="bg-surfaceElevated">
-              <tr>
-                <th className="px-4 py-3 text-left text-sm font-bold">Endgame Performance</th>
-                {selectedTeamStats.map(team => (
-                  <th key={team.teamNumber} className="px-4 py-3"></th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              <StatRow label="Climb Attempt Rate" getValue={t => t.climbAttemptRate} format="percentage" />
-              <StatRow label="Level 1 Rate" getValue={t => t.level1ClimbRate} format="percentage" />
-              <StatRow label="Level 2 Rate" getValue={t => t.level2ClimbRate} format="percentage" />
-              <StatRow label="Level 3 Rate" getValue={t => t.level3ClimbRate} format="percentage" />
-              <StatRow label="Avg Climb Time" getValue={t => t.avgClimbTime} format="time" higherIsBetter={false} />
-              <StatRow label="Endgame FUEL" getValue={t => t.avgEndgameFuelScored} />
-            </tbody>
-
-            {/* Defense */}
-            <thead className="bg-surfaceElevated">
-              <tr>
-                <th className="px-4 py-3 text-left text-sm font-bold">Defense</th>
-                {selectedTeamStats.map(team => (
-                  <th key={team.teamNumber} className="px-4 py-3"></th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              <StatRow label="Defense Played" getValue={t => t.defensePlayedRate} format="percentage" />
-              <StatRow label="Defense Effect." getValue={t => t.avgDefenseEffectiveness} />
-              <StatRow label="Was Defended" getValue={t => t.wasDefendedRate} format="percentage" higherIsBetter={false} />
-              <StatRow label="Defense Evasion" getValue={t => t.avgDefenseEvasion} />
-            </tbody>
-
-            {/* Driver Skills */}
-            <thead className="bg-surfaceElevated">
-              <tr>
-                <th className="px-4 py-3 text-left text-sm font-bold">Driver Skills (1-5)</th>
-                {selectedTeamStats.map(team => (
-                  <th key={team.teamNumber} className="px-4 py-3"></th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              <StatRow label="Driver Skill" getValue={t => t.avgDriverSkill} />
-              <StatRow label="Intake Speed" getValue={t => t.avgIntakeSpeed} />
-              <StatRow label="Shooting Accuracy" getValue={t => t.avgShootingAccuracy} />
-              <StatRow label="Shooting Speed" getValue={t => t.avgShootingSpeed} />
-            </tbody>
-
-            {/* Reliability */}
-            <thead className="bg-surfaceElevated">
-              <tr>
-                <th className="px-4 py-3 text-left text-sm font-bold">Reliability</th>
-                {selectedTeamStats.map(team => (
-                  <th key={team.teamNumber} className="px-4 py-3"></th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              <StatRow label="No Show Rate" getValue={t => t.noShowRate} format="percentage" higherIsBetter={false} />
-              <StatRow label="Robot Died Rate" getValue={t => t.diedRate} format="percentage" higherIsBetter={false} />
-              <StatRow label="Tipped Rate" getValue={t => t.tippedRate} format="percentage" higherIsBetter={false} />
-              <StatRow label="Mech. Issues" getValue={t => t.mechanicalIssuesRate} format="percentage" higherIsBetter={false} />
-              <StatRow label="Yellow Cards" getValue={t => t.yellowCardRate} format="percentage" higherIsBetter={false} />
-              <StatRow label="Red Cards" getValue={t => t.redCardRate} format="percentage" higherIsBetter={false} />
-            </tbody>
+            {/* Show message if no metrics enabled */}
+            {enabledColumns.length === 0 && (
+              <tbody>
+                <tr>
+                  <td colSpan={selectedTeamStats.length + 1} className="px-4 py-8 text-center text-textSecondary">
+                    No metrics enabled. <Link to="/settings/metrics" className="text-success hover:underline">Click here</Link> to customize which metrics to display.
+                  </td>
+                </tr>
+              </tbody>
+            )}
           </table>
         </div>
       </div>

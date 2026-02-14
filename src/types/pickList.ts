@@ -9,6 +9,9 @@ export interface PickListTeam {
   pickedBy?: number; // Team number that picked them
   tags: string[]; // e.g., ["great-auto", "defensive", "fast-cycles"]
   flagged: boolean; // Red flag for reliability issues
+  onWatchlist: boolean; // Track during final matches
+  watchlistRank?: number; // Rank within watchlist (1 = best)
+  watchlistNotes?: string; // Notes from watching final matches
 }
 
 export interface PickListConfig {
