@@ -86,7 +86,7 @@ function SessionHeader({ session, myRole, onLeave, onSetStatus, onShowParticipan
           {/* Role badge */}
           {myRole && (
             <span className={`px-2 py-1 rounded text-xs font-semibold ${
-              myRole === 'admin'
+              myRole === 'host'
                 ? 'bg-warning/20 text-warning'
                 : myRole === 'editor'
                 ? 'bg-blueAlliance/20 text-blueAlliance'
@@ -99,8 +99,8 @@ function SessionHeader({ session, myRole, onLeave, onSetStatus, onShowParticipan
           {/* Spacer */}
           <div className="flex-1" />
 
-          {/* Admin: pause/resume */}
-          {myRole === 'admin' && (
+          {/* Host: pause/resume */}
+          {myRole === 'host' && (
             <button
               onClick={() => onSetStatus(session.status === 'active' ? 'completed' : 'active')}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-card rounded border border-border hover:bg-interactive transition-colors text-sm"

@@ -37,6 +37,7 @@ function SelectionTeamCard({
   const tierLabel = team.originalTier === 'tier1' ? 'T1'
     : team.originalTier === 'tier2' ? 'T2'
     : team.originalTier === 'tier3' ? 'T3'
+    : team.originalTier === 'tier4' ? 'T4'
     : '—';
   const tierColor = team.originalTier === 'tier1'
     ? 'bg-success/20 text-success'
@@ -44,6 +45,8 @@ function SelectionTeamCard({
     ? 'bg-warning/20 text-warning'
     : team.originalTier === 'tier3'
     ? 'bg-blueAlliance/20 text-blueAlliance'
+    : team.originalTier === 'tier4'
+    ? 'bg-danger/20 text-danger'
     : 'bg-surfaceElevated text-textMuted';
 
   return (

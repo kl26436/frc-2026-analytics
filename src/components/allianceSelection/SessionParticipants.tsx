@@ -1,25 +1,26 @@
-import { X, Shield, Edit3, Eye, UserMinus, ChevronUp, ChevronDown } from 'lucide-react';
+import { X, Shield, Edit3, Eye, UserMinus, ChevronUp, ChevronDown, ArrowRightLeft } from 'lucide-react';
 import type { SessionParticipant } from '../../types/allianceSelection';
 
 interface SessionParticipantsProps {
   participants: Record<string, SessionParticipant>;
   myUid: string;
-  isAdmin: boolean;
+  isHost: boolean;
   onPromote: (uid: string) => Promise<void>;
   onDemote: (uid: string) => Promise<void>;
+  onTransferHost: (uid: string) => Promise<void>;
   onRemove: (uid: string) => Promise<void>;
   onClose: () => void;
 }
 
-function SessionParticipants({ participants, myUid, isAdmin, onPromote, onDemote, onRemove, onClose }: SessionParticipantsProps) {
+function SessionParticipants({ participants, myUid, isHost, onPromote, onDemote, onTransferHost, onRemove, onClose }: SessionParticipantsProps) {
   const entries = Object.entries(participants).sort(([, a], [, b]) => {
-    const roleOrder = { admin: 0, editor: 1, viewer: 2 };
-    return roleOrder[a.role] - roleOrder[b.role];
+    const roleOrder: Record<string, number> = { host: 0, editor: 1, viewer: 2 };
+    return (roleOrder[a.role] ?? 3) - (roleOrder[b.role] ?? 3);
   });
 
   const roleIcon = (role: SessionParticipant['role']) => {
     switch (role) {
-      case 'admin': return <Shield size={14} className="text-warning" />;
+      case 'host': return <Shield size={14} className="text-warning" />;
       case 'editor': return <Edit3 size={14} className="text-blueAlliance" />;
       case 'viewer': return <Eye size={14} className="text-textMuted" />;
     }
@@ -37,7 +38,7 @@ function SessionParticipants({ participants, myUid, isAdmin, onPromote, onDemote
       <div className="space-y-2">
         {entries.map(([uid, participant]) => {
           const isMe = uid === myUid;
-          const canModify = isAdmin && !isMe && participant.role !== 'admin';
+          const canModify = isHost && !isMe && participant.role !== 'host';
 
           return (
             <div key={uid} className="flex items-center gap-2 px-3 py-2 rounded bg-card">
@@ -52,7 +53,7 @@ function SessionParticipants({ participants, myUid, isAdmin, onPromote, onDemote
               </span>
 
               <span className={`text-xs px-1.5 py-0.5 rounded ${
-                participant.role === 'admin'
+                participant.role === 'host'
                   ? 'bg-warning/20 text-warning'
                   : participant.role === 'editor'
                   ? 'bg-blueAlliance/20 text-blueAlliance'
@@ -80,6 +81,17 @@ function SessionParticipants({ participants, myUid, isAdmin, onPromote, onDemote
                       <ChevronDown size={14} />
                     </button>
                   )}
+                  <button
+                    onClick={() => {
+                      if (confirm(`Transfer host role to ${participant.displayName}? You will become an editor.`)) {
+                        onTransferHost(uid);
+                      }
+                    }}
+                    className="p-1 rounded hover:bg-interactive text-textSecondary hover:text-warning transition-colors"
+                    title="Transfer host"
+                  >
+                    <ArrowRightLeft size={14} />
+                  </button>
                   <button
                     onClick={() => onRemove(uid)}
                     className="p-1 rounded hover:bg-interactive text-textSecondary hover:text-danger transition-colors"

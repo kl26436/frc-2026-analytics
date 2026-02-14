@@ -453,7 +453,6 @@ function PickList() {
   const setTierNames = usePickListStore(state => state.setTierNames);
   const exportPickList = usePickListStore(state => state.exportPickList);
   const importPickList = usePickListStore(state => state.importPickList);
-  const addTeamToTier = usePickListStore(state => state.addTeamToTier);
   const moveTeam = usePickListStore(state => state.moveTeam);
   const moveTeamAbove = usePickListStore(state => state.moveTeamAbove);
   const redFlagThresholds = usePickListStore(state => state.redFlagThresholds);
@@ -476,9 +475,8 @@ function PickList() {
   const [tier1Name, setTier1Name] = useState('Steak');
   const [tier2Name, setTier2Name] = useState('Potatoes');
   const [tier3Name, setTier3Name] = useState('Chicken Nuggets');
-  const [tier4Name, setTier4Name] = useState('All Teams');
+  const [tier4Name, setTier4Name] = useState('Do Not Pick');
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [initialized, setInitialized] = useState(false);
 
   // Red flag thresholds state
   const [localThresholds, setLocalThresholds] = useState<RedFlagThresholds>(redFlagThresholds || DEFAULT_RED_FLAG_THRESHOLDS);
@@ -589,63 +587,9 @@ function PickList() {
       setTier1Name(pickList.config.tier1Name);
       setTier2Name(pickList.config.tier2Name);
       setTier3Name(pickList.config.tier3Name);
-      setTier4Name(pickList.config.tier4Name || 'All Teams'); // Fallback for older pick lists
-
-      // Auto-populate ALL teams on first load
-      if (!initialized && teamStatistics.length > 0) {
-        const existingTeamNumbers = new Set(pickList.teams.map(t => t.teamNumber));
-
-        // Sort ALL teams by: points -> level3ClimbRate -> autoPoints
-        const sortedTeams = [...teamStatistics]
-          .filter(team => !existingTeamNumbers.has(team.teamNumber))
-          .sort((a, b) => {
-            // Primary: Total points
-            if (b.avgTotalPoints !== a.avgTotalPoints) {
-              return b.avgTotalPoints - a.avgTotalPoints;
-            }
-            // Secondary: Level 3 climb rate
-            if (b.level3ClimbRate !== a.level3ClimbRate) {
-              return b.level3ClimbRate - a.level3ClimbRate;
-            }
-            // Tertiary: Auto points
-            return b.avgAutoPoints - a.avgAutoPoints;
-          });
-
-        // Add ALL teams to tier4 (unranked pool) - sorted by performance
-        sortedTeams.forEach((team) => {
-          addTeamToTier(team.teamNumber, 'tier4');
-        });
-
-        setInitialized(true);
-      }
+      setTier4Name(pickList.config.tier4Name || 'Do Not Pick');
     }
-  }, [pickList, eventCode, initializePickList, teamStatistics, addTeamToTier, initialized]);
-
-  // Continuously sync: add any new teams from teamStatistics to tier4
-  useEffect(() => {
-    if (pickList && teamStatistics.length > 0 && initialized) {
-      const existingTeamNumbers = new Set(pickList.teams.map(t => t.teamNumber));
-      const newTeams = teamStatistics.filter(team => !existingTeamNumbers.has(team.teamNumber));
-
-      if (newTeams.length > 0) {
-        // Sort new teams by performance
-        const sortedNewTeams = [...newTeams].sort((a, b) => {
-          if (b.avgTotalPoints !== a.avgTotalPoints) {
-            return b.avgTotalPoints - a.avgTotalPoints;
-          }
-          if (b.level3ClimbRate !== a.level3ClimbRate) {
-            return b.level3ClimbRate - a.level3ClimbRate;
-          }
-          return b.avgAutoPoints - a.avgAutoPoints;
-        });
-
-        // Add to tier4
-        sortedNewTeams.forEach(team => {
-          addTeamToTier(team.teamNumber, 'tier4');
-        });
-      }
-    }
-  }, [teamStatistics, pickList, initialized, addTeamToTier]);
+  }, [pickList, eventCode, initializePickList]);
 
   // Auto-open comparison modal when 2 teams are selected
   useEffect(() => {
@@ -1292,14 +1236,14 @@ function PickList() {
         );
       })()}
 
-      {/* Drag-and-drop layout - always show 4 columns */}
+      {/* Drag-and-drop layout - 3 columns by default, 4 when DNP has teams */}
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
       >
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 md:gap-4">
+        <div className={`grid grid-cols-1 ${tier4Teams.length > 0 ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-3 md:gap-4`}>
           <DroppableColumn
             id="tier1-column"
             title={`${pickList.config.tier1Name} (${tier1Teams.length})`}
@@ -1309,7 +1253,7 @@ function PickList() {
               tier1: pickList.config.tier1Name,
               tier2: pickList.config.tier2Name,
               tier3: pickList.config.tier3Name,
-              tier4: pickList.config.tier4Name || 'All Teams',
+              tier4: pickList.config.tier4Name || 'Do Not Pick',
             }}
             onMoveTier={handleMoveTier}
             isCompareMode={isCompareMode}
@@ -1317,7 +1261,6 @@ function PickList() {
             onToggleTeamSelection={toggleTeamSelection}
             teamPassesFilters={teamPassesFilters}
             hasActiveFilters={hasActiveFilters}
-
           />
           <DroppableColumn
             id="tier2-column"
@@ -1328,7 +1271,7 @@ function PickList() {
               tier1: pickList.config.tier1Name,
               tier2: pickList.config.tier2Name,
               tier3: pickList.config.tier3Name,
-              tier4: pickList.config.tier4Name || 'All Teams',
+              tier4: pickList.config.tier4Name || 'Do Not Pick',
             }}
             onMoveTier={handleMoveTier}
             isCompareMode={isCompareMode}
@@ -1336,7 +1279,6 @@ function PickList() {
             onToggleTeamSelection={toggleTeamSelection}
             teamPassesFilters={teamPassesFilters}
             hasActiveFilters={hasActiveFilters}
-
           />
           <DroppableColumn
             id="tier3-column"
@@ -1347,7 +1289,7 @@ function PickList() {
               tier1: pickList.config.tier1Name,
               tier2: pickList.config.tier2Name,
               tier3: pickList.config.tier3Name,
-              tier4: pickList.config.tier4Name || 'All Teams',
+              tier4: pickList.config.tier4Name || 'Do Not Pick',
             }}
             onMoveTier={handleMoveTier}
             isCompareMode={isCompareMode}
@@ -1355,28 +1297,28 @@ function PickList() {
             onToggleTeamSelection={toggleTeamSelection}
             teamPassesFilters={teamPassesFilters}
             hasActiveFilters={hasActiveFilters}
-
           />
-          {/* Tier 4: All Teams (always visible, shows all teams ranked by performance) */}
-          <DroppableColumn
+          {/* Tier 4: Do Not Pick (only visible when teams have been added to it) */}
+          {tier4Teams.length > 0 && (
+            <DroppableColumn
               id="tier4-column"
-              title={`${pickList.config.tier4Name || 'All Teams'} (${tier4Teams.length})`}
+              title={`${pickList.config.tier4Name || 'Do Not Pick'} (${tier4Teams.length})`}
               teams={tier4Teams}
               tier="tier4"
               tierNames={{
                 tier1: pickList.config.tier1Name,
                 tier2: pickList.config.tier2Name,
                 tier3: pickList.config.tier3Name,
-                tier4: pickList.config.tier4Name || 'All Teams',
+                tier4: pickList.config.tier4Name || 'Do Not Pick',
               }}
               onMoveTier={handleMoveTier}
               isCompareMode={isCompareMode}
               selectedTeams={selectedTeams}
               onToggleTeamSelection={toggleTeamSelection}
               teamPassesFilters={teamPassesFilters}
-            hasActiveFilters={hasActiveFilters}
-
+              hasActiveFilters={hasActiveFilters}
             />
+          )}
         </div>
 
         <DragOverlay>

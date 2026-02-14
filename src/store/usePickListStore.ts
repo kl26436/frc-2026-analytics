@@ -77,7 +77,7 @@ export const usePickListStore = create<PickListState>()(
       redFlagThresholds: DEFAULT_RED_FLAG_THRESHOLDS,
 
       // Initialize a new pick list
-      initializePickList: (eventKey, tier1Name = 'Steak', tier2Name = 'Potatoes', tier3Name = 'Chicken Nuggets', tier4Name = 'All Teams') => {
+      initializePickList: (eventKey, tier1Name = 'Steak', tier2Name = 'Potatoes', tier3Name = 'Chicken Nuggets', tier4Name = 'Do Not Pick') => {
         const config: PickListConfig = {
           eventKey,
           tier1Name,

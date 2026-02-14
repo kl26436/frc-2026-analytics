@@ -1,5 +1,4 @@
 import { useMemo } from 'react';
-import { ChevronDown } from 'lucide-react';
 import type { AllianceSelectionSession, SessionRole, SessionStatus } from '../../types/allianceSelection';
 import { useAnalyticsStore } from '../../store/useAnalyticsStore';
 import { useAllianceSelectionStore } from '../../store/useAllianceSelectionStore';
@@ -16,14 +15,15 @@ interface AllianceSelectionBoardProps {
   userId: string;
   myRole: SessionRole | null;
   isEditor: boolean;
+  isHost: boolean;
   onMarkPicked: (teamNumber: number, allianceNumber: number) => Promise<void>;
   onMarkDeclined: (teamNumber: number) => Promise<void>;
   onUndoStatus: (teamNumber: number) => Promise<void>;
-  onRevealTier3: () => Promise<void>;
   onSetStatus: (status: SessionStatus) => Promise<void>;
   onLeave: () => void;
   onPromote: (uid: string) => Promise<void>;
   onDemote: (uid: string) => Promise<void>;
+  onTransferHost: (uid: string) => Promise<void>;
   onRemoveParticipant: (uid: string) => Promise<void>;
   onSendMessage: (text: string) => Promise<void>;
 }
@@ -33,14 +33,15 @@ function AllianceSelectionBoard({
   userId,
   myRole,
   isEditor,
+  isHost,
   onMarkPicked,
   onMarkDeclined,
   onUndoStatus,
-  onRevealTier3,
   onSetStatus,
   onLeave,
   onPromote,
   onDemote,
+  onTransferHost,
   onRemoveParticipant,
   onSendMessage,
 }: AllianceSelectionBoardProps) {
@@ -61,11 +62,6 @@ function AllianceSelectionBoard({
   // Build the display team list
   const displayTeams = useMemo(() => {
     let teams = [...session.teams];
-
-    // Filter out tier3 if not revealed
-    if (!session.showTier3) {
-      teams = teams.filter(t => t.originalTier !== 'tier3');
-    }
 
     // Filter by highlighted alliance
     if (highlightedAlliance) {
@@ -101,12 +97,11 @@ function AllianceSelectionBoard({
     });
 
     return teams;
-  }, [session.teams, session.showTier3, searchQuery, teamStatistics, highlightedAlliance, session.alliances]);
+  }, [session.teams, searchQuery, teamStatistics, highlightedAlliance, session.alliances]);
 
   // Stats for the team list
-  const availableCount = session.teams.filter(t => t.status === 'available' && (session.showTier3 || t.originalTier !== 'tier3')).length;
+  const availableCount = session.teams.filter(t => t.status === 'available').length;
   const pickedCount = session.teams.filter(t => t.status === 'picked').length;
-  const tier3Count = session.teams.filter(t => t.originalTier === 'tier3').length;
   const unrankedCount = session.teams.filter(t => t.originalTier === 'unranked').length;
 
   // Comparison modal data
@@ -184,22 +179,6 @@ function AllianceSelectionBoard({
             )}
           </div>
 
-          {/* Reveal Tier 3 */}
-          {!session.showTier3 && tier3Count > 0 && isEditor && (
-            <button
-              onClick={onRevealTier3}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-surfaceElevated border border-border rounded-lg text-textSecondary hover:bg-interactive hover:text-textPrimary transition-colors"
-            >
-              <ChevronDown size={16} />
-              Reveal Tier 3 Backups ({tier3Count} teams)
-            </button>
-          )}
-
-          {!session.showTier3 && tier3Count > 0 && !isEditor && (
-            <div className="text-center py-3 text-textMuted text-sm">
-              {tier3Count} backup teams hidden (editor can reveal)
-            </div>
-          )}
         </div>
 
         {/* Right: Chat + Alliance Tracker */}
@@ -222,9 +201,10 @@ function AllianceSelectionBoard({
         <SessionParticipants
           participants={session.participants}
           myUid={userId}
-          isAdmin={myRole === 'admin'}
+          isHost={isHost}
           onPromote={onPromote}
           onDemote={onDemote}
+          onTransferHost={onTransferHost}
           onRemove={onRemoveParticipant}
           onClose={() => setShowParticipants(false)}
         />

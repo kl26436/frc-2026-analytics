@@ -1,12 +1,12 @@
 // Alliance Selection Mode Types
 
-export type SessionRole = 'admin' | 'editor' | 'viewer';
+export type SessionRole = 'host' | 'editor' | 'viewer';
 export type SelectionTeamStatus = 'available' | 'picked' | 'declined';
 export type SessionStatus = 'active' | 'completed';
 
 export interface SelectionTeam {
   teamNumber: number;
-  originalTier: 'tier1' | 'tier2' | 'tier3' | 'unranked';
+  originalTier: 'tier1' | 'tier2' | 'tier3' | 'tier4' | 'unranked';
   originalRank: number;
   globalRank: number;
   status: SelectionTeamStatus;
@@ -45,13 +45,13 @@ export interface AllianceSelectionSession {
   sessionCode: string;
   eventKey: string;
   createdBy: string;
+  hostUid: string;
   createdAt: string;
   participants: Record<string, SessionParticipant>;
   editorUids: string[];
   teams: SelectionTeam[];
   alliances: Alliance[];
   status: SessionStatus;
-  showTier3: boolean;
   messages: ChatMessage[];
   lastUpdatedBy: string;
 }

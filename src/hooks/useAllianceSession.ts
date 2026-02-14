@@ -26,6 +26,7 @@ function generateSessionCode(): string {
 }
 
 // Build the selection team list from pick list teams + all event teams
+// Shows ALL teams ranked: tier1 -> tier2 -> tier3 -> tier4 -> unranked
 function buildSelectionTeams(pickListTeams: PickListTeam[], allEventTeamNumbers: number[]): SelectionTeam[] {
   const tier1 = pickListTeams
     .filter(t => t.tier === 'tier1')
@@ -36,23 +37,26 @@ function buildSelectionTeams(pickListTeams: PickListTeam[], allEventTeamNumbers:
   const tier3 = pickListTeams
     .filter(t => t.tier === 'tier3')
     .sort((a, b) => a.rank - b.rank);
+  const tier4 = pickListTeams
+    .filter(t => t.tier === 'tier4')
+    .sort((a, b) => a.rank - b.rank);
 
   // Get team numbers in pick list
   const pickListTeamNumbers = new Set(pickListTeams.map(t => t.teamNumber));
 
-  // Find teams not in pick list (unranked)
+  // Find teams not in pick list at all (unranked)
   const unrankedTeamNumbers = allEventTeamNumbers
     .filter(num => !pickListTeamNumbers.has(num))
-    .sort((a, b) => a - b); // Sort by team number
+    .sort((a, b) => a - b);
 
   let globalRank = 1;
   const result: SelectionTeam[] = [];
 
-  // Add pick list teams (tier1, tier2, tier3)
-  for (const team of [...tier1, ...tier2, ...tier3]) {
+  // Add ALL pick list teams in order: tier1, tier2, tier3, tier4
+  for (const team of [...tier1, ...tier2, ...tier3, ...tier4]) {
     result.push({
       teamNumber: team.teamNumber,
-      originalTier: team.tier as 'tier1' | 'tier2' | 'tier3',
+      originalTier: team.tier as 'tier1' | 'tier2' | 'tier3' | 'tier4',
       originalRank: team.rank,
       globalRank: globalRank++,
       status: 'available',
@@ -63,7 +67,7 @@ function buildSelectionTeams(pickListTeams: PickListTeam[], allEventTeamNumbers:
     });
   }
 
-  // Add unranked teams (not in pick list)
+  // Add unranked teams (not in any pick list tier)
   let unrankedRank = 1;
   for (const teamNumber of unrankedTeamNumbers) {
     result.push({
@@ -95,18 +99,28 @@ function buildEmptyAlliances(): Alliance[] {
 
 // Convert Firestore doc data to local session type
 function docToSession(docId: string, data: Record<string, unknown>): AllianceSelectionSession {
+  // Handle backwards compatibility: old sessions use 'admin' role, new use 'host'
+  const participants = (data.participants ?? {}) as Record<string, { displayName: string; teamNumber?: number; role: string; joinedAt: string }>;
+  const migratedParticipants: AllianceSelectionSession['participants'] = {};
+  for (const [uid, p] of Object.entries(participants)) {
+    migratedParticipants[uid] = {
+      ...p,
+      role: (p.role === 'admin' ? 'host' : p.role) as SessionRole,
+    };
+  }
+
   return {
     sessionId: docId,
     sessionCode: data.sessionCode as string,
     eventKey: data.eventKey as string,
     createdBy: data.createdBy as string,
+    hostUid: (data.hostUid ?? data.createdBy) as string,
     createdAt: (data.createdAt as Timestamp)?.toDate?.()?.toISOString?.() ?? new Date().toISOString(),
-    participants: (data.participants ?? {}) as AllianceSelectionSession['participants'],
+    participants: migratedParticipants,
     editorUids: (data.editorUids ?? []) as string[],
     teams: (data.teams ?? []) as SelectionTeam[],
     alliances: (data.alliances ?? []) as Alliance[],
     status: (data.status ?? 'active') as SessionStatus,
-    showTier3: (data.showTier3 ?? false) as boolean,
     messages: (data.messages ?? []) as ChatMessage[],
     lastUpdatedBy: (data.lastUpdatedBy ?? '') as string,
   };
@@ -137,7 +151,8 @@ export function useAllianceSession(userId: string | null) {
     return participant?.role ?? null;
   })();
 
-  const isEditor = myRole === 'admin' || myRole === 'editor';
+  const isHost = myRole === 'host';
+  const isEditor = myRole === 'host' || myRole === 'editor';
 
   // Clean up listener on unmount
   useEffect(() => {
@@ -150,7 +165,6 @@ export function useAllianceSession(userId: string | null) {
 
   // Start listening to a session document
   const startListening = useCallback((sessionId: string) => {
-    // Clean up previous listener
     if (unsubscribeRef.current) {
       unsubscribeRef.current();
     }
@@ -184,7 +198,6 @@ export function useAllianceSession(userId: string | null) {
     setError(null);
 
     try {
-      // Generate a unique session code
       let sessionCode = generateSessionCode();
       let attempts = 0;
       while (attempts < 5) {
@@ -201,7 +214,7 @@ export function useAllianceSession(userId: string | null) {
 
       const participant: Record<string, unknown> = {
         displayName: params.displayName,
-        role: 'admin',
+        role: 'host',
         joinedAt: new Date().toISOString(),
       };
       if (params.teamNumber) {
@@ -212,9 +225,9 @@ export function useAllianceSession(userId: string | null) {
         sessionCode,
         eventKey: params.eventKey,
         createdBy: userId,
+        hostUid: userId,
         createdAt: Timestamp.now(),
         status: 'active',
-        showTier3: false,
         editorUids: [],
         participants: {
           [userId]: participant,
@@ -257,7 +270,6 @@ export function useAllianceSession(userId: string | null) {
       const sessionDoc = snapshot.docs[0];
       const sessionRef = doc(db, 'sessions', sessionDoc.id);
 
-      // Add this user as a viewer
       const participant: Record<string, unknown> = {
         displayName,
         role: 'viewer',
@@ -292,7 +304,7 @@ export function useAllianceSession(userId: string | null) {
     setError(null);
   }, []);
 
-  // Helper: update the session doc (editor/admin only)
+  // Helper: update the session doc
   const updateSession = useCallback(async (updates: Record<string, unknown>) => {
     if (!session || !userId) return;
     const sessionRef = doc(db, 'sessions', session.sessionId);
@@ -312,7 +324,6 @@ export function useAllianceSession(userId: string | null) {
         : t
     );
 
-    // Find the right slot on the alliance
     const alliances = session.alliances.map(a => {
       if (a.number !== allianceNumber) return a;
       if (!a.captain) return { ...a, captain: teamNumber };
@@ -342,16 +353,12 @@ export function useAllianceSession(userId: string | null) {
   const undoTeamStatus = useCallback(async (teamNumber: number) => {
     if (!session || !isEditor) return;
 
-    const team = session.teams.find(t => t.teamNumber === teamNumber);
-    if (!team) return;
-
     const teams = session.teams.map(t =>
       t.teamNumber === teamNumber
         ? { ...t, status: 'available' as SelectionTeamStatus, pickedByAlliance: null }
         : t
     );
 
-    // If the team was picked, remove it from the alliance
     const alliances = session.alliances.map(a => {
       if (a.captain === teamNumber) return { ...a, captain: null };
       if (a.firstPick === teamNumber) return { ...a, firstPick: null };
@@ -363,49 +370,60 @@ export function useAllianceSession(userId: string | null) {
     await updateSession({ teams, alliances });
   }, [session, isEditor, updateSession]);
 
-  // Reveal tier 3 backup teams
-  const revealTier3 = useCallback(async () => {
-    if (!session || !isEditor) return;
-    await updateSession({ showTier3: true });
-  }, [session, isEditor, updateSession]);
-
-  // Set session status (active/completed)
+  // Set session status (host only)
   const setSessionStatus = useCallback(async (status: SessionStatus) => {
-    if (!session || myRole !== 'admin') return;
+    if (!session || !isHost) return;
     await updateSession({ status });
-  }, [session, myRole, updateSession]);
+  }, [session, isHost, updateSession]);
 
-  // Promote a viewer to editor (admin only)
+  // Promote a viewer to editor (host only)
   const promoteToEditor = useCallback(async (uid: string) => {
-    if (!session || myRole !== 'admin') return;
+    if (!session || !isHost) return;
 
     const participant = session.participants[uid];
-    if (!participant || participant.role === 'admin') return;
+    if (!participant || participant.role === 'host') return;
 
     await updateSession({
       [`participants.${uid}.role`]: 'editor',
       editorUids: [...session.editorUids, uid],
     });
-  }, [session, myRole, updateSession]);
+  }, [session, isHost, updateSession]);
 
-  // Demote an editor to viewer (admin only)
+  // Demote an editor to viewer (host only)
   const demoteToViewer = useCallback(async (uid: string) => {
-    if (!session || myRole !== 'admin') return;
+    if (!session || !isHost) return;
 
     const participant = session.participants[uid];
-    if (!participant || participant.role === 'admin') return;
+    if (!participant || participant.role === 'host') return;
 
     await updateSession({
       [`participants.${uid}.role`]: 'viewer',
       editorUids: session.editorUids.filter(id => id !== uid),
     });
-  }, [session, myRole, updateSession]);
+  }, [session, isHost, updateSession]);
 
-  // Remove a participant (admin only)
+  // Transfer host to another participant (host only)
+  const transferHost = useCallback(async (newHostUid: string) => {
+    if (!session || !isHost || !userId) return;
+
+    const newHostParticipant = session.participants[newHostUid];
+    if (!newHostParticipant) return;
+
+    // Build updated participants: old host becomes editor, new host becomes host
+    const newParticipants = { ...session.participants };
+    newParticipants[userId] = { ...newParticipants[userId], role: 'editor' };
+    newParticipants[newHostUid] = { ...newParticipants[newHostUid], role: 'host' };
+
+    await updateSession({
+      hostUid: newHostUid,
+      participants: newParticipants,
+    });
+  }, [session, isHost, userId, updateSession]);
+
+  // Remove a participant (host only)
   const removeParticipant = useCallback(async (uid: string) => {
-    if (!session || myRole !== 'admin' || uid === userId) return;
+    if (!session || !isHost || uid === userId) return;
 
-    // Rebuild the participants map without this user
     const newParticipants = { ...session.participants };
     delete newParticipants[uid];
 
@@ -413,7 +431,7 @@ export function useAllianceSession(userId: string | null) {
       participants: newParticipants,
       editorUids: session.editorUids.filter(id => id !== uid),
     });
-  }, [session, myRole, userId, updateSession]);
+  }, [session, isHost, userId, updateSession]);
 
   // Send a chat message (any participant)
   const sendMessage = useCallback(async (text: string) => {
@@ -431,7 +449,6 @@ export function useAllianceSession(userId: string | null) {
       timestamp: new Date().toISOString(),
     };
 
-    // Keep last 100 messages to avoid document bloat
     const messages = [...session.messages, message].slice(-100);
     await updateSession({ messages });
   }, [session, userId, updateSession]);
@@ -441,6 +458,7 @@ export function useAllianceSession(userId: string | null) {
     loading,
     error,
     myRole,
+    isHost,
     isEditor,
     createSession,
     joinSession,
@@ -448,10 +466,10 @@ export function useAllianceSession(userId: string | null) {
     markTeamPicked,
     markTeamDeclined,
     undoTeamStatus,
-    revealTier3,
     setSessionStatus,
     promoteToEditor,
     demoteToViewer,
+    transferHost,
     removeParticipant,
     sendMessage,
     startListening,

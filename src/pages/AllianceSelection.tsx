@@ -33,6 +33,7 @@ function AllianceSelection() {
     loading: sessionLoading,
     error,
     myRole,
+    isHost,
     isEditor,
     createSession,
     joinSession,
@@ -40,10 +41,10 @@ function AllianceSelection() {
     markTeamPicked,
     markTeamDeclined,
     undoTeamStatus,
-    revealTier3,
     setSessionStatus,
     promoteToEditor,
     demoteToViewer,
+    transferHost,
     removeParticipant,
     sendMessage,
     startListening,
@@ -222,14 +223,15 @@ function AllianceSelection() {
       userId={user?.uid ?? ''}
       myRole={myRole}
       isEditor={isEditor}
+      isHost={isHost}
       onMarkPicked={markTeamPicked}
       onMarkDeclined={markTeamDeclined}
       onUndoStatus={undoTeamStatus}
-      onRevealTier3={revealTier3}
       onSetStatus={setSessionStatus}
       onLeave={handleLeaveSession}
       onPromote={promoteToEditor}
       onDemote={demoteToViewer}
+      onTransferHost={transferHost}
       onRemoveParticipant={removeParticipant}
       onSendMessage={sendMessage}
     />
