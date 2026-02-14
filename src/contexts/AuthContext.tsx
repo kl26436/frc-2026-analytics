@@ -9,6 +9,13 @@ interface AccessConfig {
   adminEmails: string[];
 }
 
+export interface AccessRequest {
+  email: string;
+  displayName: string;
+  photoURL: string | null;
+  requestedAt: string;
+}
+
 interface AuthContextType {
   user: User | null;
   loading: boolean;
@@ -17,9 +24,13 @@ interface AuthContextType {
   isAllowed: boolean;
   isAdmin: boolean;
   accessConfig: AccessConfig | null;
+  accessRequests: AccessRequest[];
+  hasRequestedAccess: boolean;
   signInWithGoogle: () => Promise<User | null>;
   signOut: () => Promise<void>;
-  // Admin functions
+  requestAccess: () => Promise<void>;
+  approveRequest: (email: string) => Promise<void>;
+  denyRequest: (email: string) => Promise<void>;
   addAllowedEmail: (email: string) => Promise<void>;
   removeAllowedEmail: (email: string) => Promise<void>;
   addAdminEmail: (email: string) => Promise<void>;
@@ -31,6 +42,7 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { user, loading: authLoading, error: authError, signInWithGoogle, signOut } = useFirebaseAuth();
   const [accessConfig, setAccessConfig] = useState<AccessConfig | null>(null);
+  const [accessRequests, setAccessRequests] = useState<AccessRequest[]>([]);
   const [configLoading, setConfigLoading] = useState(true);
 
   // Listen to the access config document
@@ -45,15 +57,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             adminEmails: (data.adminEmails ?? []) as string[],
           });
         } else {
-          // No config yet — will be bootstrapped when first admin signs in
           setAccessConfig({ allowedEmails: [], adminEmails: [] });
         }
         setConfigLoading(false);
       },
       () => {
-        // If we can't read the config (permissions), set empty
         setAccessConfig({ allowedEmails: [], adminEmails: [] });
         setConfigLoading(false);
+      }
+    );
+    return unsubscribe;
+  }, []);
+
+  // Listen to access requests
+  useEffect(() => {
+    const unsubscribe = onSnapshot(
+      doc(db, 'config', 'accessRequests'),
+      (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          setAccessRequests((data.requests ?? []) as AccessRequest[]);
+        } else {
+          setAccessRequests([]);
+        }
+      },
+      () => {
+        setAccessRequests([]);
       }
     );
     return unsubscribe;
@@ -68,13 +97,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isAdmin = isAuthenticated && !!userEmail && !!accessConfig &&
     accessConfig.adminEmails.map(e => e.toLowerCase()).includes(userEmail);
 
+  const hasRequestedAccess = isAuthenticated && !!userEmail &&
+    accessRequests.some(r => r.email.toLowerCase() === userEmail);
+
   const loading = authLoading || configLoading;
 
   // Bootstrap: if no config exists and user signs in, create it with them as admin
   useEffect(() => {
     if (!user || !userEmail || !accessConfig || loading) return;
     if (accessConfig.allowedEmails.length === 0 && accessConfig.adminEmails.length === 0 && !user.isAnonymous) {
-      // First authenticated user becomes admin
       const configRef = doc(db, 'config', 'access');
       getDoc(configRef).then((snap) => {
         if (!snap.exists()) {
@@ -91,6 +122,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const configRef = doc(db, 'config', 'access');
     const current = accessConfig ?? { allowedEmails: [], adminEmails: [] };
     await setDoc(configRef, { ...current, ...updates });
+  };
+
+  const requestAccess = async () => {
+    if (!user || !userEmail) return;
+    // Don't re-request
+    if (accessRequests.some(r => r.email.toLowerCase() === userEmail)) return;
+
+    const newRequest: AccessRequest = {
+      email: userEmail,
+      displayName: user.displayName ?? userEmail,
+      photoURL: user.photoURL,
+      requestedAt: new Date().toISOString(),
+    };
+
+    const requestsRef = doc(db, 'config', 'accessRequests');
+    await setDoc(requestsRef, {
+      requests: [...accessRequests, newRequest],
+    });
+  };
+
+  const approveRequest = async (email: string) => {
+    const normalized = email.toLowerCase().trim();
+    // Add to allowed list
+    await addAllowedEmail(normalized);
+    // Remove from requests
+    const requestsRef = doc(db, 'config', 'accessRequests');
+    await setDoc(requestsRef, {
+      requests: accessRequests.filter(r => r.email.toLowerCase() !== normalized),
+    });
+  };
+
+  const denyRequest = async (email: string) => {
+    const normalized = email.toLowerCase().trim();
+    const requestsRef = doc(db, 'config', 'accessRequests');
+    await setDoc(requestsRef, {
+      requests: accessRequests.filter(r => r.email.toLowerCase() !== normalized),
+    });
   };
 
   const addAllowedEmail = async (email: string) => {
@@ -111,7 +179,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const addAdminEmail = async (email: string) => {
     if (!accessConfig) return;
     const normalized = email.toLowerCase().trim();
-    // Also add to allowed if not already there
     const newAllowed = accessConfig.allowedEmails.map(e => e.toLowerCase()).includes(normalized)
       ? accessConfig.allowedEmails
       : [...accessConfig.allowedEmails, normalized];
@@ -124,7 +191,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const removeAdminEmail = async (email: string) => {
     if (!accessConfig) return;
     const normalized = email.toLowerCase().trim();
-    // Don't allow removing the last admin
     if (accessConfig.adminEmails.length <= 1) return;
     await updateConfig({
       adminEmails: accessConfig.adminEmails.filter(e => e.toLowerCase() !== normalized),
@@ -140,8 +206,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAllowed,
       isAdmin,
       accessConfig,
+      accessRequests,
+      hasRequestedAccess,
       signInWithGoogle,
       signOut,
+      requestAccess,
+      approveRequest,
+      denyRequest,
       addAllowedEmail,
       removeAllowedEmail,
       addAdminEmail,

@@ -1,8 +1,8 @@
-import { Loader2 } from 'lucide-react';
+import { Loader2, CheckCircle, Send } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 function Login() {
-  const { loading, error, isAuthenticated, isAllowed, signInWithGoogle, user } = useAuth();
+  const { loading, error, isAuthenticated, isAllowed, hasRequestedAccess, signInWithGoogle, requestAccess, user } = useAuth();
 
   // Authenticated but not on the allowlist
   if (isAuthenticated && !isAllowed) {
@@ -14,19 +14,53 @@ function Login() {
             alt="Team 148"
             className="h-16 w-16 mx-auto mb-4 object-contain"
           />
-          <h1 className="text-2xl font-bold mb-2">Access Denied</h1>
-          <p className="text-textSecondary mb-4">
-            Your account (<span className="text-textPrimary font-semibold">{user?.email}</span>) is not on the approved access list.
-          </p>
-          <p className="text-textMuted text-sm mb-6">
-            Ask a team admin to add your email to the allowlist.
-          </p>
-          <button
-            onClick={signInWithGoogle}
-            className="w-full px-4 py-3 bg-surfaceElevated border border-border rounded-lg hover:bg-interactive transition-colors text-sm mb-3"
-          >
-            Try a different account
-          </button>
+
+          {hasRequestedAccess ? (
+            <>
+              <CheckCircle size={48} className="mx-auto mb-4 text-success" />
+              <h1 className="text-2xl font-bold mb-2">Request Sent</h1>
+              <p className="text-textSecondary mb-2">
+                Your request to access Data Wrangler has been sent.
+              </p>
+              <p className="text-textSecondary mb-6">
+                Signed in as <span className="text-textPrimary font-semibold">{user?.email}</span>
+              </p>
+              <p className="text-textMuted text-sm mb-6">
+                A team admin will approve your request. This page will update automatically when you're approved.
+              </p>
+              <button
+                onClick={signInWithGoogle}
+                className="w-full px-4 py-3 bg-surfaceElevated border border-border rounded-lg hover:bg-interactive transition-colors text-sm"
+              >
+                Try a different account
+              </button>
+            </>
+          ) : (
+            <>
+              <h1 className="text-2xl font-bold mb-2">Access Required</h1>
+              <p className="text-textSecondary mb-2">
+                Signed in as <span className="text-textPrimary font-semibold">{user?.email}</span>
+              </p>
+              <p className="text-textMuted text-sm mb-6">
+                Your account is not on the approved access list. Request access and a team admin will review it.
+              </p>
+
+              <button
+                onClick={requestAccess}
+                className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-success text-background font-semibold rounded-lg hover:bg-success/90 transition-colors mb-3"
+              >
+                <Send size={18} />
+                Request Access
+              </button>
+
+              <button
+                onClick={signInWithGoogle}
+                className="w-full px-4 py-3 bg-surfaceElevated border border-border rounded-lg hover:bg-interactive transition-colors text-sm"
+              >
+                Try a different account
+              </button>
+            </>
+          )}
         </div>
       </div>
     );

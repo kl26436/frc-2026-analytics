@@ -1,15 +1,18 @@
 import { useState } from 'react';
-import { Shield, UserPlus, Trash2, Crown, Mail } from 'lucide-react';
+import { Shield, UserPlus, Trash2, Crown, Mail, UserCheck, UserX, Clock } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 function AdminSettings() {
   const {
     isAdmin,
     accessConfig,
+    accessRequests,
     addAllowedEmail,
     removeAllowedEmail,
     addAdminEmail,
     removeAdminEmail,
+    approveRequest,
+    denyRequest,
     user,
   } = useAuth();
 
@@ -38,6 +41,18 @@ function AdminSettings() {
     setTimeout(() => setStatus(null), 3000);
   };
 
+  const handleApprove = async (email: string) => {
+    await approveRequest(email);
+    setStatus(`Approved ${email}.`);
+    setTimeout(() => setStatus(null), 3000);
+  };
+
+  const handleDeny = async (email: string) => {
+    await denyRequest(email);
+    setStatus(`Denied request from ${email}.`);
+    setTimeout(() => setStatus(null), 3000);
+  };
+
   const handlePromoteToAdmin = async (email: string) => {
     if (confirm(`Make ${email} an admin? They will be able to manage the access list.`)) {
       await addAdminEmail(email);
@@ -58,7 +73,6 @@ function AdminSettings() {
   const handleRemoveEmail = async (email: string) => {
     if (confirm(`Remove ${email} from the access list? They will no longer be able to use the app.`)) {
       await removeAllowedEmail(email);
-      // Also remove from admin if they were one
       if (accessConfig?.adminEmails.map(e => e.toLowerCase()).includes(email.toLowerCase())) {
         await removeAdminEmail(email);
       }
@@ -78,6 +92,59 @@ function AdminSettings() {
           Manage who can access the Data Wrangler app.
         </p>
       </div>
+
+      {/* Pending Access Requests */}
+      {accessRequests.length > 0 && (
+        <div className="bg-warning/10 rounded-lg border-2 border-warning p-4 md:p-6">
+          <h2 className="text-lg font-bold mb-4 flex items-center gap-2 text-warning">
+            <Clock size={20} />
+            Pending Requests ({accessRequests.length})
+          </h2>
+          <div className="space-y-3">
+            {accessRequests.map(request => (
+              <div key={request.email} className="flex items-center gap-3 px-4 py-3 bg-surface rounded-lg border border-border">
+                {request.photoURL ? (
+                  <img src={request.photoURL} alt="" className="h-8 w-8 rounded-full flex-shrink-0" />
+                ) : (
+                  <div className="h-8 w-8 rounded-full bg-surfaceElevated flex items-center justify-center flex-shrink-0">
+                    <Mail size={14} className="text-textMuted" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold truncate">{request.displayName}</p>
+                  <p className="text-xs text-textSecondary truncate">{request.email}</p>
+                </div>
+                <span className="text-xs text-textMuted hidden sm:block">
+                  {new Date(request.requestedAt).toLocaleDateString()}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleApprove(request.email)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-success text-background font-semibold rounded-lg hover:bg-success/90 transition-colors text-sm"
+                  >
+                    <UserCheck size={14} />
+                    Approve
+                  </button>
+                  <button
+                    onClick={() => handleDeny(request.email)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-danger/10 text-danger font-semibold rounded-lg hover:bg-danger/20 transition-colors text-sm"
+                  >
+                    <UserX size={14} />
+                    Deny
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Status message */}
+      {status && (
+        <div className="p-3 bg-success/10 border border-success/30 rounded-lg text-success text-sm">
+          {status}
+        </div>
+      )}
 
       {/* Add new user */}
       <div className="bg-surface rounded-lg border border-border p-4 md:p-6">
@@ -102,12 +169,6 @@ function AdminSettings() {
             Add
           </button>
         </div>
-
-        {status && (
-          <div className="mt-3 p-3 bg-success/10 border border-success/30 rounded-lg text-success text-sm">
-            {status}
-          </div>
-        )}
       </div>
 
       {/* Current users */}
@@ -180,6 +241,7 @@ function AdminSettings() {
         <p><strong>How it works:</strong></p>
         <ul className="list-disc list-inside space-y-1 text-textMuted">
           <li>Only emails on this list can sign in and use the app</li>
+          <li>Team members can request access from the login page</li>
           <li>Admins can add/remove users and manage the access list</li>
           <li>Alliance selection join links still work for anyone (no account needed)</li>
           <li>The first person to sign in automatically becomes admin</li>
