@@ -111,7 +111,11 @@ function AdminSettings() {
                   </div>
                 )}
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold truncate">{request.displayName}</p>
+                  <p className="text-sm font-semibold truncate">
+                    {request.firstName && request.lastName
+                      ? `${request.firstName} ${request.lastName}`
+                      : request.displayName}
+                  </p>
                   <p className="text-xs text-textSecondary truncate">{request.email}</p>
                 </div>
                 <span className="text-xs text-textMuted hidden sm:block">

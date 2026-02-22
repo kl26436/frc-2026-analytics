@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  doc, setDoc, updateDoc, onSnapshot,
-  collection, query, where, getDocs, Timestamp
+  doc, setDoc, updateDoc, onSnapshot, deleteField,
+  collection, query, where, getDocs, Timestamp,
+  arrayUnion, arrayRemove
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import type {
@@ -151,8 +152,10 @@ export function useAllianceSession(userId: string | null) {
     return participant?.role ?? null;
   })();
 
-  const isHost = myRole === 'host';
-  const isEditor = myRole === 'host' || myRole === 'editor';
+  // Check both participant role AND hostUid — covers the case where the role
+  // was overwritten to 'editor' by a previous buggy reconnection
+  const isHost = myRole === 'host' || (!!session && !!userId && session.hostUid === userId);
+  const isEditor = isHost || myRole === 'editor';
 
   // Clean up listener on unmount
   useEffect(() => {
@@ -169,6 +172,7 @@ export function useAllianceSession(userId: string | null) {
       unsubscribeRef.current();
     }
 
+    setLoading(true);
     const sessionRef = doc(db, 'sessions', sessionId);
     const unsubscribe = onSnapshot(
       sessionRef,
@@ -251,7 +255,7 @@ export function useAllianceSession(userId: string | null) {
   }, [userId, startListening]);
 
   // Join an existing session by code
-  const joinSession = useCallback(async (sessionCode: string, displayName: string, teamNumber?: number): Promise<JoinSessionResult | null> => {
+  const joinSession = useCallback(async (sessionCode: string, displayName: string, teamNumber?: number, role: SessionRole = 'viewer'): Promise<JoinSessionResult | null> => {
     if (!userId) throw new Error('Must be signed in to join a session');
 
     setLoading(true);
@@ -269,20 +273,34 @@ export function useAllianceSession(userId: string | null) {
 
       const sessionDoc = snapshot.docs[0];
       const sessionRef = doc(db, 'sessions', sessionDoc.id);
+      const sessionData = sessionDoc.data();
+
+      // Preserve existing role if they left voluntarily (entry still in Firestore)
+      // Kicked users have no entry, so they go through as the passed-in role (pending)
+      const existingParticipant = (sessionData.participants as Record<string, { role: string }> | undefined)?.[userId];
+      const isReturningHost = sessionData.hostUid === userId || existingParticipant?.role === 'host';
+      const isReturningAccepted = existingParticipant && existingParticipant.role !== 'pending';
+      const effectiveRole = isReturningHost ? 'host' : isReturningAccepted ? existingParticipant.role as SessionRole : role;
 
       const participant: Record<string, unknown> = {
         displayName,
-        role: 'viewer',
-        joinedAt: new Date().toISOString(),
+        role: effectiveRole,
+        joinedAt: existingParticipant ? (existingParticipant as Record<string, unknown>).joinedAt : new Date().toISOString(),
       };
       if (teamNumber) {
         participant.teamNumber = teamNumber;
       }
 
-      await updateDoc(sessionRef, {
+      // If joining as editor, also add to editorUids
+      const updates: Record<string, unknown> = {
         [`participants.${userId}`]: participant,
         lastUpdatedBy: userId,
-      });
+      };
+      if (effectiveRole === 'editor') {
+        updates.editorUids = arrayUnion(userId);
+      }
+
+      await updateDoc(sessionRef, updates);
 
       startListening(sessionDoc.id);
       return { sessionId: sessionDoc.id };
@@ -370,10 +388,44 @@ export function useAllianceSession(userId: string | null) {
     await updateSession({ teams, alliances });
   }, [session, isEditor, updateSession]);
 
-  // Set session status (host only)
-  const setSessionStatus = useCallback(async (status: SessionStatus) => {
+  // Set session status (host only) — returns true if the update was made
+  // When ending (status = 'completed'), also removes all non-host participants
+  // so their onSnapshot kick-detection fires reliably
+  const setSessionStatus = useCallback(async (status: SessionStatus): Promise<boolean> => {
+    if (!session || !isHost || !userId) return false;
+    try {
+      const sessionRef = doc(db, 'sessions', session.sessionId);
+      const updates: Record<string, unknown> = {
+        status,
+        lastUpdatedBy: userId,
+      };
+
+      // When ending, remove all non-host participants atomically
+      if (status === 'completed') {
+        for (const uid of Object.keys(session.participants)) {
+          if (uid !== userId) {
+            updates[`participants.${uid}`] = deleteField();
+          }
+        }
+      }
+
+      await updateDoc(sessionRef, updates);
+      return true;
+    } catch {
+      return false;
+    }
+  }, [session, isHost, userId]);
+
+  // Accept a pending participant (host only) — promotes to viewer
+  const acceptParticipant = useCallback(async (uid: string) => {
     if (!session || !isHost) return;
-    await updateSession({ status });
+
+    const participant = session.participants[uid];
+    if (!participant || participant.role !== 'pending') return;
+
+    await updateSession({
+      [`participants.${uid}.role`]: 'viewer',
+    });
   }, [session, isHost, updateSession]);
 
   // Promote a viewer to editor (host only)
@@ -385,7 +437,7 @@ export function useAllianceSession(userId: string | null) {
 
     await updateSession({
       [`participants.${uid}.role`]: 'editor',
-      editorUids: [...session.editorUids, uid],
+      editorUids: arrayUnion(uid),
     });
   }, [session, isHost, updateSession]);
 
@@ -398,7 +450,7 @@ export function useAllianceSession(userId: string | null) {
 
     await updateSession({
       [`participants.${uid}.role`]: 'viewer',
-      editorUids: session.editorUids.filter(id => id !== uid),
+      editorUids: arrayRemove(uid),
     });
   }, [session, isHost, updateSession]);
 
@@ -424,21 +476,20 @@ export function useAllianceSession(userId: string | null) {
   const removeParticipant = useCallback(async (uid: string) => {
     if (!session || !isHost || uid === userId) return;
 
-    const newParticipants = { ...session.participants };
-    delete newParticipants[uid];
-
-    await updateSession({
-      participants: newParticipants,
-      editorUids: session.editorUids.filter(id => id !== uid),
+    const sessionRef = doc(db, 'sessions', session.sessionId);
+    await updateDoc(sessionRef, {
+      [`participants.${uid}`]: deleteField(),
+      editorUids: arrayRemove(uid),
+      lastUpdatedBy: userId,
     });
-  }, [session, isHost, userId, updateSession]);
+  }, [session, isHost, userId]);
 
-  // Send a chat message (any participant)
+  // Send a chat message (any non-pending participant)
   const sendMessage = useCallback(async (text: string) => {
     if (!session || !userId) return;
 
     const participant = session.participants[userId];
-    if (!participant) return;
+    if (!participant || participant.role === 'pending') return;
 
     const message: ChatMessage = {
       id: `${userId}-${Date.now()}`,
@@ -467,6 +518,7 @@ export function useAllianceSession(userId: string | null) {
     markTeamDeclined,
     undoTeamStatus,
     setSessionStatus,
+    acceptParticipant,
     promoteToEditor,
     demoteToViewer,
     transferHost,

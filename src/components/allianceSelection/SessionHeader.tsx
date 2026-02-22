@@ -1,19 +1,22 @@
 import { useState } from 'react';
-import { Copy, Check, Share2, LogOut, Users, Pause, Play, QrCode, X } from 'lucide-react';
+import { Copy, Check, Share2, LogOut, Users, Pause, QrCode, X, AlertTriangle } from 'lucide-react';
 import type { AllianceSelectionSession, SessionRole, SessionStatus } from '../../types/allianceSelection';
 
 interface SessionHeaderProps {
   session: AllianceSelectionSession;
   myRole: SessionRole | null;
+  isHost: boolean;
   onLeave: () => void;
   onSetStatus: (status: SessionStatus) => void;
   onShowParticipants: () => void;
   participantCount: number;
+  pendingCount: number;
 }
 
-function SessionHeader({ session, myRole, onLeave, onSetStatus, onShowParticipants, participantCount }: SessionHeaderProps) {
+function SessionHeader({ session, myRole, isHost, onLeave, onSetStatus, onShowParticipants, participantCount, pendingCount }: SessionHeaderProps) {
   const [copied, setCopied] = useState<'code' | 'link' | null>(null);
   const [showQR, setShowQR] = useState(false);
+  const [showEndConfirm, setShowEndConfirm] = useState(false);
 
   const shareLink = `${window.location.origin}${import.meta.env.BASE_URL}alliance-selection/join/${session.sessionCode}`;
 
@@ -77,36 +80,45 @@ function SessionHeader({ session, myRole, onLeave, onSetStatus, onShowParticipan
           {/* Participants button */}
           <button
             onClick={onShowParticipants}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-card rounded border border-border hover:bg-interactive transition-colors text-sm"
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded border transition-colors text-sm ${
+              pendingCount > 0
+                ? 'bg-warning/10 border-warning/30 hover:bg-warning/20'
+                : 'bg-card border-border hover:bg-interactive'
+            }`}
           >
             <Users size={14} />
             <span>{participantCount}</span>
+            {pendingCount > 0 && (
+              <span className="bg-warning text-background text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center animate-pulse">
+                {pendingCount}
+              </span>
+            )}
           </button>
 
           {/* Role badge */}
-          {myRole && (
+          {(myRole || isHost) && (
             <span className={`px-2 py-1 rounded text-xs font-semibold ${
-              myRole === 'host'
+              isHost
                 ? 'bg-warning/20 text-warning'
                 : myRole === 'editor'
                 ? 'bg-blueAlliance/20 text-blueAlliance'
                 : 'bg-textMuted/20 text-textMuted'
             }`}>
-              {myRole}
+              {isHost ? 'host' : myRole}
             </span>
           )}
 
           {/* Spacer */}
           <div className="flex-1" />
 
-          {/* Host: pause/resume */}
-          {myRole === 'host' && (
+          {/* Host: end session (with confirmation) */}
+          {isHost && session.status === 'active' && (
             <button
-              onClick={() => onSetStatus(session.status === 'active' ? 'completed' : 'active')}
+              onClick={() => setShowEndConfirm(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-card rounded border border-border hover:bg-interactive transition-colors text-sm"
             >
-              {session.status === 'active' ? <Pause size={14} /> : <Play size={14} />}
-              <span className="hidden sm:inline">{session.status === 'active' ? 'End' : 'Resume'}</span>
+              <Pause size={14} />
+              <span className="hidden sm:inline">End</span>
             </button>
           )}
 
@@ -120,6 +132,44 @@ function SessionHeader({ session, myRole, onLeave, onSetStatus, onShowParticipan
           </button>
         </div>
       </div>
+
+      {/* End Session Confirmation */}
+      {showEndConfirm && (
+        <div
+          className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4"
+          onClick={() => setShowEndConfirm(false)}
+        >
+          <div
+            className="bg-surface rounded-lg border border-border p-6 max-w-sm w-full"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <AlertTriangle size={24} className="text-warning" />
+              <h3 className="font-bold text-lg">End Session?</h3>
+            </div>
+            <p className="text-textSecondary text-sm mb-6">
+              This will end the alliance selection for everyone. All participants will be disconnected.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowEndConfirm(false)}
+                className="flex-1 px-4 py-2.5 bg-card border border-border rounded-lg hover:bg-interactive transition-colors font-semibold text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setShowEndConfirm(false);
+                  onSetStatus('completed');
+                }}
+                className="flex-1 px-4 py-2.5 bg-danger text-white rounded-lg hover:bg-danger/90 transition-colors font-semibold text-sm"
+              >
+                End Session
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* QR Code Modal */}
       {showQR && (

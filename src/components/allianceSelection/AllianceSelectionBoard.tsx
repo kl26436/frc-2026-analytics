@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { UserCheck, UserMinus, Clock } from 'lucide-react';
 import type { AllianceSelectionSession, SessionRole, SessionStatus } from '../../types/allianceSelection';
 import { useAnalyticsStore } from '../../store/useAnalyticsStore';
 import { useAllianceSelectionStore } from '../../store/useAllianceSelectionStore';
@@ -21,6 +22,7 @@ interface AllianceSelectionBoardProps {
   onUndoStatus: (teamNumber: number) => Promise<void>;
   onSetStatus: (status: SessionStatus) => Promise<void>;
   onLeave: () => void;
+  onAcceptParticipant: (uid: string) => Promise<void>;
   onPromote: (uid: string) => Promise<void>;
   onDemote: (uid: string) => Promise<void>;
   onTransferHost: (uid: string) => Promise<void>;
@@ -39,6 +41,7 @@ function AllianceSelectionBoard({
   onUndoStatus,
   onSetStatus,
   onLeave,
+  onAcceptParticipant,
   onPromote,
   onDemote,
   onTransferHost,
@@ -110,6 +113,8 @@ function AllianceSelectionBoard({
   const canShowModal = showComparisonModal && compareTeam1 && compareTeam2;
 
   const participantCount = Object.keys(session.participants).length;
+  const pendingEntries = Object.entries(session.participants).filter(([, p]) => p.role === 'pending');
+  const pendingCount = pendingEntries.length;
 
   return (
     <div className="space-y-3">
@@ -117,11 +122,50 @@ function AllianceSelectionBoard({
       <SessionHeader
         session={session}
         myRole={myRole}
+        isHost={isHost}
         onLeave={onLeave}
         onSetStatus={onSetStatus}
         onShowParticipants={() => setShowParticipants(!showParticipants)}
         participantCount={participantCount}
+        pendingCount={pendingCount}
       />
+
+      {/* Pending Approval Banner — shows for host when there are pending users */}
+      {isHost && pendingCount > 0 && (
+        <div className="bg-warning/10 border border-warning/30 rounded-lg p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <Clock size={16} className="text-warning" />
+            <span className="text-sm font-semibold text-warning">
+              {pendingCount} {pendingCount === 1 ? 'person' : 'people'} waiting for approval
+            </span>
+          </div>
+          <div className="space-y-1.5">
+            {pendingEntries.map(([uid, participant]) => (
+              <div key={uid} className="flex items-center gap-2 bg-surface/50 rounded px-3 py-2">
+                <span className="flex-1 text-sm font-semibold">
+                  {participant.displayName}
+                  {participant.teamNumber && (
+                    <span className="text-textSecondary font-normal ml-1">#{participant.teamNumber}</span>
+                  )}
+                </span>
+                <button
+                  onClick={() => onAcceptParticipant(uid)}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded bg-success text-background text-xs font-bold hover:bg-success/90 transition-colors"
+                >
+                  <UserCheck size={12} />
+                  Accept
+                </button>
+                <button
+                  onClick={() => onRemoveParticipant(uid)}
+                  className="flex items-center gap-1 px-2 py-1.5 rounded bg-danger/20 text-danger text-xs font-bold hover:bg-danger/30 transition-colors"
+                >
+                  <UserMinus size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Main Layout */}
       <div className="flex flex-col lg:flex-row gap-3">
@@ -202,6 +246,7 @@ function AllianceSelectionBoard({
           participants={session.participants}
           myUid={userId}
           isHost={isHost}
+          onAccept={onAcceptParticipant}
           onPromote={onPromote}
           onDemote={onDemote}
           onTransferHost={onTransferHost}
@@ -215,7 +260,6 @@ function AllianceSelectionBoard({
         <ComparisonModal
           team1={compareTeam1!}
           team2={compareTeam2!}
-          onPickTeam={() => clearCompareSelection()}
           onClose={() => {
             setShowComparisonModal(false);
             clearCompareSelection();

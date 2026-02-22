@@ -1,6 +1,6 @@
 // Alliance Selection Mode Types
 
-export type SessionRole = 'host' | 'editor' | 'viewer';
+export type SessionRole = 'host' | 'editor' | 'viewer' | 'pending';
 export type SelectionTeamStatus = 'available' | 'picked' | 'declined';
 export type SessionStatus = 'active' | 'completed';
 

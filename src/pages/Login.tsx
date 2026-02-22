@@ -1,8 +1,11 @@
+import { useState } from 'react';
 import { Loader2, CheckCircle, Send } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 function Login() {
   const { loading, error, isAuthenticated, isAllowed, hasRequestedAccess, signInWithGoogle, requestAccess, user } = useAuth();
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
 
   // Authenticated but not on the allowlist
   if (isAuthenticated && !isAllowed) {
@@ -45,9 +48,33 @@ function Login() {
                 Your account is not on the approved access list. Request access and a team admin will review it.
               </p>
 
+              <div className="grid grid-cols-2 gap-3 mb-4 text-left">
+                <div>
+                  <label className="text-sm text-textSecondary block mb-1">First Name *</label>
+                  <input
+                    type="text"
+                    value={firstName}
+                    onChange={e => setFirstName(e.target.value)}
+                    placeholder="First"
+                    className="w-full px-3 py-2.5 bg-card border border-border rounded-lg text-textPrimary placeholder-textMuted focus:outline-none focus:border-success"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm text-textSecondary block mb-1">Last Name *</label>
+                  <input
+                    type="text"
+                    value={lastName}
+                    onChange={e => setLastName(e.target.value)}
+                    placeholder="Last"
+                    className="w-full px-3 py-2.5 bg-card border border-border rounded-lg text-textPrimary placeholder-textMuted focus:outline-none focus:border-success"
+                  />
+                </div>
+              </div>
+
               <button
-                onClick={requestAccess}
-                className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-success text-background font-semibold rounded-lg hover:bg-success/90 transition-colors mb-3"
+                onClick={() => requestAccess(firstName.trim(), lastName.trim())}
+                disabled={!firstName.trim() || !lastName.trim()}
+                className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-success text-background font-semibold rounded-lg hover:bg-success/90 transition-colors mb-3 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Send size={18} />
                 Request Access

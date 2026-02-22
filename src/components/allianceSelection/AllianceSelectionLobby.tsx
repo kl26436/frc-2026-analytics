@@ -1,32 +1,32 @@
 import { useState } from 'react';
-import { Plus, LogIn, RotateCcw, Loader2, AlertCircle } from 'lucide-react';
+import { Plus, Loader2, AlertCircle, Radio, XCircle, Handshake } from 'lucide-react';
 import { usePickListStore } from '../../store/usePickListStore';
 import { useAnalyticsStore } from '../../store/useAnalyticsStore';
 import { useAllianceSelectionStore } from '../../store/useAllianceSelectionStore';
+import type { LiveSession } from '../../contexts/AuthContext';
 
 interface AllianceSelectionLobbyProps {
   onCreateSession: (eventKey: string, displayName: string, teamNumber?: number) => Promise<void>;
   onJoinSession: (sessionCode: string, displayName: string, teamNumber?: number) => Promise<void>;
+  onClearLiveSession?: () => Promise<void>;
   loading: boolean;
   error: string | null;
+  isAdmin: boolean;
+  userDisplayName?: string;
+  liveSession: LiveSession | null;
 }
 
-function AllianceSelectionLobby({ onCreateSession, onJoinSession, loading, error }: AllianceSelectionLobbyProps) {
+function AllianceSelectionLobby({ onCreateSession, onJoinSession, onClearLiveSession, loading, error, isAdmin, userDisplayName, liveSession }: AllianceSelectionLobbyProps) {
   const pickList = usePickListStore(state => state.pickList);
   const eventCode = useAnalyticsStore(state => state.eventCode);
   const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
-  const lastSessionCode = useAllianceSelectionStore(state => state.lastSessionCode);
-  const lastDisplayName = useAllianceSelectionStore(state => state.lastDisplayName);
-  const lastTeamNumber = useAllianceSelectionStore(state => state.lastTeamNumber);
   const activeSessionId = useAllianceSelectionStore(state => state.activeSessionId);
   const setLastDisplayName = useAllianceSelectionStore(state => state.setLastDisplayName);
   const setLastTeamNumber = useAllianceSelectionStore(state => state.setLastTeamNumber);
 
-  const [createName, setCreateName] = useState(lastDisplayName);
-  const [createTeamNum, setCreateTeamNum] = useState(lastTeamNumber);
-  const [joinCode, setJoinCode] = useState('');
-  const [joinName, setJoinName] = useState(lastDisplayName);
-  const [joinTeamNum, setJoinTeamNum] = useState(lastTeamNumber);
+  const defaultName = userDisplayName || '';
+  const [createName, setCreateName] = useState(defaultName);
+  const [createTeamNum, setCreateTeamNum] = useState('148');
 
   const tier1Count = pickList?.teams.filter(t => t.tier === 'tier1').length ?? 0;
   const tier2Count = pickList?.teams.filter(t => t.tier === 'tier2').length ?? 0;
@@ -35,7 +35,6 @@ function AllianceSelectionLobby({ onCreateSession, onJoinSession, loading, error
   const totalEventTeams = teamStatistics.length;
   const unrankedCount = totalEventTeams - rankedCount;
 
-  // Check if there's already an active session
   const hasActiveSession = !!activeSessionId;
 
   const parseTeamNum = (val: string): number | undefined => {
@@ -50,25 +49,18 @@ function AllianceSelectionLobby({ onCreateSession, onJoinSession, loading, error
     await onCreateSession(eventCode, createName.trim(), parseTeamNum(createTeamNum));
   };
 
-  const handleJoin = async () => {
-    if (!joinCode.trim() || !joinName.trim()) return;
-    setLastDisplayName(joinName.trim());
-    if (joinTeamNum.trim()) setLastTeamNumber(joinTeamNum.trim());
-    await onJoinSession(joinCode.trim().toUpperCase(), joinName.trim(), parseTeamNum(joinTeamNum));
-  };
-
-  const handleRejoin = async () => {
-    if (!lastSessionCode || !joinName.trim()) return;
-    setLastDisplayName(joinName.trim());
-    if (joinTeamNum.trim()) setLastTeamNumber(joinTeamNum.trim());
-    await onJoinSession(lastSessionCode, joinName.trim(), parseTeamNum(joinTeamNum));
+  const handleJoinLive = async () => {
+    if (!liveSession || !defaultName) return;
+    setLastDisplayName(defaultName);
+    setLastTeamNumber('148');
+    await onJoinSession(liveSession.sessionCode, defaultName, 148);
   };
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl md:text-3xl font-bold">Alliance Selection</h1>
-        <p className="text-textSecondary mt-1">Create or join a real-time alliance selection session</p>
+        <p className="text-textSecondary mt-1">Real-time alliance selection session for your team</p>
       </div>
 
       {error && (
@@ -77,24 +69,53 @@ function AllianceSelectionLobby({ onCreateSession, onJoinSession, loading, error
         </div>
       )}
 
-      <div className="grid md:grid-cols-2 gap-6">
-        {/* Create Session */}
-        <div className="bg-surface p-6 rounded-lg border border-border">
+      {/* Live Session — one-click join for team members */}
+      {liveSession && !hasActiveSession && (
+        <div className="bg-blueAlliance/10 border-2 border-blueAlliance/30 rounded-lg p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <Radio size={20} className="text-blueAlliance animate-pulse" />
+            <h2 className="text-xl font-bold text-blueAlliance flex-1">Live Session Available</h2>
+            {isAdmin && onClearLiveSession && (
+              <button
+                onClick={onClearLiveSession}
+                className="p-1.5 rounded text-textMuted hover:text-danger hover:bg-interactive transition-colors"
+                title="Dismiss live session broadcast"
+              >
+                <XCircle size={20} />
+              </button>
+            )}
+          </div>
+          <p className="text-textSecondary text-sm mb-4">
+            <span className="font-semibold text-textPrimary">{liveSession.createdByName}</span> started an alliance selection session.
+            {defaultName && <span> Joining as <span className="font-semibold text-textPrimary">{defaultName}</span> (Team 148).</span>}
+          </p>
+          <button
+            onClick={handleJoinLive}
+            disabled={loading || !defaultName}
+            className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-blueAlliance text-white font-bold rounded-lg hover:bg-blueAlliance/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-lg"
+          >
+            {loading ? <Loader2 size={20} className="animate-spin" /> : <Handshake size={20} />}
+            Join Live Session
+          </button>
+        </div>
+      )}
+
+      {/* Admin: Create Session (only shown when no live session) */}
+      {!liveSession && isAdmin && (
+        <div className="bg-surface p-6 rounded-lg border border-border max-w-lg">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
             <Plus size={20} />
-            Create New Session
+            Start Alliance Selection
           </h2>
 
           {hasActiveSession ? (
-            <div className="space-y-4">
-              <div className="flex items-start gap-3 bg-warning/10 border border-warning/30 text-warning px-4 py-3 rounded-lg">
-                <AlertCircle size={20} className="flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-semibold">Session Already Active</p>
-                  <p className="text-sm text-textSecondary mt-1">
-                    You already have an active session. Use the "Live Alliance Selection" banner at the top of any page to rejoin, or use the Rejoin button below.
-                  </p>
-                </div>
+            <div className="flex items-start gap-3 bg-warning/10 border border-warning/30 text-warning px-4 py-3 rounded-lg">
+              <AlertCircle size={20} className="flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold">Session Already Active</p>
+                <p className="text-sm text-textSecondary mt-1">
+                  You already have an active session. Use the banner at the top of any page to rejoin it.
+                </p>
               </div>
             </div>
           ) : !eventCode ? (
@@ -170,73 +191,18 @@ function AllianceSelectionLobby({ onCreateSession, onJoinSession, loading, error
             </div>
           )}
         </div>
+      )}
 
-        {/* Join Session */}
-        <div className="bg-surface p-6 rounded-lg border border-border">
-          <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-            <LogIn size={20} />
-            Join Session
-          </h2>
-
-          <div className="space-y-4">
-            <div>
-              <label className="text-sm text-textSecondary block mb-1">Session Code *</label>
-              <input
-                type="text"
-                value={joinCode}
-                onChange={e => setJoinCode(e.target.value.toUpperCase())}
-                placeholder="e.g. A7K3M2"
-                maxLength={6}
-                className="w-full bg-card border border-border rounded-lg px-3 py-2 text-textPrimary placeholder-textMuted focus:outline-none focus:border-success font-mono text-lg tracking-widest uppercase"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-sm text-textSecondary block mb-1">Your Name *</label>
-                <input
-                  type="text"
-                  value={joinName}
-                  onChange={e => setJoinName(e.target.value)}
-                  placeholder="Enter your name"
-                  className="w-full bg-card border border-border rounded-lg px-3 py-2 text-textPrimary placeholder-textMuted focus:outline-none focus:border-success"
-                />
-              </div>
-              <div>
-                <label className="text-sm text-textSecondary block mb-1">Team Number</label>
-                <input
-                  type="text"
-                  value={joinTeamNum}
-                  onChange={e => setJoinTeamNum(e.target.value.replace(/\D/g, ''))}
-                  placeholder="e.g. 148"
-                  maxLength={5}
-                  className="w-full bg-card border border-border rounded-lg px-3 py-2 text-textPrimary placeholder-textMuted focus:outline-none focus:border-success font-mono"
-                />
-              </div>
-            </div>
-
-            <button
-              onClick={handleJoin}
-              disabled={loading || !joinCode.trim() || !joinName.trim()}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blueAlliance text-white font-semibold rounded-lg hover:bg-blueAlliance/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? <Loader2 size={18} className="animate-spin" /> : <LogIn size={18} />}
-              Join Session
-            </button>
-
-            {lastSessionCode && (
-              <button
-                onClick={handleRejoin}
-                disabled={loading || !joinName.trim()}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-surfaceElevated border border-border text-textPrimary font-semibold rounded-lg hover:bg-interactive transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <RotateCcw size={16} />
-                Rejoin: {lastSessionCode}
-              </button>
-            )}
-          </div>
+      {/* Non-admin: No active session message */}
+      {!liveSession && !isAdmin && (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <Handshake size={48} className="text-textMuted mb-4" />
+          <h2 className="text-xl font-semibold text-textSecondary mb-2">No Active Session</h2>
+          <p className="text-textMuted max-w-md">
+            There are no alliance selection sessions running right now. When an admin starts one, it will appear here automatically.
+          </p>
         </div>
-      </div>
+      )}
     </div>
   );
 }

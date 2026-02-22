@@ -1,8 +1,6 @@
 import { useState, useRef } from 'react';
 import { useMetricsStore } from '../store/useMetricsStore';
 import {
-  Eye,
-  EyeOff,
   RefreshCw,
   Settings as SettingsIcon,
   Save,
@@ -10,7 +8,9 @@ import {
   Trash2,
   X,
   GripVertical,
+  ArrowLeft,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import type { MetricColumn, MetricCategory, MetricAggregation } from '../types/metrics';
 import { CATEGORY_LABELS, DEFAULT_METRICS } from '../types/metrics';
 
@@ -55,6 +55,7 @@ const AVAILABLE_FIELDS = [
 ];
 
 function MetricsSettings() {
+  const navigate = useNavigate();
   const config = useMetricsStore(state => state.config);
   const toggleColumn = useMetricsStore(state => state.toggleColumn);
   const updateColumn = useMetricsStore(state => state.updateColumn);
@@ -92,7 +93,10 @@ function MetricsSettings() {
 
   const [editingColumn, setEditingColumn] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<MetricColumn>>({});
-  const [showAddForm, setShowAddForm] = useState(false);
+  const [showAddPicker, setShowAddPicker] = useState(false);
+  const [addFilterCategory, setAddFilterCategory] = useState<MetricCategory | 'all'>('all');
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showAddCustom, setShowAddCustom] = useState(false);
   const [newColumn, setNewColumn] = useState({
     baseField: '',
     aggregation: 'avg' as MetricAggregation,
@@ -102,12 +106,32 @@ function MetricsSettings() {
     category: 'overall' as MetricCategory,
   });
 
-  // Check if a column is a default one (can't be deleted)
+  // Only show enabled metrics in the main list
+  const enabledColumns = config.columns.filter(c => c.enabled);
+
+  // Disabled default metrics that can be re-added
+  const disabledColumns = config.columns.filter(c => !c.enabled);
+
+  // Check if a column is a default one
   const isDefaultColumn = (columnId: string) => {
     return DEFAULT_METRICS.some(m => m.id === columnId);
   };
 
-  // Handle adding a new column
+  // Handle removing a metric (disable for defaults, delete for custom)
+  const handleRemoveColumn = (column: MetricColumn) => {
+    if (isDefaultColumn(column.id)) {
+      toggleColumn(column.id); // just hide it
+    } else {
+      deleteColumn(column.id); // permanently remove custom
+    }
+  };
+
+  // Handle re-adding a disabled metric
+  const handleEnableColumn = (columnId: string) => {
+    toggleColumn(columnId);
+  };
+
+  // Handle adding a new custom column
   const handleAddColumn = () => {
     if (!newColumn.baseField || !newColumn.label) return;
 
@@ -115,7 +139,6 @@ function MetricsSettings() {
     const fieldName = newColumn.baseField.replace(/^avg/, '').replace(/Rate$/, '');
     const id = `custom_${newColumn.aggregation}_${fieldName}_${Date.now()}`;
 
-    // Map the base field to the correct stat field based on aggregation
     let actualField = newColumn.baseField;
     if (newColumn.aggregation === 'max') {
       actualField = newColumn.baseField.replace(/^avg/, 'max');
@@ -136,7 +159,7 @@ function MetricsSettings() {
     };
 
     addColumn(column);
-    setShowAddForm(false);
+    setShowAddCustom(false);
     setNewColumn({
       baseField: '',
       aggregation: 'avg',
@@ -147,11 +170,10 @@ function MetricsSettings() {
     });
   };
 
-  // Auto-generate label when field or aggregation changes
   const updateNewColumnLabel = (baseField: string, aggregation: MetricAggregation) => {
     const selectedField = AVAILABLE_FIELDS.find(f => f.field === baseField);
     if (selectedField) {
-      const prefix = aggregation === 'avg' ? 'Avg' : aggregation === 'max' ? 'Max' : aggregation === 'min' ? 'Min' : aggregation === 'rate' ? '' : '';
+      const prefix = aggregation === 'avg' ? 'Avg' : aggregation === 'max' ? 'Max' : aggregation === 'min' ? 'Min' : '';
       setNewColumn(prev => ({
         ...prev,
         baseField,
@@ -182,375 +204,372 @@ function MetricsSettings() {
     }
   };
 
-  const handleCancelEdit = () => {
-    setEditingColumn(null);
-    setEditForm({});
-  };
+  // Group enabled columns by category for display
+  const enabledByCategory = enabledColumns.reduce((acc, col) => {
+    const cat = col.category || 'overall';
+    if (!acc[cat]) acc[cat] = [];
+    acc[cat].push(col);
+    return acc;
+  }, {} as Record<MetricCategory, MetricColumn[]>);
 
-  const enabledCount = config.columns.filter(c => c.enabled).length;
-
-  const renderColumn = (column: MetricColumn) => (
-    <div
-      key={column.id}
-      draggable={editingColumn !== column.id}
-      onDragStart={() => handleDragStart(column.id)}
-      onDragEnter={() => handleDragEnter(column.id)}
-      onDragEnd={handleDragEnd}
-      onDragOver={(e) => e.preventDefault()}
-      className={`p-4 border-b border-border/50 last:border-b-0 transition-all ${
-        column.enabled ? 'bg-surface' : 'bg-background opacity-60'
-      } ${isDragging && dragItem.current === column.id ? 'opacity-50' : ''} ${
-        editingColumn !== column.id ? 'cursor-grab active:cursor-grabbing' : ''
-      }`}
-    >
-      {editingColumn === column.id ? (
-        // Edit Mode
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm text-textSecondary mb-2">
-                Display Label
-              </label>
-              <input
-                type="text"
-                value={editForm.label || ''}
-                onChange={e => setEditForm({ ...editForm, label: e.target.value })}
-                className="w-full px-3 py-2 bg-background border border-border rounded-lg"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm text-textSecondary mb-2">
-                Format
-              </label>
-              <select
-                value={editForm.format || 'number'}
-                onChange={e => setEditForm({ ...editForm, format: e.target.value as 'number' | 'percentage' | 'time' })}
-                className="w-full px-3 py-2 bg-background border border-border rounded-lg"
-              >
-                <option value="number">Number</option>
-                <option value="percentage">Percentage</option>
-                <option value="time">Time (seconds)</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm text-textSecondary mb-2">
-                Decimal Places
-              </label>
-              <input
-                type="number"
-                min="0"
-                max="3"
-                value={editForm.decimals ?? 1}
-                onChange={e => setEditForm({ ...editForm, decimals: parseInt(e.target.value) })}
-                className="w-full px-3 py-2 bg-background border border-border rounded-lg"
-              />
-            </div>
-          </div>
-
-          <div className="flex gap-2 justify-end">
-            <button
-              onClick={handleCancelEdit}
-              className="px-4 py-2 bg-surface hover:bg-interactive rounded-lg transition-colors border border-border"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSaveEdit}
-              className="flex items-center gap-2 px-4 py-2 bg-success text-background font-semibold rounded-lg hover:bg-success/90 transition-colors"
-            >
-              <Save size={16} />
-              Save Changes
-            </button>
-          </div>
-        </div>
-      ) : (
-        // View Mode
-        <div className="flex items-center gap-3">
-          {/* Drag Handle */}
-          <div className="text-textMuted hover:text-textSecondary cursor-grab active:cursor-grabbing">
-            <GripVertical size={18} />
-          </div>
-
-          {/* Visibility Toggle */}
-          <button
-            onClick={() => toggleColumn(column.id)}
-            className={`p-2 rounded transition-colors ${
-              column.enabled
-                ? 'text-success hover:text-success/80'
-                : 'text-textMuted hover:text-textPrimary'
-            }`}
-            title={column.enabled ? 'Hide column' : 'Show column'}
-          >
-            {column.enabled ? <Eye size={20} /> : <EyeOff size={20} />}
-          </button>
-
-          {/* Column Info */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1 flex-wrap">
-              <h3 className="font-bold">{column.label}</h3>
-              <span className="text-xs px-2 py-0.5 bg-warning/20 text-warning rounded">
-                {CATEGORY_LABELS[column.category || 'overall']}
-              </span>
-              <span className="text-xs px-2 py-0.5 bg-surfaceElevated rounded text-textSecondary">
-                {column.aggregation}
-              </span>
-              <span className="text-xs px-2 py-0.5 bg-surfaceElevated rounded text-textSecondary">
-                {column.format}
-              </span>
-            </div>
-          </div>
-
-          {/* Edit Button */}
-          <button
-            onClick={() => handleEditColumn(column)}
-            className="p-2 text-textMuted hover:text-textPrimary rounded transition-colors"
-            title="Edit column"
-          >
-            <SettingsIcon size={18} />
-          </button>
-
-          {/* Delete Button (only for custom columns) */}
-          {!isDefaultColumn(column.id) && (
-            <button
-              onClick={() => deleteColumn(column.id)}
-              className="p-2 text-textMuted hover:text-danger rounded transition-colors"
-              title="Delete custom column"
-            >
-              <Trash2 size={18} />
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  );
+  // Filter disabled columns for the add picker
+  const filteredDisabledColumns = addFilterCategory === 'all'
+    ? disabledColumns
+    : disabledColumns.filter(c => c.category === addFilterCategory);
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold">Metrics Configuration</h1>
-          <p className="text-textSecondary mt-2">
-            Customize which columns appear in the Teams view
-          </p>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate(-1)}
+            className="p-2 text-textSecondary hover:text-textPrimary hover:bg-interactive rounded-lg transition-colors"
+            title="Go back"
+          >
+            <ArrowLeft size={24} />
+          </button>
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold">Customize Metrics</h1>
+            <p className="text-textSecondary text-sm mt-1">
+              {enabledColumns.length} active metrics
+            </p>
+          </div>
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => setShowAddForm(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-success text-background font-semibold rounded-lg hover:bg-success/90 transition-colors"
+            onClick={() => setShowResetConfirm(true)}
+            className="flex items-center gap-2 px-3 py-2 bg-surface hover:bg-interactive rounded-lg transition-colors border border-border text-sm"
           >
-            <Plus size={20} />
-            Add Column
-          </button>
-          <button
-            onClick={resetToDefaults}
-            className="flex items-center gap-2 px-4 py-2 bg-surface hover:bg-interactive rounded-lg transition-colors border border-border"
-          >
-            <RefreshCw size={20} />
-            Reset to Defaults
+            <RefreshCw size={16} />
+            Reset
           </button>
         </div>
       </div>
 
-      {/* Add Column Form */}
-      {showAddForm && (
-        <div className="bg-surface p-6 rounded-lg border-2 border-success">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold">Add New Column</h2>
-            <button
-              onClick={() => setShowAddForm(false)}
-              className="p-2 text-textMuted hover:text-textPrimary rounded transition-colors"
-            >
-              <X size={20} />
-            </button>
+      {/* Active Metrics List */}
+      <div className="bg-surface rounded-lg border border-border overflow-hidden">
+        <div className="p-4 border-b border-border flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-bold">Active Metrics</h2>
+            <p className="text-xs text-textSecondary mt-0.5">Drag to reorder. This order is used in Teams table and Comparison view.</p>
           </div>
+          <button
+            onClick={() => setShowAddPicker(true)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-success text-background font-semibold rounded-lg hover:bg-success/90 transition-colors text-sm"
+          >
+            <Plus size={16} />
+            Add Metric
+          </button>
+        </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
-            <div>
-              <label className="block text-sm text-textSecondary mb-2">
-                Data Field *
-              </label>
-              <select
-                value={newColumn.baseField}
-                onChange={e => updateNewColumnLabel(e.target.value, newColumn.aggregation)}
-                className="w-full px-3 py-2 bg-background border border-border rounded-lg"
-              >
-                <option value="">Select a field...</option>
-                <optgroup label="Overall">
-                  {AVAILABLE_FIELDS.filter(f => f.category === 'overall').map(f => (
-                    <option key={f.field} value={f.field}>{f.label}</option>
-                  ))}
-                </optgroup>
-                <optgroup label="Autonomous">
-                  {AVAILABLE_FIELDS.filter(f => f.category === 'auto').map(f => (
-                    <option key={f.field} value={f.field}>{f.label}</option>
-                  ))}
-                </optgroup>
-                <optgroup label="Teleop">
-                  {AVAILABLE_FIELDS.filter(f => f.category === 'teleop').map(f => (
-                    <option key={f.field} value={f.field}>{f.label}</option>
-                  ))}
-                </optgroup>
-                <optgroup label="Endgame">
-                  {AVAILABLE_FIELDS.filter(f => f.category === 'endgame').map(f => (
-                    <option key={f.field} value={f.field}>{f.label}</option>
-                  ))}
-                </optgroup>
-                <optgroup label="Defense">
-                  {AVAILABLE_FIELDS.filter(f => f.category === 'defense').map(f => (
-                    <option key={f.field} value={f.field}>{f.label}</option>
-                  ))}
-                </optgroup>
-                <optgroup label="Performance">
-                  {AVAILABLE_FIELDS.filter(f => f.category === 'performance').map(f => (
-                    <option key={f.field} value={f.field}>{f.label}</option>
-                  ))}
-                </optgroup>
-                <optgroup label="Reliability">
-                  {AVAILABLE_FIELDS.filter(f => f.category === 'reliability').map(f => (
-                    <option key={f.field} value={f.field}>{f.label}</option>
-                  ))}
-                </optgroup>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm text-textSecondary mb-2">
-                Measurement Type *
-              </label>
-              <select
-                value={newColumn.aggregation}
-                onChange={e => updateNewColumnLabel(newColumn.baseField, e.target.value as MetricAggregation)}
-                className="w-full px-3 py-2 bg-background border border-border rounded-lg"
-              >
-                <option value="avg">Average</option>
-                <option value="max">Maximum</option>
-                <option value="min">Minimum</option>
-                <option value="rate">Rate (%)</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm text-textSecondary mb-2">
-                Display Label *
-              </label>
-              <input
-                type="text"
-                value={newColumn.label}
-                onChange={e => setNewColumn({ ...newColumn, label: e.target.value })}
-                placeholder="e.g., Max Points"
-                className="w-full px-3 py-2 bg-background border border-border rounded-lg"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm text-textSecondary mb-2">
-                Format
-              </label>
-              <select
-                value={newColumn.format}
-                onChange={e => setNewColumn({ ...newColumn, format: e.target.value as 'number' | 'percentage' | 'time' })}
-                className="w-full px-3 py-2 bg-background border border-border rounded-lg"
-              >
-                <option value="number">Number</option>
-                <option value="percentage">Percentage</option>
-                <option value="time">Time (seconds)</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm text-textSecondary mb-2">
-                Decimal Places
-              </label>
-              <input
-                type="number"
-                min="0"
-                max="3"
-                value={newColumn.decimals}
-                onChange={e => setNewColumn({ ...newColumn, decimals: parseInt(e.target.value) })}
-                className="w-full px-3 py-2 bg-background border border-border rounded-lg"
-              />
-            </div>
+        {enabledColumns.length === 0 ? (
+          <div className="p-8 text-center text-textMuted">
+            No metrics enabled. Click "Add Metric" to get started.
           </div>
+        ) : (
+          <div>
+            {(Object.keys(CATEGORY_LABELS) as MetricCategory[]).map(category => {
+              const cols = enabledByCategory[category];
+              if (!cols || cols.length === 0) return null;
 
-          <div className="flex justify-end gap-2">
-            <button
-              onClick={() => setShowAddForm(false)}
-              className="px-4 py-2 bg-surface hover:bg-interactive rounded-lg transition-colors border border-border"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleAddColumn}
-              disabled={!newColumn.baseField || !newColumn.label}
-              className="flex items-center gap-2 px-4 py-2 bg-success text-background font-semibold rounded-lg hover:bg-success/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Plus size={16} />
-              Add Column
-            </button>
+              return (
+                <div key={category}>
+                  <div className="px-4 py-2 bg-surfaceElevated border-b border-border/50">
+                    <span className="text-xs font-bold uppercase tracking-wide text-textSecondary">
+                      {CATEGORY_LABELS[category]}
+                    </span>
+                  </div>
+                  {cols.map(column => (
+                    <div
+                      key={column.id}
+                      draggable={editingColumn !== column.id}
+                      onDragStart={() => handleDragStart(column.id)}
+                      onDragEnter={() => handleDragEnter(column.id)}
+                      onDragEnd={handleDragEnd}
+                      onDragOver={(e) => e.preventDefault()}
+                      className={`flex items-center gap-3 px-4 py-3 border-b border-border/30 hover:bg-interactive/50 transition-all ${
+                        isDragging && dragItem.current === column.id ? 'opacity-50' : ''
+                      } ${editingColumn !== column.id ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                    >
+                      {editingColumn === column.id ? (
+                        // Edit Mode
+                        <div className="flex-1 space-y-3 py-1">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div>
+                              <label className="block text-xs text-textSecondary mb-1">Label</label>
+                              <input
+                                type="text"
+                                value={editForm.label || ''}
+                                onChange={e => setEditForm({ ...editForm, label: e.target.value })}
+                                className="w-full px-3 py-1.5 bg-background border border-border rounded-lg text-sm"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-textSecondary mb-1">Format</label>
+                              <select
+                                value={editForm.format || 'number'}
+                                onChange={e => setEditForm({ ...editForm, format: e.target.value as 'number' | 'percentage' | 'time' })}
+                                className="w-full px-3 py-1.5 bg-background border border-border rounded-lg text-sm"
+                              >
+                                <option value="number">Number</option>
+                                <option value="percentage">Percentage</option>
+                                <option value="time">Time (seconds)</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-xs text-textSecondary mb-1">Decimals</label>
+                              <input
+                                type="number"
+                                min="0"
+                                max="3"
+                                value={editForm.decimals ?? 1}
+                                onChange={e => setEditForm({ ...editForm, decimals: parseInt(e.target.value) })}
+                                className="w-full px-3 py-1.5 bg-background border border-border rounded-lg text-sm"
+                              />
+                            </div>
+                          </div>
+                          <div className="flex gap-2 justify-end">
+                            <button
+                              onClick={() => { setEditingColumn(null); setEditForm({}); }}
+                              className="px-3 py-1.5 text-sm bg-surface hover:bg-interactive rounded-lg border border-border"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={handleSaveEdit}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-success text-background font-semibold rounded-lg hover:bg-success/90"
+                            >
+                              <Save size={14} />
+                              Save
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        // View Mode
+                        <>
+                          <div className="text-textMuted hover:text-textSecondary">
+                            <GripVertical size={16} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <span className="font-semibold text-sm">{column.label}</span>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-xs text-textMuted">{column.aggregation} &middot; {column.format}</span>
+                              {!isDefaultColumn(column.id) && (
+                                <span className="text-xs px-1.5 py-0.5 bg-blueAlliance/20 text-blueAlliance rounded">custom</span>
+                              )}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => handleEditColumn(column)}
+                            className="p-1.5 text-textMuted hover:text-textPrimary rounded transition-colors"
+                            title="Edit"
+                          >
+                            <SettingsIcon size={16} />
+                          </button>
+                          <button
+                            onClick={() => handleRemoveColumn(column)}
+                            className="p-1.5 text-textMuted hover:text-danger rounded transition-colors"
+                            title="Remove"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Add Metric Picker Modal */}
+      {showAddPicker && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={() => setShowAddPicker(false)}>
+          <div className="bg-surface rounded-lg border border-border w-full max-w-lg max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
+              <h3 className="font-bold text-lg">Add Metric</h3>
+              <button onClick={() => setShowAddPicker(false)} className="p-1.5 hover:bg-interactive rounded transition-colors">
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Category filter tabs */}
+            <div className="px-4 pt-3 pb-2 flex flex-wrap gap-1.5 border-b border-border flex-shrink-0">
+              <button
+                onClick={() => setAddFilterCategory('all')}
+                className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors ${
+                  addFilterCategory === 'all' ? 'bg-success text-background' : 'bg-card hover:bg-interactive text-textSecondary'
+                }`}
+              >
+                All
+              </button>
+              {(Object.keys(CATEGORY_LABELS) as MetricCategory[]).map(cat => (
+                <button
+                  key={cat}
+                  onClick={() => setAddFilterCategory(cat)}
+                  className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors ${
+                    addFilterCategory === cat ? 'bg-success text-background' : 'bg-card hover:bg-interactive text-textSecondary'
+                  }`}
+                >
+                  {CATEGORY_LABELS[cat]}
+                </button>
+              ))}
+            </div>
+
+            {/* Available metrics to add */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-1.5 min-h-0">
+              {filteredDisabledColumns.length === 0 && !showAddCustom ? (
+                <p className="text-center text-textMuted py-4 text-sm">
+                  All metrics in this category are already active.
+                </p>
+              ) : (
+                filteredDisabledColumns.map(col => (
+                  <button
+                    key={col.id}
+                    onClick={() => handleEnableColumn(col.id)}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded bg-card hover:bg-interactive transition-colors text-left"
+                  >
+                    <Plus size={16} className="text-success flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-semibold">{col.label}</span>
+                      <span className="text-xs text-textMuted ml-2">{CATEGORY_LABELS[col.category || 'overall']}</span>
+                    </div>
+                  </button>
+                ))
+              )}
+
+              {/* Custom column builder */}
+              {showAddCustom ? (
+                <div className="mt-3 p-4 rounded-lg border-2 border-success bg-success/5">
+                  <h4 className="font-bold text-sm mb-3">New Custom Metric</h4>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs text-textSecondary mb-1">Data Field *</label>
+                      <select
+                        value={newColumn.baseField}
+                        onChange={e => updateNewColumnLabel(e.target.value, newColumn.aggregation)}
+                        className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm"
+                      >
+                        <option value="">Select a field...</option>
+                        {(Object.keys(CATEGORY_LABELS) as MetricCategory[]).map(cat => (
+                          <optgroup key={cat} label={CATEGORY_LABELS[cat]}>
+                            {AVAILABLE_FIELDS.filter(f => f.category === cat).map(f => (
+                              <option key={f.field} value={f.field}>{f.label}</option>
+                            ))}
+                          </optgroup>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-textSecondary mb-1">Type</label>
+                        <select
+                          value={newColumn.aggregation}
+                          onChange={e => updateNewColumnLabel(newColumn.baseField, e.target.value as MetricAggregation)}
+                          className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm"
+                        >
+                          <option value="avg">Average</option>
+                          <option value="max">Maximum</option>
+                          <option value="min">Minimum</option>
+                          <option value="rate">Rate (%)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-textSecondary mb-1">Label *</label>
+                        <input
+                          type="text"
+                          value={newColumn.label}
+                          onChange={e => setNewColumn({ ...newColumn, label: e.target.value })}
+                          placeholder="e.g., Max Points"
+                          className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-textSecondary mb-1">Format</label>
+                        <select
+                          value={newColumn.format}
+                          onChange={e => setNewColumn({ ...newColumn, format: e.target.value as 'number' | 'percentage' | 'time' })}
+                          className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm"
+                        >
+                          <option value="number">Number</option>
+                          <option value="percentage">Percentage</option>
+                          <option value="time">Time (seconds)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-textSecondary mb-1">Decimals</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="3"
+                          value={newColumn.decimals}
+                          onChange={e => setNewColumn({ ...newColumn, decimals: parseInt(e.target.value) })}
+                          className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-2 justify-end">
+                      <button
+                        onClick={() => setShowAddCustom(false)}
+                        className="px-3 py-1.5 text-sm bg-surface hover:bg-interactive rounded-lg border border-border"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleAddColumn}
+                        disabled={!newColumn.baseField || !newColumn.label}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-success text-background font-semibold rounded-lg hover:bg-success/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Plus size={14} />
+                        Add
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowAddCustom(true)}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded border border-dashed border-border hover:border-success hover:bg-success/5 transition-colors text-left mt-2"
+                >
+                  <Plus size={16} className="text-textMuted" />
+                  <span className="text-sm text-textSecondary">Create custom metric...</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
 
-      {/* Summary */}
-      <div className="bg-surface p-6 rounded-lg border border-border">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-bold mb-2">Active Configuration</h2>
-            <p className="text-textSecondary">
-              {enabledCount} of {config.columns.length} metrics enabled
+      {/* Reset Confirmation */}
+      {showResetConfirm && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={() => setShowResetConfirm(false)}>
+          <div className="bg-surface rounded-lg border border-border p-6 max-w-sm w-full" onClick={e => e.stopPropagation()}>
+            <h3 className="font-bold text-lg mb-2">Reset to Defaults?</h3>
+            <p className="text-textSecondary text-sm mb-6">
+              This will remove all custom metrics and restore the default configuration.
             </p>
-          </div>
-          <div className="text-sm text-textMuted">
-            Last updated: {new Date(config.lastUpdated).toLocaleString()}
-          </div>
-        </div>
-      </div>
-
-      {/* All Metrics */}
-      <div className="bg-surface rounded-lg border border-border overflow-hidden">
-        <div className="p-4 border-b border-border">
-          <h2 className="text-lg font-bold">All Metrics</h2>
-          <p className="text-sm text-textSecondary mt-1">Drag to reorder. Order here = column order on Teams page.</p>
-        </div>
-        <div>
-          {config.columns.map((col) => renderColumn(col))}
-        </div>
-      </div>
-
-      {/* Help Section */}
-      <div className="bg-surface p-6 rounded-lg border border-border">
-        <h2 className="text-lg font-bold mb-4">How It Works</h2>
-        <div className="grid md:grid-cols-3 gap-6 text-sm text-textSecondary">
-          <div>
-            <p className="text-textPrimary font-semibold mb-2">Controls</p>
-            <ul className="space-y-1">
-              <li><GripVertical size={14} className="inline mr-1" /> Drag to reorder</li>
-              <li><Eye size={14} className="inline mr-1" /> Toggle visibility</li>
-              <li><SettingsIcon size={14} className="inline mr-1" /> Edit settings</li>
-            </ul>
-          </div>
-          <div>
-            <p className="text-textPrimary font-semibold mb-2">Measurements</p>
-            <ul className="space-y-1">
-              <li><strong>avg</strong> - Mean across all matches</li>
-              <li><strong>max</strong> - Best single-match value</li>
-              <li><strong>min</strong> - Worst or fastest</li>
-              <li><strong>rate</strong> - Percentage of matches</li>
-            </ul>
-          </div>
-          <div>
-            <p className="text-textPrimary font-semibold mb-2">Formats</p>
-            <ul className="space-y-1">
-              <li><strong>Number</strong> - Decimal number</li>
-              <li><strong>Percentage</strong> - With % symbol</li>
-              <li><strong>Time</strong> - Seconds with 's'</li>
-            </ul>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowResetConfirm(false)}
+                className="flex-1 px-4 py-2.5 bg-card border border-border rounded-lg hover:bg-interactive transition-colors font-semibold text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { resetToDefaults(); setShowResetConfirm(false); }}
+                className="flex-1 px-4 py-2.5 bg-danger text-white rounded-lg hover:bg-danger/90 transition-colors font-semibold text-sm"
+              >
+                Reset
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

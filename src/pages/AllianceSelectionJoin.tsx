@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { Loader2, LogIn, Handshake } from 'lucide-react';
+import { Loader2, LogIn, Handshake, Clock } from 'lucide-react';
 import { useFirebaseAuth } from '../hooks/useFirebaseAuth';
 import { useAllianceSession } from '../hooks/useAllianceSession';
 import { useAllianceSelectionStore } from '../store/useAllianceSelectionStore';
@@ -37,6 +37,7 @@ function AllianceSelectionJoin() {
     markTeamDeclined,
     undoTeamStatus,
     setSessionStatus,
+    acceptParticipant,
     promoteToEditor,
     demoteToViewer,
     transferHost,
@@ -51,6 +52,16 @@ function AllianceSelectionJoin() {
       signIn();
     }
   }, [user, authLoading, signIn]);
+
+  // If session ended or user was removed, go back to join prompt
+  useEffect(() => {
+    if (!session || !user) return;
+    if (!session.participants[user.uid] || session.status === 'completed') {
+      leaveSession();
+      setActiveSessionId(null);
+      setNeedsJoinPrompt(true);
+    }
+  }, [session, user, leaveSession, setActiveSessionId]);
 
   // Determine join state once authed
   useEffect(() => {
@@ -72,7 +83,7 @@ function AllianceSelectionJoin() {
 
     setNeedsJoinPrompt(false);
 
-    const result = await joinSession(sessionCode, joinName.trim(), teamNum && !isNaN(teamNum) ? teamNum : undefined);
+    const result = await joinSession(sessionCode, joinName.trim(), teamNum && !isNaN(teamNum) ? teamNum : undefined, 'pending');
     if (result) {
       setLastSessionCode(sessionCode);
       setActiveSessionId(result.sessionId);
@@ -188,6 +199,30 @@ function AllianceSelectionJoin() {
     );
   }
 
+  // Pending approval — waiting for host to accept
+  if (myRole === 'pending') {
+    return (
+      <div className="min-h-screen bg-background text-textPrimary">
+        {guestHeader}
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="bg-surface p-6 rounded-lg border border-border w-full max-w-md mx-4 text-center">
+            <Clock size={40} className="mx-auto mb-4 text-warning animate-pulse" />
+            <h2 className="text-xl font-bold mb-2">Waiting for Approval</h2>
+            <p className="text-textSecondary text-sm mb-6">
+              The host needs to accept you before you can join the session. Please wait...
+            </p>
+            <button
+              onClick={handleLeave}
+              className="px-4 py-2 bg-card border border-border rounded-lg hover:bg-interactive transition-colors text-textPrimary font-semibold text-sm"
+            >
+              Leave Session
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Active session — show the board
   return (
     <div className="min-h-screen bg-background text-textPrimary">
@@ -202,8 +237,9 @@ function AllianceSelectionJoin() {
           onMarkPicked={markTeamPicked}
           onMarkDeclined={markTeamDeclined}
           onUndoStatus={undoTeamStatus}
-          onSetStatus={setSessionStatus}
+          onSetStatus={async (status) => { await setSessionStatus(status); }}
           onLeave={handleLeave}
+          onAcceptParticipant={acceptParticipant}
           onPromote={promoteToEditor}
           onDemote={demoteToViewer}
           onTransferHost={transferHost}

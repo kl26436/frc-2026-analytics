@@ -176,7 +176,7 @@ function TeamComparison() {
             Comparing {selectedTeamStats.length} team{selectedTeamStats.length !== 1 ? 's' : ''} • {enabledColumns.length} metrics
           </p>
           <Link
-            to="/settings/metrics"
+            to="/metrics"
             className="flex items-center gap-2 px-3 py-1.5 text-sm bg-surface border border-border rounded-lg hover:bg-interactive transition-colors"
           >
             <Sliders size={16} />
@@ -264,7 +264,7 @@ function TeamComparison() {
               <tbody>
                 <tr>
                   <td colSpan={selectedTeamStats.length + 1} className="px-4 py-8 text-center text-textSecondary">
-                    No metrics enabled. <Link to="/settings/metrics" className="text-success hover:underline">Click here</Link> to customize which metrics to display.
+                    No metrics enabled. <Link to="/metrics" className="text-success hover:underline">Click here</Link> to customize which metrics to display.
                   </td>
                 </tr>
               </tbody>

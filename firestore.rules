@@ -1,7 +1,35 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Alliance Selection sessions
+
+    // ── Access Config & Requests ──
+    match /config/{docId} {
+      // Anyone authenticated can read (needed to check allowlist on login)
+      allow read: if request.auth != null;
+
+      // accessRequests doc: any authenticated user can write
+      // (so non-allowlisted users can submit a request, admins can approve/deny)
+      allow write: if request.auth != null
+                   && docId == 'accessRequests';
+
+      // liveSession doc: admins can create/update/delete (broadcast live alliance sessions)
+      allow write: if request.auth != null
+                   && docId == 'liveSession'
+                   && request.auth.token.email in
+                      get(/databases/$(database)/documents/config/access).data.adminEmails;
+
+      // access doc: bootstrap — first user can create if it doesn't exist yet
+      allow create: if request.auth != null
+                    && docId == 'access'
+                    && !exists(/databases/$(database)/documents/config/access);
+
+      // access doc: only admins can update or delete
+      allow update, delete: if request.auth != null
+                            && docId == 'access'
+                            && request.auth.token.email in resource.data.adminEmails;
+    }
+
+    // ── Alliance Selection Sessions ──
     match /sessions/{sessionId} {
       // Any authenticated user can read (they need the sessionId/code to access)
       allow read: if request.auth != null;
@@ -11,7 +39,7 @@ service cloud.firestore {
                     && request.resource.data.createdBy == request.auth.uid;
 
       // Any authenticated user can update (joining adds them to participants,
-      // editors/admin make game-state changes — all require write access)
+      // editors/host make game-state changes — all require write access)
       allow update: if request.auth != null;
 
       // Only creator can delete
@@ -19,7 +47,7 @@ service cloud.firestore {
                     && resource.data.createdBy == request.auth.uid;
     }
 
-    // Pit Scouting entries
+    // ── Pit Scouting ──
     match /pitScouting/{entryId} {
       // Any authenticated user can read/write pit scouting data
       allow read, write: if request.auth != null;
