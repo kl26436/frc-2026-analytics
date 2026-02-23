@@ -18,6 +18,26 @@ service cloud.firestore {
                    && request.auth.token.email in
                       get(/databases/$(database)/documents/config/access).data.adminEmails;
 
+      // eventConfig doc: admins only (broadcast active event + home team to all users)
+      allow write: if request.auth != null
+                   && docId == 'eventConfig'
+                   && request.auth.token.email in
+                      get(/databases/$(database)/documents/config/access).data.adminEmails;
+
+      // syncMeta doc: admins only (written by sync script / Cloud Function)
+      allow write: if request.auth != null
+                   && docId == 'syncMeta'
+                   && request.auth.token.email in
+                      get(/databases/$(database)/documents/config/access).data.adminEmails;
+
+      // userProfiles doc: any allowed user can write (sign-in upsert) or admin can write (manual name edit)
+      allow write: if request.auth != null
+                   && docId == 'userProfiles'
+                   && (request.auth.token.email in
+                         get(/databases/$(database)/documents/config/access).data.allowedEmails
+                       || request.auth.token.email in
+                         get(/databases/$(database)/documents/config/access).data.adminEmails);
+
       // access doc: bootstrap — first user can create if it doesn't exist yet
       allow create: if request.auth != null
                     && docId == 'access'
@@ -52,5 +72,54 @@ service cloud.firestore {
       // Any authenticated user can read/write pit scouting data
       allow read, write: if request.auth != null;
     }
+
+    // ── Live Pick List ──
+    match /pick-lists/{eventKey} {
+      allow read: if request.auth != null && (
+        request.auth.token.email in get(/databases/$(database)/documents/config/access).data.allowedEmails ||
+        request.auth.token.email in get(/databases/$(database)/documents/config/access).data.adminEmails
+      );
+      allow write: if request.auth != null &&
+        request.auth.token.email in get(/databases/$(database)/documents/config/access).data.adminEmails;
+    }
+
+    match /pick-lists/{eventKey}/comments/{commentId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
+    }
+
+    match /pick-lists/{eventKey}/suggestions/{suggestionId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow update: if request.auth != null; // voting + admin accept/dismiss
+    }
+
+    // ── Synced Scouting Data (Postgres → Firestore) ──
+    match /scoutData/{eventKey}/entries/{entryId} {
+      allow read: if request.auth != null;
+      // Writes come from Cloud Functions (Admin SDK bypasses rules) or admin users
+      allow write: if request.auth != null
+                   && request.auth.token.email in
+                      get(/databases/$(database)/documents/config/access).data.adminEmails;
+    }
+
+    // ── Synced TBA Data (Postgres → Firestore) ──
+    match /tbaData/{eventKey}/matches/{matchId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+                   && request.auth.token.email in
+                      get(/databases/$(database)/documents/config/access).data.adminEmails;
+    }
+
+    match /tbaData/{eventKey}/rankings/{teamId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+                   && request.auth.token.email in
+                      get(/databases/$(database)/documents/config/access).data.adminEmails;
+    }
+
+    // ── Sync Metadata ──
+    // (Handled by existing /config/{docId} rules — syncMeta is a config doc)
   }
 }

@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { Flag, Undo2, Ban, ChevronDown } from 'lucide-react';
 import type { SelectionTeam } from '../../types/allianceSelection';
-import type { TeamStatistics } from '../../types/scouting';
+import type { RealTeamStatistics } from '../../types/scoutingReal';
 import type { Alliance } from '../../types/allianceSelection';
 import PickAlliancePopover from './PickAlliancePopover';
 
 interface SelectionTeamCardProps {
   team: SelectionTeam;
-  teamStats: TeamStatistics | undefined;
+  teamStats: RealTeamStatistics | undefined;
   isEditor: boolean;
   isSelectedForCompare: boolean;
   alliances: Alliance[];

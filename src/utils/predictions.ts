@@ -1,6 +1,26 @@
-import type { TeamStatistics } from '../types/scouting';
-
 // ─── Interfaces ───────────────────────────────────────────────
+
+/**
+ * Common subset of TeamStatistics / RealTeamStatistics that predictions need.
+ * Both stat types provide these fields with the same names and 0-100 rate convention.
+ */
+interface PredictableStats {
+  teamNumber: number;
+  teamName?: string;
+  matchesPlayed: number;
+  avgAutoPoints: number;
+  avgTeleopPoints: number;
+  avgEndgamePoints: number;
+  avgTotalPoints: number;
+  level1ClimbRate: number;
+  level2ClimbRate: number;
+  level3ClimbRate: number;
+  // Reliability — we use whatever rate fields are available
+  lostConnectionRate?: number;
+  noRobotRate?: number;
+  diedRate?: number;
+  noShowRate?: number;
+}
 
 export interface TeamBreakdown {
   teamNumber: number;
@@ -43,12 +63,16 @@ export interface MatchupResult {
 
 // ─── Prediction Logic ─────────────────────────────────────────
 
-export function predictAlliance(teamNumbers: number[], stats: TeamStatistics[]): AlliancePrediction {
+export function predictAlliance(teamNumbers: number[], stats: PredictableStats[]): AlliancePrediction {
   const teams: TeamBreakdown[] = teamNumbers.map(num => {
     const s = stats.find(t => t.teamNumber === num);
     if (!s) return { teamNumber: num, autoPoints: 0, teleopPoints: 0, endgamePoints: 0, totalPoints: 0, reliability: 0.5, matchesPlayed: 0, climbRate: 0 };
 
-    const reliability = 1 - Math.min((s.diedRate + s.noShowRate) / 100, 0.5);
+    // Use whichever reliability fields exist (real stats have lostConnectionRate/noRobotRate, mock has diedRate/noShowRate)
+    const unreliabilityPct =
+      ((s.lostConnectionRate ?? s.diedRate ?? 0) + (s.noRobotRate ?? s.noShowRate ?? 0));
+    const reliability = 1 - Math.min(unreliabilityPct / 100, 0.5);
+
     return {
       teamNumber: num,
       teamName: s.teamName,
@@ -58,7 +82,7 @@ export function predictAlliance(teamNumbers: number[], stats: TeamStatistics[]):
       totalPoints: s.avgTotalPoints * reliability,
       reliability,
       matchesPlayed: s.matchesPlayed,
-      climbRate: s.climbAttemptRate * (s.level1ClimbRate + s.level2ClimbRate + s.level3ClimbRate) / 100,
+      climbRate: (s.level1ClimbRate + s.level2ClimbRate + s.level3ClimbRate),
     };
   });
 
@@ -96,7 +120,7 @@ export function predictRP(alliance: AlliancePrediction, opponent: AlliancePredic
   return { winProbability: winProb, expectedWinRP, climbBonusProb, scoringBonusProb, expectedTotalRP };
 }
 
-export function computeMatchup(redTeams: number[], blueTeams: number[], stats: TeamStatistics[]): MatchupResult {
+export function computeMatchup(redTeams: number[], blueTeams: number[], stats: PredictableStats[]): MatchupResult {
   const red = predictAlliance(redTeams, stats);
   const blue = predictAlliance(blueTeams, stats);
   const scoreDiff = Math.abs(red.totalScore - blue.totalScore);

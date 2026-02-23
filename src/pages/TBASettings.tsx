@@ -13,7 +13,6 @@ function TBASettings() {
   const eventCode = useAnalyticsStore(state => state.eventCode);
   const setEventCode = useAnalyticsStore(state => state.setEventCode);
   const clearTeamSelection = useAnalyticsStore(state => state.clearTeamSelection);
-  const loadMockData = useAnalyticsStore(state => state.loadMockData);
 
   const [apiKey, setApiKey] = useState(tbaApiKey);
   const [event, setEvent] = useState(eventCode);
@@ -75,12 +74,9 @@ function TBASettings() {
     // Clear team selections
     clearTeamSelection();
 
-    // Reload mock data (this will clear any TBA data)
-    loadMockData();
-
     setStatus({
       type: 'success',
-      message: `Event reset successfully! Pick list cleared and mock data reloaded for event: ${event}`,
+      message: `Event reset successfully! Pick list cleared for event: ${event}`,
     });
   };
 

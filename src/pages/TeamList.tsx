@@ -1,9 +1,8 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
-import { usePickListStore } from '../store/usePickListStore';
 import { useMetricsStore } from '../store/useMetricsStore';
-import { ArrowUp, ArrowDown, Search, Plus, Sliders, LayoutGrid, Table2, X } from 'lucide-react';
+import { ArrowUp, ArrowDown, Search, Sliders, LayoutGrid, Table2, X } from 'lucide-react';
 import { teamKeyToNumber } from '../utils/tbaApi';
 import ComparisonModal from '../components/ComparisonModal';
 
@@ -12,16 +11,8 @@ type ViewMode = 'table' | 'cards';
 type SortCriteria = { field: string; direction: SortDirection };
 
 function TeamList() {
-  const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
+  const teamStatistics = useAnalyticsStore(state => state.realTeamStatistics);
   const tbaData = useAnalyticsStore(state => state.tbaData);
-  const addTeamToTier = usePickListStore(state => state.addTeamToTier);
-  const pickList = usePickListStore(state => state.pickList);
-
-  const tierNames = {
-    tier1: pickList?.config?.tier1Name || 'Steak',
-    tier2: pickList?.config?.tier2Name || 'Potatoes',
-    tier3: pickList?.config?.tier3Name || 'Chicken Nuggets',
-  };
   const getEnabledColumns = useMetricsStore(state => state.getEnabledColumns);
 
   const teamRankMap = useMemo(() => {
@@ -40,7 +31,6 @@ function TeamList() {
   const [sortCriteria, setSortCriteria] = useState<SortCriteria[]>([
     { field: 'avgTotalPoints', direction: 'desc' }
   ]);
-  const [showAddMenu, setShowAddMenu] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('table');
 
   // Click-to-compare state (max 2 teams)
@@ -309,9 +299,6 @@ function TeamList() {
                     <SortButton field={column.field} label={column.label} />
                   </th>
                 ))}
-                <th className="px-4 py-3 text-center text-textSecondary text-sm font-semibold">
-                  Actions
-                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -357,46 +344,6 @@ function TeamList() {
                         </td>
                       );
                     })}
-                    <td className="px-4 py-4 text-center relative" onClick={e => e.stopPropagation()}>
-                      <button
-                        onClick={() => setShowAddMenu(showAddMenu === team.teamNumber ? null : team.teamNumber)}
-                        className="p-2 text-textMuted hover:text-success rounded transition-colors"
-                        title="Add to Pick List"
-                      >
-                        <Plus size={20} />
-                      </button>
-                      {showAddMenu === team.teamNumber && (
-                        <div className="absolute right-0 mt-2 w-48 bg-surface border border-border rounded-lg shadow-lg z-10">
-                          <button
-                            onClick={() => {
-                              addTeamToTier(team.teamNumber, 'tier1');
-                              setShowAddMenu(null);
-                            }}
-                            className="w-full px-4 py-2 text-left hover:bg-interactive transition-colors"
-                          >
-                            Add to {tierNames.tier1}
-                          </button>
-                          <button
-                            onClick={() => {
-                              addTeamToTier(team.teamNumber, 'tier2');
-                              setShowAddMenu(null);
-                            }}
-                            className="w-full px-4 py-2 text-left hover:bg-interactive transition-colors"
-                          >
-                            Add to {tierNames.tier2}
-                          </button>
-                          <button
-                            onClick={() => {
-                              addTeamToTier(team.teamNumber, 'tier3');
-                              setShowAddMenu(null);
-                            }}
-                            className="w-full px-4 py-2 text-left hover:bg-interactive transition-colors"
-                          >
-                            Add to {tierNames.tier3}
-                          </button>
-                        </div>
-                      )}
-                    </td>
                   </tr>
                 );
               })}
@@ -461,48 +408,6 @@ function TeamList() {
                       </div>
                     );
                   })}
-                </div>
-
-                {/* Actions */}
-                <div className="relative" onClick={e => e.stopPropagation()}>
-                  <button
-                    onClick={() => setShowAddMenu(showAddMenu === team.teamNumber ? null : team.teamNumber)}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-surfaceElevated hover:bg-interactive rounded transition-colors text-sm"
-                  >
-                    <Plus size={16} />
-                    Add to Pick List
-                  </button>
-                  {showAddMenu === team.teamNumber && (
-                    <div className="absolute bottom-full mb-2 w-full bg-surface border border-border rounded-lg shadow-lg z-10">
-                      <button
-                        onClick={() => {
-                          addTeamToTier(team.teamNumber, 'tier1');
-                          setShowAddMenu(null);
-                        }}
-                        className="w-full px-4 py-2 text-left hover:bg-interactive transition-colors rounded-t-lg"
-                      >
-                        Add to {tierNames.tier1}
-                      </button>
-                      <button
-                        onClick={() => {
-                          addTeamToTier(team.teamNumber, 'tier2');
-                          setShowAddMenu(null);
-                        }}
-                        className="w-full px-4 py-2 text-left hover:bg-interactive transition-colors"
-                      >
-                        Add to {tierNames.tier2}
-                      </button>
-                      <button
-                        onClick={() => {
-                          addTeamToTier(team.teamNumber, 'tier3');
-                          setShowAddMenu(null);
-                        }}
-                        className="w-full px-4 py-2 text-left hover:bg-interactive transition-colors rounded-b-lg"
-                      >
-                        Add to {tierNames.tier3}
-                      </button>
-                    </div>
-                  )}
                 </div>
               </div>
             );

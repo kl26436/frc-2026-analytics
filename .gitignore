@@ -37,3 +37,8 @@ lerna-debug.log*
 
 # OS
 Thumbs.db
+
+# Firebase service account key (NEVER commit)
+serviceAccountKey.json
+scripts/serviceAccountKey.json
+*firebase-adminsdk*

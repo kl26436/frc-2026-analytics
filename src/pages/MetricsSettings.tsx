@@ -14,44 +14,49 @@ import { useNavigate } from 'react-router-dom';
 import type { MetricColumn, MetricCategory, MetricAggregation } from '../types/metrics';
 import { CATEGORY_LABELS, DEFAULT_METRICS } from '../types/metrics';
 
-// Available data fields that can be used for metrics
+// Available data fields from RealTeamStatistics for custom metric creation
 const AVAILABLE_FIELDS = [
+  // Overall
   { field: 'avgTotalPoints', label: 'Total Points', category: 'overall' as MetricCategory },
+  { field: 'maxTotalPoints', label: 'Max Total Points', category: 'overall' as MetricCategory },
   { field: 'avgAutoPoints', label: 'Auto Points', category: 'overall' as MetricCategory },
   { field: 'avgTeleopPoints', label: 'Teleop Points', category: 'overall' as MetricCategory },
   { field: 'avgEndgamePoints', label: 'Endgame Points', category: 'overall' as MetricCategory },
-  { field: 'avgAutoFuelScored', label: 'Auto FUEL Scored', category: 'auto' as MetricCategory },
-  { field: 'avgAutoFuelMissed', label: 'Auto FUEL Missed', category: 'auto' as MetricCategory },
-  { field: 'autoAccuracy', label: 'Auto Accuracy', category: 'auto' as MetricCategory },
-  { field: 'autoMobilityRate', label: 'Auto Mobility Rate', category: 'auto' as MetricCategory },
+  // Fuel
+  { field: 'avgTotalFuelEstimate', label: 'Total Fuel Estimate', category: 'fuel' as MetricCategory },
+  { field: 'avgAutoFuelEstimate', label: 'Auto Fuel Estimate', category: 'fuel' as MetricCategory },
+  { field: 'avgTeleopFuelEstimate', label: 'Teleop Fuel Estimate', category: 'fuel' as MetricCategory },
+  { field: 'maxTotalFuelEstimate', label: 'Max Total Fuel', category: 'fuel' as MetricCategory },
+  { field: 'avgAutoFuelScore', label: 'Auto Raw FUEL_SCORE', category: 'fuel' as MetricCategory },
+  { field: 'avgTeleopFuelScore', label: 'Teleop Raw FUEL_SCORE', category: 'fuel' as MetricCategory },
+  { field: 'avgTotalPass', label: 'Total Passes', category: 'fuel' as MetricCategory },
+  { field: 'passerRatio', label: 'Passer Ratio', category: 'fuel' as MetricCategory },
+  { field: 'avgAutoPlus1', label: 'Auto +1 Buckets', category: 'fuel' as MetricCategory },
+  { field: 'avgAutoPlus2', label: 'Auto +2 Buckets', category: 'fuel' as MetricCategory },
+  { field: 'avgAutoPlus3', label: 'Auto +3 Buckets', category: 'fuel' as MetricCategory },
+  { field: 'avgAutoPlus5', label: 'Auto +5 Buckets', category: 'fuel' as MetricCategory },
+  { field: 'avgAutoPlus10', label: 'Auto +10 Buckets', category: 'fuel' as MetricCategory },
+  { field: 'avgTeleopPlus1', label: 'Teleop +1 Buckets', category: 'fuel' as MetricCategory },
+  { field: 'avgTeleopPlus2', label: 'Teleop +2 Buckets', category: 'fuel' as MetricCategory },
+  { field: 'avgTeleopPlus3', label: 'Teleop +3 Buckets', category: 'fuel' as MetricCategory },
+  { field: 'avgTeleopPlus5', label: 'Teleop +5 Buckets', category: 'fuel' as MetricCategory },
+  { field: 'avgTeleopPlus10', label: 'Teleop +10 Buckets', category: 'fuel' as MetricCategory },
+  // Auto
   { field: 'autoClimbRate', label: 'Auto Climb Rate', category: 'auto' as MetricCategory },
-  { field: 'autoClimbSuccessRate', label: 'Auto Climb Success Rate', category: 'auto' as MetricCategory },
-  { field: 'avgTeleopFuelScored', label: 'Teleop FUEL Scored', category: 'teleop' as MetricCategory },
-  { field: 'avgTeleopFuelMissed', label: 'Teleop FUEL Missed', category: 'teleop' as MetricCategory },
-  { field: 'teleopAccuracy', label: 'Teleop Accuracy', category: 'teleop' as MetricCategory },
-  { field: 'avgCycleCount', label: 'Cycle Count', category: 'teleop' as MetricCategory },
-  { field: 'avgActiveHubScores', label: 'Active Hub Scores', category: 'teleop' as MetricCategory },
-  { field: 'avgInactiveHubScores', label: 'Inactive Hub Scores', category: 'teleop' as MetricCategory },
-  { field: 'climbAttemptRate', label: 'Climb Attempt Rate', category: 'endgame' as MetricCategory },
-  { field: 'level1ClimbRate', label: 'Level 1 Climb Rate', category: 'endgame' as MetricCategory },
-  { field: 'level2ClimbRate', label: 'Level 2 Climb Rate', category: 'endgame' as MetricCategory },
-  { field: 'level3ClimbRate', label: 'Level 3 Climb Rate', category: 'endgame' as MetricCategory },
-  { field: 'avgClimbTime', label: 'Climb Time', category: 'endgame' as MetricCategory },
-  { field: 'avgEndgameFuelScored', label: 'Endgame FUEL Scored', category: 'endgame' as MetricCategory },
-  { field: 'defensePlayedRate', label: 'Defense Played Rate', category: 'defense' as MetricCategory },
-  { field: 'avgDefenseEffectiveness', label: 'Defense Effectiveness', category: 'defense' as MetricCategory },
-  { field: 'wasDefendedRate', label: 'Was Defended Rate', category: 'defense' as MetricCategory },
-  { field: 'avgDefenseEvasion', label: 'Defense Evasion', category: 'defense' as MetricCategory },
-  { field: 'avgDriverSkill', label: 'Driver Skill', category: 'performance' as MetricCategory },
-  { field: 'avgIntakeSpeed', label: 'Intake Speed', category: 'performance' as MetricCategory },
-  { field: 'avgShootingAccuracy', label: 'Shooting Accuracy', category: 'performance' as MetricCategory },
-  { field: 'avgShootingSpeed', label: 'Shooting Speed', category: 'performance' as MetricCategory },
-  { field: 'noShowRate', label: 'No Show Rate', category: 'reliability' as MetricCategory },
-  { field: 'diedRate', label: 'Died Rate', category: 'reliability' as MetricCategory },
-  { field: 'tippedRate', label: 'Tipped Rate', category: 'reliability' as MetricCategory },
-  { field: 'mechanicalIssuesRate', label: 'Mechanical Issues Rate', category: 'reliability' as MetricCategory },
-  { field: 'yellowCardRate', label: 'Yellow Card Rate', category: 'reliability' as MetricCategory },
-  { field: 'redCardRate', label: 'Red Card Rate', category: 'reliability' as MetricCategory },
+  { field: 'autoDidNothingRate', label: 'Auto Did Nothing Rate', category: 'auto' as MetricCategory },
+  // Endgame
+  { field: 'level3ClimbRate', label: 'L3 Climb Rate', category: 'endgame' as MetricCategory },
+  { field: 'level2ClimbRate', label: 'L2 Climb Rate', category: 'endgame' as MetricCategory },
+  { field: 'level1ClimbRate', label: 'L1 Climb Rate', category: 'endgame' as MetricCategory },
+  { field: 'climbNoneRate', label: 'No Climb Rate', category: 'endgame' as MetricCategory },
+  { field: 'climbFailedRate', label: 'Climb Failed Rate', category: 'endgame' as MetricCategory },
+  // Quality
+  { field: 'dedicatedPasserRate', label: 'Dedicated Passer Rate', category: 'quality' as MetricCategory },
+  { field: 'bulldozedFuelRate', label: 'Bulldozed Fuel Rate', category: 'quality' as MetricCategory },
+  { field: 'poorAccuracyRate', label: 'Poor Accuracy Rate', category: 'quality' as MetricCategory },
+  // Reliability
+  { field: 'lostConnectionRate', label: 'Lost Connection Rate', category: 'reliability' as MetricCategory },
+  { field: 'noRobotRate', label: 'No Robot Rate', category: 'reliability' as MetricCategory },
 ];
 
 function MetricsSettings() {

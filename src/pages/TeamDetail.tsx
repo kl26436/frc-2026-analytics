@@ -1,9 +1,10 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { usePickListStore } from '../store/usePickListStore';
-import { ArrowLeft, TrendingUp, TrendingDown, Minus, Play, X, FileText } from 'lucide-react';
-import type { MatchScoutingEntry } from '../types/scouting';
+import { ArrowLeft, TrendingUp, TrendingDown, Minus, Play, X } from 'lucide-react';
+import { estimateMatchFuel, estimateMatchPoints, parseClimbLevel } from '../types/scoutingReal';
+import type { RealScoutEntry } from '../types/scoutingReal';
 import type { TBAMatch } from '../types/tba';
 import { getTeamEventMatches, getMatchVideoUrl, teamNumberToKey } from '../utils/tbaApi';
 import MatchDetailModal from '../components/MatchDetailModal';
@@ -11,22 +12,37 @@ import MatchDetailModal from '../components/MatchDetailModal';
 function TeamDetail() {
   const { teamNumber } = useParams<{ teamNumber: string }>();
   const navigate = useNavigate();
-  const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
-  const matchEntries = useAnalyticsStore(state => state.matchEntries);
-  const pitEntries = useAnalyticsStore(state => state.pitEntries);
-  const eventCode = useAnalyticsStore(state => state.eventCode);
-  const tbaApiKey = usePickListStore(state => state.tbaApiKey);
+
+  const teamStatistics = useAnalyticsStore(s => s.realTeamStatistics);
+  const realScoutEntries = useAnalyticsStore(s => s.realScoutEntries);
+  const eventCode = useAnalyticsStore(s => s.eventCode);
+  const tbaApiKey = usePickListStore(s => s.tbaApiKey);
 
   const [tbaMatches, setTbaMatches] = useState<TBAMatch[]>([]);
   const [selectedVideo, setSelectedVideo] = useState<{ matchNumber: number; videoUrl: string } | null>(null);
-  const [selectedMatch, setSelectedMatch] = useState<MatchScoutingEntry | null>(null);
+  const [selectedMatch, setSelectedMatch] = useState<RealScoutEntry | null>(null);
 
   const teamNum = parseInt(teamNumber || '0');
   const teamStats = teamStatistics.find(t => t.teamNumber === teamNum);
-  const teamMatches = matchEntries
-    .filter(m => m.teamNumber === teamNum)
-    .sort((a, b) => a.matchNumber - b.matchNumber);
-  const pitData = pitEntries.find(p => p.teamNumber === teamNum);
+
+  // Get real scout entries for this team
+  const teamEntries = useMemo(() =>
+    realScoutEntries
+      .filter(e => e.team_number === teamNum)
+      .sort((a, b) => a.match_number - b.match_number),
+    [realScoutEntries, teamNum]
+  );
+
+  // Calculate per-match data from real entries
+  const matchData = useMemo(() =>
+    teamEntries.map(entry => ({
+      entry,
+      fuel: estimateMatchFuel(entry),
+      points: estimateMatchPoints(entry),
+      climbLevel: parseClimbLevel(entry.climb_level),
+    })),
+    [teamEntries]
+  );
 
   // Fetch TBA match data for videos
   useEffect(() => {
@@ -56,51 +72,26 @@ function TeamDetail() {
     );
   }
 
-  // Calculate points for each match
-  const calculateMatchPoints = (match: MatchScoutingEntry) => {
-    const autoFuelPoints = match.autoFuelScored * 1;
-    const autoClimbPoints = match.autoClimbSuccess ? 15 : 0;
-    const autoPoints = autoFuelPoints + autoClimbPoints;
-
-    const teleopPoints = match.teleopScoresDuringActive * 1;
-
-    const climbPoints: Record<string, number> = {
-      none: 0,
-      level1: 10,
-      level2: 20,
-      level3: 30,
-    };
-    const endgameClimbPoints = climbPoints[match.climbLevel] || 0;
-    const endgameFuelPoints = match.endgameFuelScored * 1;
-    const endgamePoints = endgameClimbPoints + endgameFuelPoints;
-
-    return {
-      auto: autoPoints,
-      teleop: teleopPoints,
-      endgame: endgamePoints,
-      total: autoPoints + teleopPoints + endgamePoints,
-    };
-  };
-
-  const matchPointsData = teamMatches.map(m => ({
-    match: m,
-    points: calculateMatchPoints(m),
-  }));
-
-  // Calculate trend
+  // Calculate trend from match points
   const getTrend = () => {
-    if (matchPointsData.length < 3) return 'stable';
-    const recent = matchPointsData.slice(-3).map(m => m.points.total);
-    const earlier = matchPointsData.slice(0, 3).map(m => m.points.total);
+    if (matchData.length < 3) return 'stable';
+    const recent = matchData.slice(-3).map(m => m.points.total);
+    const earlier = matchData.slice(0, 3).map(m => m.points.total);
     const recentAvg = recent.reduce((a, b) => a + b, 0) / recent.length;
     const earlierAvg = earlier.reduce((a, b) => a + b, 0) / earlier.length;
-
     if (recentAvg > earlierAvg * 1.1) return 'up';
     if (recentAvg < earlierAvg * 0.9) return 'down';
     return 'stable';
   };
-
   const trend = getTrend();
+
+  // Climb level label
+  const climbLabel = (level: number) => {
+    return ['None', 'L1', 'L2', 'L3'][level] ?? 'None';
+  };
+
+  // Safe access to real stat fields (works regardless of which stats type is loaded)
+  const rs = teamStats as any;
 
   return (
     <div className="space-y-6">
@@ -127,7 +118,7 @@ function TeamDetail() {
       </div>
 
       {/* Stats Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-surface p-6 rounded-lg border border-border">
           <p className="text-textSecondary text-sm">Avg Total Points</p>
           <p className="text-3xl font-bold mt-1">{teamStats.avgTotalPoints.toFixed(1)}</p>
@@ -137,8 +128,8 @@ function TeamDetail() {
           <p className="text-3xl font-bold mt-1">{teamStats.matchesPlayed}</p>
         </div>
         <div className="bg-surface p-6 rounded-lg border border-border">
-          <p className="text-textSecondary text-sm">Auto Accuracy</p>
-          <p className="text-3xl font-bold mt-1">{teamStats.autoAccuracy.toFixed(0)}%</p>
+          <p className="text-textSecondary text-sm">Avg Total Fuel</p>
+          <p className="text-3xl font-bold mt-1">{(rs.avgTotalFuelEstimate ?? 0).toFixed(1)}</p>
         </div>
         <div className="bg-surface p-6 rounded-lg border border-border">
           <p className="text-textSecondary text-sm">L3 Climb Rate</p>
@@ -146,186 +137,97 @@ function TeamDetail() {
         </div>
       </div>
 
-      {/* Pit Scouting Data */}
-      {pitData && (
-        <div className="bg-surface p-6 rounded-lg border border-border">
-          <h2 className="text-xl font-bold mb-4">Pit Scouting Info</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
-              <p className="text-textSecondary text-sm">Drivetrain</p>
-              <p className="font-semibold mt-1 capitalize">{pitData.drivetrainType}</p>
-            </div>
-            <div>
-              <p className="text-textSecondary text-sm">Shooter Type</p>
-              <p className="font-semibold mt-1">{pitData.shooterType}</p>
-            </div>
-            <div>
-              <p className="text-textSecondary text-sm">Max Capacity</p>
-              <p className="font-semibold mt-1">{pitData.maxFuelCapacity} FUEL</p>
-            </div>
-            <div>
-              <p className="text-textSecondary text-sm">Climb Capability</p>
-              <p className="font-semibold mt-1 capitalize">{pitData.climbCapability}</p>
-            </div>
-            <div>
-              <p className="text-textSecondary text-sm">Max Range</p>
-              <p className="font-semibold mt-1">{pitData.maxShootingRange} ft</p>
-            </div>
-            <div>
-              <p className="text-textSecondary text-sm">Preferred Role</p>
-              <p className="font-semibold mt-1 capitalize">{pitData.preferredRole}</p>
-            </div>
-            <div>
-              <p className="text-textSecondary text-sm">Weight</p>
-              <p className="font-semibold mt-1">{pitData.robotWeight} lbs</p>
-            </div>
-            <div>
-              <p className="text-textSecondary text-sm">Driver Experience</p>
-              <p className="font-semibold mt-1">{pitData.driverExperience}</p>
-            </div>
+      {/* Match History (Real Data) */}
+      {matchData.length > 0 && (
+        <div className="bg-surface rounded-lg border border-border">
+          <div className="p-6 border-b border-border">
+            <h2 className="text-xl font-bold">Match History ({matchData.length} entries)</h2>
           </div>
-          {pitData.comments && (
-            <div className="mt-4 pt-4 border-t border-border">
-              <p className="text-textSecondary text-sm">Comments</p>
-              <p className="mt-1">{pitData.comments}</p>
-            </div>
-          )}
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-surfaceElevated border-b border-border">
+                <tr>
+                  <th className="px-3 py-3 text-left text-textSecondary text-sm font-semibold">Match</th>
+                  <th className="px-3 py-3 text-center text-textSecondary text-sm font-semibold">Video</th>
+                  <th className="px-3 py-3 text-center text-textSecondary text-sm font-semibold">Alliance</th>
+                  <th className="px-3 py-3 text-right text-textSecondary text-sm font-semibold">Total Pts</th>
+                  <th className="px-3 py-3 text-right text-textSecondary text-sm font-semibold">Auto Fuel</th>
+                  <th className="px-3 py-3 text-right text-textSecondary text-sm font-semibold">Teleop Fuel</th>
+                  <th className="px-3 py-3 text-right text-textSecondary text-sm font-semibold">Total Fuel</th>
+                  <th className="px-3 py-3 text-center text-textSecondary text-sm font-semibold">Climb</th>
+                  <th className="px-3 py-3 text-center text-textSecondary text-sm font-semibold">Flags</th>
+                  <th className="px-3 py-3 text-left text-textSecondary text-sm font-semibold">Notes</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {matchData.map(({ entry, fuel, points, climbLevel }) => {
+                  const alliance = entry.configured_team.startsWith('red') ? 'red' : 'blue';
+                  const tbaMatch = tbaMatches.find(
+                    m => m.comp_level === 'qm' && m.match_number === entry.match_number
+                  );
+                  const videoUrl = tbaMatch ? getMatchVideoUrl(tbaMatch) : null;
+
+                  return (
+                    <tr key={entry.id} className="hover:bg-interactive transition-colors">
+                      <td className="px-3 py-3 font-semibold">
+                        <button
+                          onClick={() => setSelectedMatch(entry)}
+                          className="text-blueAlliance hover:underline cursor-pointer"
+                          title="View full scouting report"
+                        >
+                          Q{entry.match_number}
+                        </button>
+                      </td>
+                      <td className="px-3 py-3 text-center">
+                        {videoUrl ? (
+                          <button
+                            onClick={() => setSelectedVideo({ matchNumber: entry.match_number, videoUrl })}
+                            className="p-1 text-danger hover:bg-danger/10 rounded transition-colors"
+                            title="Watch match video"
+                          >
+                            <Play size={16} fill="currentColor" />
+                          </button>
+                        ) : (
+                          <span className="text-textMuted text-xs">-</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-3 text-center">
+                        <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                          alliance === 'red' ? 'bg-redAlliance/20 text-redAlliance' : 'bg-blueAlliance/20 text-blueAlliance'
+                        }`}>
+                          {alliance.toUpperCase()}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 text-right font-bold">{points.total}</td>
+                      <td className="px-3 py-3 text-right text-textSecondary">{fuel.auto}</td>
+                      <td className="px-3 py-3 text-right text-textSecondary">{fuel.teleop}</td>
+                      <td className="px-3 py-3 text-right font-semibold">{fuel.total}</td>
+                      <td className="px-3 py-3 text-center">
+                        <span className={climbLevel >= 2 ? 'font-semibold text-success' : climbLevel === 1 ? 'font-semibold' : 'text-textMuted'}>
+                          {climbLabel(climbLevel)}
+                        </span>
+                        {entry.teleop_climb_failed && (
+                          <span className="ml-1 text-danger text-xs">(failed)</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-3 text-center text-xs space-x-1">
+                        {entry.lost_connection && <span className="text-danger">LOST</span>}
+                        {entry.no_robot_on_field && <span className="text-danger">NO ROBOT</span>}
+                        {entry.dedicated_passer && <span className="text-blueAlliance">PASSER</span>}
+                        {entry.eff_rep_bulldozed_fuel && <span className="text-warning">BULLDOZE</span>}
+                        {entry.auton_did_nothing && <span className="text-textMuted">NO AUTO</span>}
+                      </td>
+                      <td className="px-3 py-3 text-sm text-textSecondary max-w-[200px] truncate">
+                        {entry.notes}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
-
-      {/* Match History */}
-      <div className="bg-surface rounded-lg border border-border">
-        <div className="p-6 border-b border-border">
-          <h2 className="text-xl font-bold">Match History</h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-surfaceElevated border-b border-border">
-              <tr>
-                <th className="px-4 py-3 text-left text-textSecondary text-sm font-semibold">
-                  Match
-                </th>
-                <th className="px-4 py-3 text-center text-textSecondary text-sm font-semibold">
-                  Video
-                </th>
-                <th className="px-4 py-3 text-center text-textSecondary text-sm font-semibold">
-                  Alliance
-                </th>
-                <th className="px-4 py-3 text-right text-textSecondary text-sm font-semibold">
-                  Total Pts
-                </th>
-                <th className="px-4 py-3 text-right text-textSecondary text-sm font-semibold">
-                  Auto
-                </th>
-                <th className="px-4 py-3 text-right text-textSecondary text-sm font-semibold">
-                  Teleop
-                </th>
-                <th className="px-4 py-3 text-right text-textSecondary text-sm font-semibold">
-                  Endgame
-                </th>
-                <th className="px-4 py-3 text-center text-textSecondary text-sm font-semibold">
-                  Auto Fuel
-                </th>
-                <th className="px-4 py-3 text-center text-textSecondary text-sm font-semibold">
-                  Teleop Fuel
-                </th>
-                <th className="px-4 py-3 text-center text-textSecondary text-sm font-semibold">
-                  Climb
-                </th>
-                <th className="px-4 py-3 text-center text-textSecondary text-sm font-semibold">
-                  Cycles
-                </th>
-                <th className="px-4 py-3 text-left text-textSecondary text-sm font-semibold">
-                  Notes
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {matchPointsData.map(({ match, points }) => {
-                // Find corresponding TBA match for video
-                const tbaMatch = tbaMatches.find(
-                  m => m.comp_level === 'qm' && m.match_number === match.matchNumber
-                );
-                const videoUrl = tbaMatch ? getMatchVideoUrl(tbaMatch) : null;
-
-                return (
-                  <tr key={match.id} className="hover:bg-interactive transition-colors">
-                    <td className="px-4 py-4">
-                      <button
-                        onClick={() => setSelectedMatch(match)}
-                        className="flex items-center gap-1 font-semibold text-textPrimary hover:text-blueAlliance transition-colors"
-                        title="View full scouting data"
-                      >
-                        {match.matchType === 'qualification' ? 'Q' : match.matchType === 'playoff' ? 'P' : 'Pr'}
-                        {match.matchNumber}
-                        <FileText size={14} className="text-textMuted" />
-                      </button>
-                    </td>
-                    <td className="px-4 py-4 text-center">
-                      {videoUrl ? (
-                        <button
-                          onClick={() => setSelectedVideo({ matchNumber: match.matchNumber, videoUrl })}
-                          className="p-1 text-danger hover:bg-danger/10 rounded transition-colors"
-                          title="Watch match video"
-                        >
-                          <Play size={18} fill="currentColor" />
-                        </button>
-                      ) : (
-                        <span className="text-textMuted text-xs">-</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-4 text-center">
-                    <span
-                      className={`px-2 py-1 rounded text-xs font-semibold ${
-                        match.alliance === 'red'
-                          ? 'bg-redAlliance/20 text-redAlliance'
-                          : 'bg-blueAlliance/20 text-blueAlliance'
-                      }`}
-                    >
-                      {match.alliance.toUpperCase()}
-                    </span>
-                  </td>
-                  <td className="px-4 py-4 text-right font-bold">{points.total}</td>
-                  <td className="px-4 py-4 text-right text-textSecondary">{points.auto}</td>
-                  <td className="px-4 py-4 text-right text-textSecondary">{points.teleop}</td>
-                  <td className="px-4 py-4 text-right text-textSecondary">{points.endgame}</td>
-                  <td className="px-4 py-4 text-center">
-                    <span className="text-success">{match.autoFuelScored}</span>
-                    <span className="text-textMuted">/</span>
-                    <span className="text-danger">{match.autoFuelMissed}</span>
-                  </td>
-                  <td className="px-4 py-4 text-center">
-                    <span className="text-success">{match.teleopTotalScored}</span>
-                    <span className="text-textMuted">/</span>
-                    <span className="text-danger">{match.teleopTotalMissed}</span>
-                  </td>
-                  <td className="px-4 py-4 text-center">
-                    {match.climbLevel === 'none' ? (
-                      <span className="text-textMuted">-</span>
-                    ) : (
-                      <span className="font-semibold capitalize">
-                        {match.climbLevel.replace('level', 'L')}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-4 text-center">{match.cycleCount}</td>
-                  <td className="px-4 py-4 text-sm text-textSecondary max-w-xs truncate">
-                    {match.robotDied && <span className="text-danger mr-2">DIED</span>}
-                    {match.robotTipped && <span className="text-warning mr-2">TIPPED</span>}
-                    {match.cardReceived !== 'none' && (
-                      <span className={match.cardReceived === 'yellow' ? 'text-warning mr-2' : 'text-danger mr-2'}>
-                        {match.cardReceived.toUpperCase()} CARD
-                      </span>
-                    )}
-                    {match.commentsOverall}
-                  </td>
-                </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
 
       {/* Performance Breakdown */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -334,20 +236,22 @@ function TeamDetail() {
           <h3 className="text-lg font-bold mb-4">Auto Performance</h3>
           <div className="space-y-3">
             <div className="flex justify-between">
-              <span className="text-textSecondary">Avg FUEL Scored</span>
-              <span className="font-semibold">{teamStats.avgAutoFuelScored.toFixed(1)}</span>
+              <span className="text-textSecondary">Avg Auto Fuel Estimate</span>
+              <span className="font-semibold">{(rs.avgAutoFuelEstimate ?? 0).toFixed(1)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-textSecondary">Accuracy</span>
-              <span className="font-semibold">{teamStats.autoAccuracy.toFixed(1)}%</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-textSecondary">Mobility Rate</span>
-              <span className="font-semibold">{teamStats.autoMobilityRate.toFixed(0)}%</span>
+              <span className="text-textSecondary">Avg Auto Points</span>
+              <span className="font-semibold">{teamStats.avgAutoPoints.toFixed(1)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-textSecondary">Auto Climb Rate</span>
-              <span className="font-semibold">{teamStats.autoClimbRate.toFixed(0)}%</span>
+              <span className="font-semibold">{(rs.autoClimbRate ?? 0).toFixed(0)}%</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-textSecondary">Did Nothing Rate</span>
+              <span className={`font-semibold ${(rs.autoDidNothingRate ?? 0) > 20 ? 'text-danger' : ''}`}>
+                {(rs.autoDidNothingRate ?? 0).toFixed(0)}%
+              </span>
             </div>
           </div>
         </div>
@@ -357,20 +261,20 @@ function TeamDetail() {
           <h3 className="text-lg font-bold mb-4">Teleop Performance</h3>
           <div className="space-y-3">
             <div className="flex justify-between">
-              <span className="text-textSecondary">Avg FUEL Scored</span>
-              <span className="font-semibold">{teamStats.avgTeleopFuelScored.toFixed(1)}</span>
+              <span className="text-textSecondary">Avg Teleop Fuel Estimate</span>
+              <span className="font-semibold">{(rs.avgTeleopFuelEstimate ?? 0).toFixed(1)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-textSecondary">Accuracy</span>
-              <span className="font-semibold">{teamStats.teleopAccuracy.toFixed(1)}%</span>
+              <span className="text-textSecondary">Avg Teleop Points</span>
+              <span className="font-semibold">{teamStats.avgTeleopPoints.toFixed(1)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-textSecondary">Avg Cycles</span>
-              <span className="font-semibold">{teamStats.avgCycleCount.toFixed(1)}</span>
+              <span className="text-textSecondary">Avg Passes</span>
+              <span className="font-semibold">{(rs.avgTotalPass ?? 0).toFixed(1)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-textSecondary">Active HUB Scoring</span>
-              <span className="font-semibold">{teamStats.avgActiveHubScores.toFixed(1)}</span>
+              <span className="text-textSecondary">Dedicated Passer Rate</span>
+              <span className="font-semibold">{(rs.dedicatedPasserRate ?? 0).toFixed(0)}%</span>
             </div>
           </div>
         </div>
@@ -380,8 +284,8 @@ function TeamDetail() {
           <h3 className="text-lg font-bold mb-4">Endgame Performance</h3>
           <div className="space-y-3">
             <div className="flex justify-between">
-              <span className="text-textSecondary">Climb Attempt Rate</span>
-              <span className="font-semibold">{teamStats.climbAttemptRate.toFixed(0)}%</span>
+              <span className="text-textSecondary">No Climb</span>
+              <span className="font-semibold">{(rs.climbNoneRate ?? 0).toFixed(0)}%</span>
             </div>
             <div className="flex justify-between">
               <span className="text-textSecondary">Level 1 Rate</span>
@@ -396,41 +300,67 @@ function TeamDetail() {
               <span className="font-semibold text-success">{teamStats.level3ClimbRate.toFixed(0)}%</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-textSecondary">Avg Climb Time</span>
-              <span className="font-semibold">{teamStats.avgClimbTime.toFixed(1)}s</span>
+              <span className="text-textSecondary">Climb Failed Rate</span>
+              <span className={`font-semibold ${(rs.climbFailedRate ?? 0) > 10 ? 'text-danger' : ''}`}>
+                {(rs.climbFailedRate ?? 0).toFixed(0)}%
+              </span>
             </div>
           </div>
         </div>
 
         {/* Reliability */}
         <div className="bg-surface p-6 rounded-lg border border-border">
-          <h3 className="text-lg font-bold mb-4">Reliability</h3>
+          <h3 className="text-lg font-bold mb-4">Reliability & Quality</h3>
           <div className="space-y-3">
             <div className="flex justify-between">
-              <span className="text-textSecondary">Robot Died</span>
-              <span className={teamStats.diedRate > 10 ? 'text-danger font-semibold' : 'font-semibold'}>
-                {teamStats.diedRate.toFixed(0)}%
+              <span className="text-textSecondary">Lost Connection</span>
+              <span className={`font-semibold ${(rs.lostConnectionRate ?? 0) > 10 ? 'text-danger' : ''}`}>
+                {(rs.lostConnectionRate ?? 0).toFixed(0)}%
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-textSecondary">Robot Tipped</span>
-              <span className={teamStats.tippedRate > 10 ? 'text-warning font-semibold' : 'font-semibold'}>
-                {teamStats.tippedRate.toFixed(0)}%
+              <span className="text-textSecondary">No Robot on Field</span>
+              <span className={`font-semibold ${(rs.noRobotRate ?? 0) > 0 ? 'text-danger' : ''}`}>
+                {(rs.noRobotRate ?? 0).toFixed(0)}%
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-textSecondary">Mechanical Issues</span>
-              <span className={teamStats.mechanicalIssuesRate > 15 ? 'text-danger font-semibold' : 'font-semibold'}>
-                {teamStats.mechanicalIssuesRate.toFixed(0)}%
+              <span className="text-textSecondary">Bulldozed Fuel</span>
+              <span className={`font-semibold ${(rs.bulldozedFuelRate ?? 0) > 20 ? 'text-warning' : ''}`}>
+                {(rs.bulldozedFuelRate ?? 0).toFixed(0)}%
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-textSecondary">Driver Skill (1-5)</span>
-              <span className="font-semibold">{teamStats.avgDriverSkill.toFixed(1)}</span>
+              <span className="text-textSecondary">Poor Accuracy Flag</span>
+              <span className={`font-semibold ${(rs.poorAccuracyRate ?? 0) > 20 ? 'text-warning' : ''}`}>
+                {(rs.poorAccuracyRate ?? 0).toFixed(0)}%
+              </span>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Scout Notes */}
+      {rs.notesList && rs.notesList.length > 0 && (
+        <div className="bg-surface p-6 rounded-lg border border-border">
+          <h3 className="text-lg font-bold mb-4">Scout Notes ({rs.notesList.length})</h3>
+          <div className="space-y-2">
+            {rs.notesList.map((note: string, i: number) => (
+              <div key={i} className="p-3 bg-surfaceElevated rounded-lg text-sm text-textSecondary">
+                {note}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Match Detail Modal */}
+      {selectedMatch && (
+        <MatchDetailModal
+          match={selectedMatch}
+          onClose={() => setSelectedMatch(null)}
+        />
+      )}
 
       {/* Video Modal */}
       {selectedVideo && (
@@ -467,14 +397,6 @@ function TeamDetail() {
             </div>
           </div>
         </div>
-      )}
-
-      {/* Match Detail Modal */}
-      {selectedMatch && (
-        <MatchDetailModal
-          match={selectedMatch}
-          onClose={() => setSelectedMatch(null)}
-        />
       )}
     </div>
   );

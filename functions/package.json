@@ -1,0 +1,14 @@
+{
+  "name": "frc-2026-analytics-functions",
+  "description": "Firebase Cloud Functions for FRC 2026 Analytics data sync",
+  "engines": {
+    "node": "20"
+  },
+  "main": "index.js",
+  "dependencies": {
+    "firebase-admin": "^13.0.0",
+    "firebase-functions": "^6.3.0",
+    "pg": "^8.13.0"
+  },
+  "private": true
+}

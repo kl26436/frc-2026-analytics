@@ -1,7 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { X, ArrowUp, Sliders, Play } from 'lucide-react';
-import type { TeamStatistics } from '../types/scouting';
 import type { TBAMatch } from '../types/tba';
 import type { MetricCategory, MetricColumn } from '../types/metrics';
 import { CATEGORY_LABELS } from '../types/metrics';
@@ -12,14 +11,19 @@ import { getTeamEventMatches, getMatchVideoUrl, teamNumberToKey } from '../utils
 
 // Fields where lower is better (for coloring)
 const LOWER_IS_BETTER_FIELDS = [
-  'noShowRate', 'diedRate', 'tippedRate', 'mechanicalIssuesRate',
-  'yellowCardRate', 'redCardRate', 'avgClimbTime', 'minClimbTime',
-  'avgAutoFuelMissed', 'avgTeleopFuelMissed', 'wasDefendedRate'
+  'lostConnectionRate', 'noRobotRate', 'climbNoneRate', 'climbFailedRate',
+  'bulldozedFuelRate', 'poorAccuracyRate', 'autoDidNothingRate',
 ];
 
+interface TeamLike {
+  teamNumber: number;
+  teamName?: string;
+  matchesPlayed: number;
+}
+
 interface ComparisonModalProps {
-  team1: TeamStatistics;
-  team2: TeamStatistics;
+  team1: TeamLike;
+  team2: TeamLike;
   onPickTeam?: (teamNumber: number) => void;
   onClose: () => void;
 }
@@ -67,11 +71,11 @@ function ComparisonModal({ team1, team2, onPickTeam, onClose }: ComparisonModalP
   // Group enabled metrics by category
   const enabledColumns = getEnabledColumns();
   const metricsByCategory = useMemo(() => {
-    const grouped: Record<MetricCategory, MetricColumn[]> = {
-      overall: [], auto: [], teleop: [], endgame: [],
-      defense: [], performance: [], reliability: [],
-    };
-    enabledColumns.forEach(col => grouped[col.category].push(col));
+    const grouped: Partial<Record<MetricCategory, MetricColumn[]>> = {};
+    enabledColumns.forEach(col => {
+      if (!grouped[col.category]) grouped[col.category] = [];
+      grouped[col.category]!.push(col);
+    });
     return grouped;
   }, [enabledColumns]);
 
@@ -79,7 +83,7 @@ function ComparisonModal({ team1, team2, onPickTeam, onClose }: ComparisonModalP
   const MetricStatRow = ({ column }: { column: MetricColumn }) => {
     const higherIsBetter = !LOWER_IS_BETTER_FIELDS.includes(column.field);
 
-    const getValue = (team: TeamStatistics): number =>
+    const getValue = (team: TeamLike): number =>
       (team as unknown as Record<string, number>)[column.field] || 0;
 
     const value1 = getValue(team1);
@@ -230,7 +234,7 @@ function ComparisonModal({ team1, team2, onPickTeam, onClose }: ComparisonModalP
         >
           {(Object.keys(metricsByCategory) as MetricCategory[]).map(category => {
             const columns = metricsByCategory[category];
-            if (columns.length === 0) return null;
+            if (!columns || columns.length === 0) return null;
             return (
               <div key={category}>
                 <div className="bg-surfaceElevated px-3 py-2 font-bold text-sm mt-4 first:mt-0">

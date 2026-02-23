@@ -1,23 +1,44 @@
 import { useEffect } from 'react';
 import { X, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
-import type { MatchScoutingEntry } from '../types/scouting';
+import type { RealScoutEntry } from '../types/scoutingReal';
+import { estimateMatchFuel, estimateMatchPoints, parseClimbLevel, getAlliance, getStation } from '../types/scoutingReal';
 
 interface MatchDetailModalProps {
-  match: MatchScoutingEntry;
+  match: RealScoutEntry;
   onClose: () => void;
 }
 
 function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
-  // Handle ESC key to close modal
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
+      if (e.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', handleEsc);
     return () => window.removeEventListener('keydown', handleEsc);
   }, [onClose]);
+
+  const fuel = estimateMatchFuel(match);
+  const points = estimateMatchPoints(match);
+  const climbLevel = parseClimbLevel(match.climb_level);
+  const alliance = getAlliance(match.configured_team);
+  const station = getStation(match.configured_team);
+
+  const climbLabel = ['None', 'Level 1', 'Level 2', 'Level 3'][climbLevel] ?? 'None';
+
+  // Determine start zone
+  const startZones = [
+    match.prematch_AUTON_START_ZONE_1,
+    match.prematch_AUTON_START_ZONE_2,
+    match.prematch_AUTON_START_ZONE_3,
+    match.prematch_AUTON_START_ZONE_4,
+    match.prematch_AUTON_START_ZONE_5,
+    match.prematch_AUTON_START_ZONE_6,
+  ];
+  const activeZone = startZones.findIndex(z => z > 0);
+  const startZoneLabel = activeZone >= 0 ? `Zone ${activeZone + 1}` : '-';
+
+  const hasIssues = match.lost_connection || match.no_robot_on_field || match.teleop_climb_failed ||
+    match.eff_rep_bulldozed_fuel || match.poor_fuel_scoring_accuracy;
 
   const BooleanBadge = ({ value, label }: { value: boolean; label: string }) => (
     <div className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${
@@ -32,21 +53,6 @@ function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
     <div>
       <p className="text-textSecondary text-xs">{label}</p>
       <p className="font-semibold">{value}{suffix}</p>
-    </div>
-  );
-
-  const RatingBar = ({ label, value, max = 5 }: { label: string; value: number; max?: number }) => (
-    <div>
-      <div className="flex justify-between text-xs mb-1">
-        <span className="text-textSecondary">{label}</span>
-        <span className="font-semibold">{value}/{max}</span>
-      </div>
-      <div className="h-2 bg-surface rounded-full overflow-hidden">
-        <div
-          className="h-full bg-success rounded-full transition-all"
-          style={{ width: `${(value / max) * 100}%` }}
-        />
-      </div>
     </div>
   );
 
@@ -69,11 +75,13 @@ function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
         {/* Header */}
         <div className="flex-shrink-0 bg-surfaceElevated p-4 border-b border-border flex justify-between items-center rounded-t-lg">
           <div>
-            <h2 className="text-xl font-bold">
-              {match.matchType === 'qualification' ? 'Qual' : match.matchType === 'playoff' ? 'Playoff' : 'Practice'} {match.matchNumber}
-            </h2>
+            <h2 className="text-xl font-bold">Qual {match.match_number}</h2>
             <p className="text-sm text-textSecondary">
-              Team {match.teamNumber} • {match.alliance.toUpperCase()} Alliance • Station {match.driverStation}
+              Team {match.team_number} •{' '}
+              <span className={alliance === 'red' ? 'text-redAlliance' : 'text-blueAlliance'}>
+                {alliance.toUpperCase()}
+              </span>{' '}
+              Alliance • Station {station}
             </p>
           </div>
           <button
@@ -91,19 +99,18 @@ function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
           style={{ WebkitOverflowScrolling: 'touch' }}
         >
           {/* Issues Banner */}
-          {(match.noShow || match.robotDied || match.robotTipped || match.mechanicalIssues || match.cardReceived !== 'none') && (
+          {hasIssues && (
             <div className="bg-danger/10 border border-danger/30 rounded-lg p-3">
               <div className="flex items-center gap-2 text-danger font-semibold mb-2">
                 <AlertTriangle size={16} />
                 Issues Reported
               </div>
               <div className="flex flex-wrap gap-2">
-                {match.noShow && <span className="px-2 py-1 bg-danger/20 text-danger text-xs rounded font-medium">NO SHOW</span>}
-                {match.robotDied && <span className="px-2 py-1 bg-danger/20 text-danger text-xs rounded font-medium">ROBOT DIED</span>}
-                {match.robotTipped && <span className="px-2 py-1 bg-warning/20 text-warning text-xs rounded font-medium">ROBOT TIPPED</span>}
-                {match.mechanicalIssues && <span className="px-2 py-1 bg-warning/20 text-warning text-xs rounded font-medium">MECHANICAL ISSUES</span>}
-                {match.cardReceived === 'yellow' && <span className="px-2 py-1 bg-warning/20 text-warning text-xs rounded font-medium">YELLOW CARD</span>}
-                {match.cardReceived === 'red' && <span className="px-2 py-1 bg-danger/20 text-danger text-xs rounded font-medium">RED CARD</span>}
+                {match.lost_connection && <span className="px-2 py-1 bg-danger/20 text-danger text-xs rounded font-medium">LOST CONNECTION</span>}
+                {match.no_robot_on_field && <span className="px-2 py-1 bg-danger/20 text-danger text-xs rounded font-medium">NO ROBOT</span>}
+                {match.teleop_climb_failed && <span className="px-2 py-1 bg-warning/20 text-warning text-xs rounded font-medium">CLIMB FAILED</span>}
+                {match.eff_rep_bulldozed_fuel && <span className="px-2 py-1 bg-warning/20 text-warning text-xs rounded font-medium">BULLDOZED FUEL</span>}
+                {match.poor_fuel_scoring_accuracy && <span className="px-2 py-1 bg-warning/20 text-warning text-xs rounded font-medium">POOR ACCURACY</span>}
               </div>
             </div>
           )}
@@ -112,9 +119,9 @@ function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
           <div>
             <SectionHeader title="Pre-Match" />
             <div className="grid grid-cols-3 gap-4">
-              <StatItem label="Starting Position" value={match.startingPosition.toUpperCase()} />
-              <StatItem label="Preloaded FUEL" value={match.preloadedFuel} />
-              <StatItem label="No Show" value={match.noShow ? 'Yes' : 'No'} />
+              <StatItem label="Start Zone" value={startZoneLabel} />
+              <StatItem label="Dedicated Passer" value={match.dedicated_passer ? 'Yes' : 'No'} />
+              <StatItem label="Second Review" value={match.second_review ? 'Yes' : 'No'} />
             </div>
           </div>
 
@@ -122,128 +129,147 @@ function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
           <div>
             <SectionHeader title="Autonomous" />
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-3">
-              <StatItem label="FUEL Scored" value={match.autoFuelScored} />
-              <StatItem label="FUEL Missed" value={match.autoFuelMissed} />
-              <StatItem
-                label="Accuracy"
-                value={match.autoFuelScored + match.autoFuelMissed > 0
-                  ? Math.round((match.autoFuelScored / (match.autoFuelScored + match.autoFuelMissed)) * 100)
-                  : 0}
-                suffix="%"
-              />
-              <StatItem label="Climb Success" value={match.autoClimbSuccess ? 'Yes' : 'No'} />
+              <StatItem label="Fuel Scored" value={match.auton_FUEL_SCORE} />
+              <StatItem label="Fuel Passed" value={match.auton_FUEL_PASS} />
+              <StatItem label="Fuel Estimate" value={fuel.auto} />
+              <StatItem label="Auto Climbed" value={match.auton_AUTON_CLIMBED > 0 ? 'Yes' : 'No'} />
             </div>
-            <div className="flex flex-wrap gap-2 mb-3">
-              <BooleanBadge value={match.autoMobility} label="Mobility" />
-              <BooleanBadge value={match.autoClimbAttempted} label="Climb Attempted" />
-              <BooleanBadge value={match.autoCrossedBump} label="Crossed Bump" />
-              <BooleanBadge value={match.autoUsedTrench} label="Used Trench" />
-            </div>
-            <div className="grid grid-cols-3 gap-4 text-sm">
-              <StatItem label="From Depot" value={match.autoFuelFromDepot} />
-              <StatItem label="From Neutral" value={match.autoFuelFromNeutral} />
-              <StatItem label="From Human" value={match.autoFuelFromHuman} />
-            </div>
-            {match.commentsAuto && (
-              <div className="mt-3 p-3 bg-surfaceElevated rounded text-sm">
-                <p className="text-textSecondary text-xs mb-1">Auto Comments</p>
-                <p>{match.commentsAuto}</p>
+
+            {/* SCORE_PLUS breakdown */}
+            <div className="bg-surfaceElevated rounded p-3 mb-3">
+              <p className="text-xs text-textSecondary mb-2">Bonus Buckets</p>
+              <div className="grid grid-cols-5 gap-3 text-center">
+                <div>
+                  <p className="text-xs text-textMuted">+1</p>
+                  <p className="font-bold">{match.auton_SCORE_PLUS_1}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-textMuted">+2</p>
+                  <p className="font-bold">{match.auton_SCORE_PLUS_2}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-textMuted">+3</p>
+                  <p className="font-bold">{match.auton_SCORE_PLUS_3}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-textMuted">+5</p>
+                  <p className="font-bold">{match.auton_SCORE_PLUS_5}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-textMuted">+10</p>
+                  <p className="font-bold">{match.auton_SCORE_PLUS_10}</p>
+                </div>
               </div>
-            )}
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <BooleanBadge value={match.auton_AUTON_CLIMBED > 0} label="Auto Climb" />
+              <BooleanBadge value={!match.auton_did_nothing} label="Active Auto" />
+            </div>
           </div>
 
           {/* Teleop */}
           <div>
             <SectionHeader title="Teleop" />
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-3">
-              <StatItem label="FUEL Scored" value={match.teleopTotalScored} />
-              <StatItem label="FUEL Missed" value={match.teleopTotalMissed} />
-              <StatItem
-                label="Accuracy"
-                value={match.teleopTotalScored + match.teleopTotalMissed > 0
-                  ? Math.round((match.teleopTotalScored / (match.teleopTotalScored + match.teleopTotalMissed)) * 100)
-                  : 0}
-                suffix="%"
-              />
-              <StatItem label="Cycles" value={match.cycleCount} />
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-3">
+              <StatItem label="Fuel Scored" value={match.teleop_FUEL_SCORE} />
+              <StatItem label="Fuel Passed" value={match.teleop_FUEL_PASS} />
+              <StatItem label="Fuel Estimate" value={fuel.teleop} />
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-3 text-sm">
-              <StatItem label="Active Hub" value={match.teleopScoresDuringActive} />
-              <StatItem label="Inactive Hub" value={match.teleopScoresDuringInactive} />
-              <StatItem label="To Human Player" value={match.teleopFuelToHuman} />
-              <div></div>
+
+            {/* SCORE_PLUS breakdown */}
+            <div className="bg-surfaceElevated rounded p-3 mb-3">
+              <p className="text-xs text-textSecondary mb-2">Bonus Buckets</p>
+              <div className="grid grid-cols-5 gap-3 text-center">
+                <div>
+                  <p className="text-xs text-textMuted">+1</p>
+                  <p className="font-bold">{match.teleop_SCORE_PLUS_1}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-textMuted">+2</p>
+                  <p className="font-bold">{match.teleop_SCORE_PLUS_2}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-textMuted">+3</p>
+                  <p className="font-bold">{match.teleop_SCORE_PLUS_3}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-textMuted">+5</p>
+                  <p className="font-bold">{match.teleop_SCORE_PLUS_5}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-textMuted">+10</p>
+                  <p className="font-bold">{match.teleop_SCORE_PLUS_10}</p>
+                </div>
+              </div>
             </div>
-            <div className="grid grid-cols-3 gap-4 text-sm mb-3">
-              <StatItem label="From Depot" value={match.teleopFuelFromDepot} />
-              <StatItem label="From Neutral" value={match.teleopFuelFromNeutral} />
-              <StatItem label="From Human" value={match.teleopFuelFromHuman} />
-            </div>
+
             <div className="flex flex-wrap gap-2">
-              <BooleanBadge value={match.playedDefense} label="Played Defense" />
-              <BooleanBadge value={match.wasDefended} label="Was Defended" />
+              <BooleanBadge value={match.dedicated_passer} label="Dedicated Passer" />
             </div>
-            {match.playedDefense && (
-              <div className="mt-2">
-                <StatItem label="Defense Effectiveness" value={match.defenseEffectiveness.toUpperCase()} />
-              </div>
-            )}
-            {match.wasDefended && (
-              <div className="mt-2">
-                <StatItem label="Defense Evasion" value={match.defenseEvasion.toUpperCase()} />
-              </div>
-            )}
-            {match.commentsTeleop && (
-              <div className="mt-3 p-3 bg-surfaceElevated rounded text-sm">
-                <p className="text-textSecondary text-xs mb-1">Teleop Comments</p>
-                <p>{match.commentsTeleop}</p>
-              </div>
-            )}
           </div>
 
           {/* Endgame */}
           <div>
             <SectionHeader title="Endgame" />
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-3">
-              <StatItem label="Climb Level" value={match.climbLevel === 'none' ? 'None' : match.climbLevel.replace('level', 'Level ')} />
-              <StatItem label="Climb Time" value={match.climbTime > 0 ? match.climbTime : '-'} suffix={match.climbTime > 0 ? 's' : ''} />
-              <StatItem label="Endgame FUEL" value={match.endgameFuelScored} />
-              <StatItem label="Parked" value={match.parked ? 'Yes' : 'No'} />
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <BooleanBadge value={match.climbAttempted} label="Climb Attempted" />
-              <BooleanBadge value={match.climbAssisted} label="Was Assisted" />
-              <BooleanBadge value={match.climbAssistedOther} label="Assisted Others" />
+            <div className="grid grid-cols-3 gap-4 mb-3">
+              <StatItem label="Climb Level" value={climbLabel} />
+              <StatItem label="Climb Points" value={points.endgamePoints} />
+              <StatItem label="Climb Failed" value={match.teleop_climb_failed ? 'Yes' : 'No'} />
             </div>
           </div>
 
-          {/* Performance Ratings */}
+          {/* Points Summary */}
           <div>
-            <SectionHeader title="Performance Ratings" />
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <RatingBar label="Driver Skill" value={match.driverSkill} />
-              <RatingBar label="Intake Speed" value={match.intakeSpeed} />
-              <RatingBar label="Shooting Accuracy" value={match.shootingAccuracy} />
-              <RatingBar label="Shooting Speed" value={match.shootingSpeed} />
-            </div>
-            <div className="mt-3">
-              <StatItem label="Human Player Rating" value={match.humanPlayerRating.toUpperCase()} />
+            <SectionHeader title="Estimated Points" />
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div className="bg-surfaceElevated rounded-lg p-3 text-center">
+                <p className="text-xs text-textSecondary">Auto</p>
+                <p className="text-xl font-bold">{points.autoPoints}</p>
+              </div>
+              <div className="bg-surfaceElevated rounded-lg p-3 text-center">
+                <p className="text-xs text-textSecondary">Teleop</p>
+                <p className="text-xl font-bold">{points.teleopPoints}</p>
+              </div>
+              <div className="bg-surfaceElevated rounded-lg p-3 text-center">
+                <p className="text-xs text-textSecondary">Endgame</p>
+                <p className="text-xl font-bold">{points.endgamePoints}</p>
+              </div>
+              <div className="bg-success/10 border border-success/30 rounded-lg p-3 text-center">
+                <p className="text-xs text-success">Total</p>
+                <p className="text-xl font-bold text-success">{points.total}</p>
+              </div>
             </div>
           </div>
 
-          {/* Overall Comments */}
-          {match.commentsOverall && (
+          {/* Quality Flags */}
+          <div>
+            <SectionHeader title="Quality Flags" />
+            <div className="flex flex-wrap gap-2 mb-3">
+              <BooleanBadge value={match.eff_rep_bulldozed_fuel} label="Bulldozed Fuel" />
+              <BooleanBadge value={match.poor_fuel_scoring_accuracy} label="Poor Accuracy" />
+              <BooleanBadge value={match.lost_connection} label="Lost Connection" />
+              <BooleanBadge value={match.no_robot_on_field} label="No Robot" />
+            </div>
+            {match.relative_driver_performance && (
+              <StatItem label="Relative Driver Performance" value={match.relative_driver_performance} />
+            )}
+          </div>
+
+          {/* Notes */}
+          {match.notes && (
             <div>
-              <SectionHeader title="Overall Comments" />
+              <SectionHeader title="Scout Notes" />
               <div className="p-3 bg-surfaceElevated rounded">
-                <p>{match.commentsOverall}</p>
+                <p>{match.notes}</p>
               </div>
             </div>
           )}
 
           {/* Metadata */}
           <div className="text-xs text-textMuted border-t border-border pt-4">
-            <p>Scouted by: {match.scoutName}</p>
-            <p>Recorded: {new Date(match.timestamp).toLocaleString()}</p>
+            <p>Scouter: {match.scouter_id}</p>
+            <p>Match Key: {match.match_key}</p>
           </div>
         </div>
 

@@ -2,22 +2,22 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { PickList, PickListTeam, PickListConfig } from '../types/pickList';
 import type { TBAEventRankings } from '../types/tba';
-import type { TeamStatistics } from '../types/scouting';
+import type { RealTeamStatistics } from '../types/scoutingReal';
 import { teamKeyToNumber } from '../utils/tbaApi';
 
 // Red flag auto-detection thresholds
 export interface RedFlagThresholds {
-  diedRate: number; // Flag if >= this percentage
-  mechanicalIssuesRate: number;
-  tippedRate: number;
-  noShowRate: number;
+  lostConnectionRate: number;
+  noRobotRate: number;
+  climbFailedRate: number;
+  poorAccuracyRate: number;
 }
 
 export const DEFAULT_RED_FLAG_THRESHOLDS: RedFlagThresholds = {
-  diedRate: 20, // Flag if died 20% or more of matches
-  mechanicalIssuesRate: 25, // Flag if mechanical issues 25% or more
-  tippedRate: 15, // Flag if tipped 15% or more
-  noShowRate: 10, // Flag if no-showed 10% or more
+  lostConnectionRate: 20,
+  noRobotRate: 10,
+  climbFailedRate: 30,
+  poorAccuracyRate: 30,
 };
 
 interface PickListState {
@@ -46,7 +46,7 @@ interface PickListState {
 
   // Red flag auto-detection
   setRedFlagThresholds: (thresholds: RedFlagThresholds) => void;
-  autoFlagTeams: (teamStatistics: TeamStatistics[]) => number; // Returns count of newly flagged teams
+  autoFlagTeams: (teamStatistics: RealTeamStatistics[]) => number; // Returns count of newly flagged teams
 
   // TBA integration
   importFromTBARankings: (rankings: TBAEventRankings) => void;
@@ -363,10 +363,10 @@ export const usePickListStore = create<PickListState>()(
 
           // Check if team exceeds any threshold
           const shouldFlag =
-            stats.diedRate >= redFlagThresholds.diedRate ||
-            stats.mechanicalIssuesRate >= redFlagThresholds.mechanicalIssuesRate ||
-            stats.tippedRate >= redFlagThresholds.tippedRate ||
-            stats.noShowRate >= redFlagThresholds.noShowRate;
+            stats.lostConnectionRate >= redFlagThresholds.lostConnectionRate ||
+            stats.noRobotRate >= redFlagThresholds.noRobotRate ||
+            stats.climbFailedRate >= redFlagThresholds.climbFailedRate ||
+            stats.poorAccuracyRate >= redFlagThresholds.poorAccuracyRate;
 
           // Only count as newly flagged if it wasn't already flagged
           if (shouldFlag && !team.flagged) {

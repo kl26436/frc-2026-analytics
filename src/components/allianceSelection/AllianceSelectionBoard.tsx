@@ -48,7 +48,7 @@ function AllianceSelectionBoard({
   onRemoveParticipant,
   onSendMessage,
 }: AllianceSelectionBoardProps) {
-  const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
+  const teamStatistics = useAnalyticsStore(state => state.realTeamStatistics);
 
   const searchQuery = useAllianceSelectionStore(state => state.searchQuery);
   const setSearchQuery = useAllianceSelectionStore(state => state.setSearchQuery);

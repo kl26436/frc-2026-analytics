@@ -9,6 +9,21 @@ interface AccessConfig {
   adminEmails: string[];
 }
 
+export interface EventConfig {
+  eventCode: string;
+  homeTeamNumber: number;
+  updatedBy?: string;
+  updatedAt?: string;
+  autoSyncEnabled?: boolean;
+}
+
+export interface UserProfile {
+  firstName: string;
+  lastName: string;
+  displayName: string;
+  photoURL: string | null;
+}
+
 export interface LiveSession {
   sessionCode: string;
   sessionId: string;
@@ -37,6 +52,8 @@ interface AuthContextType {
   accessRequests: AccessRequest[];
   hasRequestedAccess: boolean;
   liveSession: LiveSession | null;
+  eventConfig: EventConfig | null;
+  userProfiles: Record<string, UserProfile>;
   signInWithGoogle: () => Promise<User | null>;
   signOut: () => Promise<void>;
   requestAccess: (firstName: string, lastName: string) => Promise<void>;
@@ -48,6 +65,8 @@ interface AuthContextType {
   removeAdminEmail: (email: string) => Promise<void>;
   setLiveSession: (session: LiveSession) => Promise<void>;
   clearLiveSession: () => Promise<void>;
+  setEventConfig: (config: EventConfig) => Promise<void>;
+  setUserProfile: (email: string, profile: Partial<UserProfile>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -57,15 +76,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [accessConfig, setAccessConfig] = useState<AccessConfig | null>(null);
   const [accessRequests, setAccessRequests] = useState<AccessRequest[]>([]);
   const [liveSession, setLiveSessionState] = useState<LiveSession | null>(null);
+  const [eventConfig, setEventConfigState] = useState<EventConfig | null>(null);
+  const [userProfiles, setUserProfiles] = useState<Record<string, UserProfile>>({});
 
-  // Listen to the access config document — restart when auth changes
   const uid = user?.uid;
-  useEffect(() => {
-    if (!uid) {
-      setAccessConfig(null);
-      return;
-    }
 
+  // Listen to access config
+  useEffect(() => {
+    if (!uid) { setAccessConfig(null); return; }
     const unsubscribe = onSnapshot(
       doc(db, 'config', 'access'),
       (snapshot) => {
@@ -79,56 +97,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setAccessConfig({ allowedEmails: [], adminEmails: [] });
         }
       },
-      () => {
-        setAccessConfig({ allowedEmails: [], adminEmails: [] });
-      }
+      () => setAccessConfig({ allowedEmails: [], adminEmails: [] })
     );
     return unsubscribe;
   }, [uid]);
 
-  // Listen to access requests — restart when auth changes
+  // Listen to access requests
   useEffect(() => {
-    if (!uid) {
-      setAccessRequests([]);
-      return;
-    }
-
+    if (!uid) { setAccessRequests([]); return; }
     const unsubscribe = onSnapshot(
       doc(db, 'config', 'accessRequests'),
       (snapshot) => {
-        if (snapshot.exists()) {
-          const data = snapshot.data();
-          setAccessRequests((data.requests ?? []) as AccessRequest[]);
-        } else {
-          setAccessRequests([]);
-        }
+        setAccessRequests(snapshot.exists() ? (snapshot.data().requests ?? []) as AccessRequest[] : []);
       },
-      () => {
-        setAccessRequests([]);
-      }
+      () => setAccessRequests([])
     );
     return unsubscribe;
   }, [uid]);
 
-  // Listen to live session broadcast — restart when auth changes
+  // Listen to live session broadcast
   useEffect(() => {
-    if (!uid) {
-      setLiveSessionState(null);
-      return;
-    }
-
+    if (!uid) { setLiveSessionState(null); return; }
     const unsubscribe = onSnapshot(
       doc(db, 'config', 'liveSession'),
       (snapshot) => {
-        if (snapshot.exists()) {
-          setLiveSessionState(snapshot.data() as LiveSession);
-        } else {
-          setLiveSessionState(null);
-        }
+        setLiveSessionState(snapshot.exists() ? snapshot.data() as LiveSession : null);
       },
-      () => {
-        setLiveSessionState(null);
-      }
+      () => setLiveSessionState(null)
+    );
+    return unsubscribe;
+  }, [uid]);
+
+  // Listen to event config (active event + home team, set by admins)
+  useEffect(() => {
+    if (!uid) { setEventConfigState(null); return; }
+    const unsubscribe = onSnapshot(
+      doc(db, 'config', 'eventConfig'),
+      (snapshot) => {
+        setEventConfigState(snapshot.exists() ? snapshot.data() as EventConfig : null);
+      },
+      () => setEventConfigState(null)
+    );
+    return unsubscribe;
+  }, [uid]);
+
+  // Listen to user profiles (names + avatars for approved users)
+  useEffect(() => {
+    if (!uid) { setUserProfiles({}); return; }
+    const unsubscribe = onSnapshot(
+      doc(db, 'config', 'userProfiles'),
+      (snapshot) => {
+        setUserProfiles(snapshot.exists() ? (snapshot.data().profiles ?? {}) as Record<string, UserProfile> : {});
+      },
+      () => setUserProfiles({})
     );
     return unsubscribe;
   }, [uid]);
@@ -145,11 +166,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const hasRequestedAccess = isAuthenticated && !!userEmail &&
     accessRequests.some(r => r.email.toLowerCase() === userEmail);
 
-  // Stay in loading state while user is authenticated but config hasn't loaded yet
-  // (covers the gap between sign-in and config listener starting)
   const loading = authLoading || (!!user && accessConfig === null);
 
-  // Bootstrap: if no config exists and user signs in, create it with them as admin
+  // Bootstrap: first user to sign in becomes admin
   useEffect(() => {
     if (!user || !userEmail || !accessConfig || loading) return;
     if (accessConfig.allowedEmails.length === 0 && accessConfig.adminEmails.length === 0 && !user.isAnonymous) {
@@ -165,13 +184,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [user, userEmail, accessConfig, loading]);
 
+  // Upsert user profile on sign-in (for approved users)
+  useEffect(() => {
+    if (!user || !userEmail || !isAllowed) return;
+    const displayName = user.displayName ?? '';
+    const spaceIdx = displayName.indexOf(' ');
+    const firstName = spaceIdx > 0 ? displayName.slice(0, spaceIdx) : displayName;
+    const lastName = spaceIdx > 0 ? displayName.slice(spaceIdx + 1) : '';
+    const profile: UserProfile = {
+      firstName,
+      lastName,
+      displayName,
+      photoURL: user.photoURL,
+    };
+    const profilesRef = doc(db, 'config', 'userProfiles');
+    // Merge so we don't overwrite other users' profiles
+    setDoc(profilesRef, { profiles: { [userEmail]: profile } }, { merge: true }).catch(() => {});
+  }, [user, userEmail, isAllowed]);
+
   const configRef = doc(db, 'config', 'access');
 
   const requestAccess = async (firstName: string, lastName: string) => {
     if (!user || !userEmail) return;
-    // Don't re-request
     if (accessRequests.some(r => r.email.toLowerCase() === userEmail)) return;
-
     const newRequest: AccessRequest = {
       email: userEmail,
       firstName,
@@ -180,18 +215,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       photoURL: user.photoURL,
       requestedAt: new Date().toISOString(),
     };
-
     const requestsRef = doc(db, 'config', 'accessRequests');
-    await setDoc(requestsRef, {
-      requests: [...accessRequests, newRequest],
-    });
+    await setDoc(requestsRef, { requests: [...accessRequests, newRequest] });
   };
 
   const approveRequest = async (email: string) => {
     const normalized = email.toLowerCase().trim();
-    // Add to allowed list (atomic)
     await addAllowedEmail(normalized);
-    // Remove from requests
+    // Copy profile from request to userProfiles
+    const request = accessRequests.find(r => r.email.toLowerCase() === normalized);
+    if (request) {
+      const profile: UserProfile = {
+        firstName: request.firstName,
+        lastName: request.lastName,
+        displayName: request.displayName,
+        photoURL: request.photoURL,
+      };
+      await setDoc(doc(db, 'config', 'userProfiles'), { profiles: { [normalized]: profile } }, { merge: true });
+    }
     const requestsRef = doc(db, 'config', 'accessRequests');
     await setDoc(requestsRef, {
       requests: accessRequests.filter(r => r.email.toLowerCase() !== normalized),
@@ -208,16 +249,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const addAllowedEmail = async (email: string) => {
     const normalized = email.toLowerCase().trim();
-    await updateDoc(configRef, {
-      allowedEmails: arrayUnion(normalized),
-    });
+    await updateDoc(configRef, { allowedEmails: arrayUnion(normalized) });
   };
 
   const removeAllowedEmail = async (email: string) => {
     const normalized = email.toLowerCase().trim();
-    await updateDoc(configRef, {
-      allowedEmails: arrayRemove(normalized),
-    });
+    await updateDoc(configRef, { allowedEmails: arrayRemove(normalized) });
   };
 
   const addAdminEmail = async (email: string) => {
@@ -231,9 +268,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const removeAdminEmail = async (email: string) => {
     if (!accessConfig || accessConfig.adminEmails.length <= 1) return;
     const normalized = email.toLowerCase().trim();
-    await updateDoc(configRef, {
-      adminEmails: arrayRemove(normalized),
-    });
+    await updateDoc(configRef, { adminEmails: arrayRemove(normalized) });
   };
 
   const setLiveSession = async (session: LiveSession) => {
@@ -242,6 +277,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const clearLiveSession = async () => {
     await deleteDoc(doc(db, 'config', 'liveSession'));
+  };
+
+  const setEventConfig = async (config: EventConfig) => {
+    await setDoc(doc(db, 'config', 'eventConfig'), {
+      ...config,
+      updatedBy: userEmail ?? 'unknown',
+      updatedAt: new Date().toISOString(),
+    });
+  };
+
+  const setUserProfile = async (email: string, profile: Partial<UserProfile>) => {
+    const normalized = email.toLowerCase().trim();
+    const existing = userProfiles[normalized] ?? { firstName: '', lastName: '', displayName: '', photoURL: null };
+    const merged: UserProfile = {
+      ...existing,
+      ...profile,
+      displayName: profile.displayName ?? `${profile.firstName ?? existing.firstName} ${profile.lastName ?? existing.lastName}`.trim(),
+    };
+    await setDoc(doc(db, 'config', 'userProfiles'), { profiles: { [normalized]: merged } }, { merge: true });
   };
 
   return (
@@ -256,6 +310,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       accessRequests,
       hasRequestedAccess,
       liveSession,
+      eventConfig,
+      userProfiles,
       signInWithGoogle,
       signOut,
       requestAccess,
@@ -267,6 +323,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       removeAdminEmail,
       setLiveSession,
       clearLiveSession,
+      setEventConfig,
+      setUserProfile,
     }}>
       {children}
     </AuthContext.Provider>

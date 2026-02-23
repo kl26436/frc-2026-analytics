@@ -19,7 +19,7 @@ interface AllianceSelectionLobbyProps {
 function AllianceSelectionLobby({ onCreateSession, onJoinSession, onClearLiveSession, loading, error, isAdmin, userDisplayName, liveSession }: AllianceSelectionLobbyProps) {
   const pickList = usePickListStore(state => state.pickList);
   const eventCode = useAnalyticsStore(state => state.eventCode);
-  const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
+  const teamStatistics = useAnalyticsStore(state => state.realTeamStatistics);
   const activeSessionId = useAllianceSelectionStore(state => state.activeSessionId);
   const setLastDisplayName = useAllianceSelectionStore(state => state.setLastDisplayName);
   const setLastTeamNumber = useAllianceSelectionStore(state => state.setLastTeamNumber);

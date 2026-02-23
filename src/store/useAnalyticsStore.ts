@@ -1,70 +1,144 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { MatchScoutingEntry, PitScoutingEntry, TeamStatistics } from '../types/scouting';
+import { collection, doc, onSnapshot } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from '../lib/firebase';
+import type { RealScoutEntry, RealTeamStatistics, PgTBAMatch, SyncMeta } from '../types/scoutingReal';
 import type { TBAEventData } from '../types/tba';
-import { generateMockData } from '../data/mockData';
-import { calculateAllTeamStatistics } from '../utils/statistics';
+import { calculateAllRealTeamStatistics } from '../utils/realStatistics';
 import { getAllEventData } from '../utils/tbaApi';
 
 interface AnalyticsState {
-  // Raw data
-  matchEntries: MatchScoutingEntry[];
-  pitEntries: PitScoutingEntry[];
+  // ── Scout data ──
+  realScoutEntries: RealScoutEntry[];
+  realTeamStatistics: RealTeamStatistics[];
+  pgTbaMatches: PgTBAMatch[];
+  syncMeta: SyncMeta | null;
+  realDataLoading: boolean;
+  realDataError: string | null;
 
-  // TBA data
+  // ── TBA data ──
   tbaData: TBAEventData | null;
   tbaLoading: boolean;
   tbaError: string | null;
   autoRefreshEnabled: boolean;
 
-  // Calculated stats
-  teamStatistics: TeamStatistics[];
-
-  // UI state
+  // ── UI state ──
   selectedTeams: number[];
   eventCode: string;
+  homeTeamNumber: number;
 
-  // Actions
-  loadMockData: () => Promise<void>;
-  calculateStats: () => void;
+  // ── Actions ──
+  subscribeToRealData: (eventKey: string) => void;
+  unsubscribeFromRealData: () => void;
+  calculateRealStats: () => void;
   toggleTeamSelection: (teamNumber: number) => void;
   clearTeamSelection: () => void;
   setEventCode: (code: string) => void;
+  setHomeTeamNumber: (n: number) => void;
   fetchTBAData: (eventCode?: string) => Promise<TBAEventData | null>;
   setAutoRefresh: (enabled: boolean) => void;
   clearTBAData: () => void;
+  triggerSync: (eventKey: string) => Promise<SyncMeta>;
 }
+
+// Store unsubscribe functions outside the store to avoid serialization issues
+let _unsubScout: (() => void) | null = null;
+let _unsubSyncMeta: (() => void) | null = null;
+let _unsubTbaMatches: (() => void) | null = null;
+let _subscribedEventKey: string | null = null;
 
 export const useAnalyticsStore = create<AnalyticsState>()(
   persist(
     (set, get) => ({
       // Initial state
-      matchEntries: [],
-      pitEntries: [],
-      teamStatistics: [],
+      realScoutEntries: [],
+      realTeamStatistics: [],
+      pgTbaMatches: [],
+      syncMeta: null,
+      realDataLoading: false,
+      realDataError: null,
       selectedTeams: [],
-      eventCode: '2025txcmp1',
+      eventCode: '2026week0',
+      homeTeamNumber: 148,
       tbaData: null,
       tbaLoading: false,
       tbaError: null,
       autoRefreshEnabled: false,
 
-      // Load mock data
-      loadMockData: async () => {
-        const { eventCode } = get();
-        const { matchEntries, pitEntries } = await generateMockData(eventCode);
-        set({ matchEntries, pitEntries });
-        get().calculateStats();
+      // ── Real Data Subscriptions ──────────────────────────────────────
+
+      subscribeToRealData: (eventKey: string) => {
+        // Don't re-subscribe if already listening to this event
+        if (_subscribedEventKey === eventKey && _unsubScout) return;
+
+        // Clean up previous listeners
+        get().unsubscribeFromRealData();
+
+        _subscribedEventKey = eventKey;
+        set({ realDataLoading: true, realDataError: null });
+
+        // 1. Subscribe to scout entries: scoutData/{eventKey}/entries
+        const entriesRef = collection(db, 'scoutData', eventKey, 'entries');
+        _unsubScout = onSnapshot(
+          entriesRef,
+          (snapshot) => {
+            const entries: RealScoutEntry[] = snapshot.docs.map(d => ({
+              ...d.data(),
+              id: d.id,
+            })) as RealScoutEntry[];
+            set({ realScoutEntries: entries, realDataLoading: false, realDataError: null });
+            get().calculateRealStats();
+          },
+          (error) => {
+            console.error('Scout data listener error:', error);
+            set({ realDataError: error.message, realDataLoading: false });
+          }
+        );
+
+        // 2. Subscribe to sync metadata: config/syncMeta
+        const syncMetaRef = doc(db, 'config', 'syncMeta');
+        _unsubSyncMeta = onSnapshot(
+          syncMetaRef,
+          (snapshot) => {
+            if (snapshot.exists()) {
+              set({ syncMeta: snapshot.data() as SyncMeta });
+            }
+          },
+          (error) => {
+            console.error('SyncMeta listener error:', error);
+          }
+        );
+
+        // 3. Subscribe to TBA matches: tbaData/{eventKey}/matches
+        const matchesRef = collection(db, 'tbaData', eventKey, 'matches');
+        _unsubTbaMatches = onSnapshot(
+          matchesRef,
+          (snapshot) => {
+            const matches: PgTBAMatch[] = snapshot.docs.map(d => d.data()) as PgTBAMatch[];
+            set({ pgTbaMatches: matches });
+          },
+          (error) => {
+            console.error('TBA matches listener error:', error);
+          }
+        );
       },
 
-      // Calculate team statistics
-      calculateStats: () => {
-        const { matchEntries, pitEntries } = get();
-        const teamStatistics = calculateAllTeamStatistics(matchEntries, pitEntries);
-        set({ teamStatistics });
+      unsubscribeFromRealData: () => {
+        if (_unsubScout) { _unsubScout(); _unsubScout = null; }
+        if (_unsubSyncMeta) { _unsubSyncMeta(); _unsubSyncMeta = null; }
+        if (_unsubTbaMatches) { _unsubTbaMatches(); _unsubTbaMatches = null; }
+        _subscribedEventKey = null;
       },
 
-      // Toggle team selection
+      calculateRealStats: () => {
+        const { realScoutEntries } = get();
+        const realTeamStatistics = calculateAllRealTeamStatistics(realScoutEntries);
+        set({ realTeamStatistics });
+      },
+
+      // ── Team Selection ─────────────────────────────────────────────
+
       toggleTeamSelection: (teamNumber: number) => {
         const { selectedTeams } = get();
         if (selectedTeams.includes(teamNumber)) {
@@ -74,21 +148,25 @@ export const useAnalyticsStore = create<AnalyticsState>()(
         }
       },
 
-      // Clear team selection
       clearTeamSelection: () => {
         set({ selectedTeams: [] });
       },
 
-      // Set event code
+      // ── Event Config ───────────────────────────────────────────────
+
       setEventCode: (code: string) => {
         set({ eventCode: code });
       },
 
-      // Fetch TBA data for current or specified event
+      setHomeTeamNumber: (n: number) => {
+        set({ homeTeamNumber: n });
+      },
+
+      // ── TBA Data ───────────────────────────────────────────────────
+
       fetchTBAData: async (eventCodeOverride?: string) => {
         const code = eventCodeOverride || get().eventCode;
         set({ tbaLoading: true, tbaError: null });
-
         try {
           const data = await getAllEventData(code);
           set({ tbaData: data, tbaLoading: false });
@@ -100,20 +178,27 @@ export const useAnalyticsStore = create<AnalyticsState>()(
         }
       },
 
-      // Toggle auto-refresh
       setAutoRefresh: (enabled: boolean) => {
         set({ autoRefreshEnabled: enabled });
       },
 
-      // Clear TBA data
       clearTBAData: () => {
         set({ tbaData: null, tbaError: null });
+      },
+
+      triggerSync: async (eventKey: string) => {
+        const syncFn = httpsCallable<{ eventKey: string }, SyncMeta>(functions, 'syncScoutData');
+        const result = await syncFn({ eventKey });
+        return result.data;
       },
     }),
     {
       name: 'frc-analytics-storage',
+      version: 2,
+      migrate: () => ({}),
       partialize: (state) => ({
         eventCode: state.eventCode,
+        homeTeamNumber: state.homeTeamNumber,
         selectedTeams: state.selectedTeams,
         tbaData: state.tbaData,
         autoRefreshEnabled: state.autoRefreshEnabled,

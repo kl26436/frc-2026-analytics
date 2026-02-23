@@ -1,175 +1,118 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
-import { usePickListStore } from '../store/usePickListStore';
 import {
-  Settings,
-  Download,
-  Trash2,
-  CheckCircle,
-  AlertCircle,
-  Loader,
   RefreshCw,
   Trophy,
   Users,
   Calendar,
-  Clock
+  Clock,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import { teamKeyToNumber } from '../utils/tbaApi';
+import type { TBAMatch } from '../types/tba';
 
 const AUTO_REFRESH_INTERVAL = 10 * 60 * 1000; // 10 minutes
 
 function EventSetup() {
   const eventCode = useAnalyticsStore(state => state.eventCode);
-  const setEventCode = useAnalyticsStore(state => state.setEventCode);
-  const loadMockData = useAnalyticsStore(state => state.loadMockData);
   const tbaData = useAnalyticsStore(state => state.tbaData);
   const tbaLoading = useAnalyticsStore(state => state.tbaLoading);
   const tbaError = useAnalyticsStore(state => state.tbaError);
   const fetchTBAData = useAnalyticsStore(state => state.fetchTBAData);
   const autoRefreshEnabled = useAnalyticsStore(state => state.autoRefreshEnabled);
   const setAutoRefresh = useAnalyticsStore(state => state.setAutoRefresh);
+  const syncMeta = useAnalyticsStore(state => state.syncMeta);
+  const realScoutEntries = useAnalyticsStore(state => state.realScoutEntries);
 
-  const clearPickList = usePickListStore(state => state.clearPickList);
-  const initializePickList = usePickListStore(state => state.initializePickList);
-  const importFromTBARankings = usePickListStore(state => state.importFromTBARankings);
-
-  const [inputEventCode, setInputEventCode] = useState(eventCode);
-  const [isInitializing, setIsInitializing] = useState(false);
-  const [status, setStatus] = useState<{ type: 'success' | 'error' | null; message: string }>({
-    type: null,
-    message: '',
-  });
-
+  const [expandedMatch, setExpandedMatch] = useState<string | null>(null);
   const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Auto-refresh effect
   useEffect(() => {
     if (autoRefreshEnabled && eventCode) {
-      // Initial fetch if no data
-      if (!tbaData) {
-        fetchTBAData();
-      }
-
-      // Set up interval
-      refreshIntervalRef.current = setInterval(() => {
-        fetchTBAData();
-      }, AUTO_REFRESH_INTERVAL);
-
-      return () => {
-        if (refreshIntervalRef.current) {
-          clearInterval(refreshIntervalRef.current);
-        }
-      };
+      if (!tbaData) fetchTBAData();
+      refreshIntervalRef.current = setInterval(() => fetchTBAData(), AUTO_REFRESH_INTERVAL);
+      return () => { if (refreshIntervalRef.current) clearInterval(refreshIntervalRef.current); };
     } else {
-      if (refreshIntervalRef.current) {
-        clearInterval(refreshIntervalRef.current);
-      }
+      if (refreshIntervalRef.current) clearInterval(refreshIntervalRef.current);
     }
   }, [autoRefreshEnabled, eventCode, fetchTBAData, tbaData]);
 
-  const handleCheckEvent = async () => {
-    if (!inputEventCode) {
-      setStatus({ type: 'error', message: 'Please enter an event code' });
-      return;
-    }
-
-    setStatus({ type: null, message: '' });
-    const data = await fetchTBAData(inputEventCode);
-
-    if (data && data.event) {
-      setStatus({
-        type: 'success',
-        message: `Found event: ${data.event.name}`,
-      });
-    } else if (data) {
-      setStatus({
-        type: 'success',
-        message: `Found ${data.teams.length} teams and ${data.matches.length} matches`,
-      });
-    }
-  };
-
-  const handleInitializeEvent = async () => {
-    if (!inputEventCode || !tbaData) {
-      setStatus({ type: 'error', message: 'Please check event first' });
-      return;
-    }
-
-    setIsInitializing(true);
-    setStatus({ type: null, message: '' });
-
-    try {
-      // Step 1: Clear pick list
-      clearPickList();
-
-      // Step 2: Update event code
-      setEventCode(inputEventCode);
-
-      // Step 3: Initialize new pick list
-      initializePickList(inputEventCode);
-
-      // Step 4: Import rankings if available
-      let rankingsMessage = '';
-      if (tbaData.rankings && tbaData.rankings.rankings.length > 0) {
-        importFromTBARankings(tbaData.rankings);
-        const top12Count = Math.min(12, tbaData.rankings.rankings.length);
-        const remainingCount = Math.max(0, tbaData.rankings.rankings.length - 12);
-        rankingsMessage = ` ${top12Count} teams imported to "Potatoes", ${remainingCount} to "Chicken Nuggets".`;
-      }
-
-      // Step 5: Load mock data
-      await loadMockData();
-
-      setStatus({
-        type: 'success',
-        message: `Event ${inputEventCode} initialized!${rankingsMessage}`,
-      });
-    } catch (error) {
-      setStatus({
-        type: 'error',
-        message: `Failed to initialize: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      });
-    } finally {
-      setIsInitializing(false);
-    }
-  };
-
-  const handleResetPickList = () => {
-    if (confirm('Are you sure you want to clear the entire pick list? This cannot be undone.')) {
-      clearPickList();
-      initializePickList(eventCode);
-
-      // Re-import TBA rankings if available
-      let message = 'Pick list cleared and reinitialized';
-      if (tbaData?.rankings && tbaData.rankings.rankings.length > 0) {
-        importFromTBARankings(tbaData.rankings);
-        const top12Count = Math.min(12, tbaData.rankings.rankings.length);
-        const remainingCount = Math.max(0, tbaData.rankings.rankings.length - 12);
-        message += `. ${top12Count} teams imported to tier 2, ${remainingCount} to tier 3 (by event rank).`;
-      }
-
-      setStatus({ type: 'success', message });
-    }
-  };
-
-  const handleRefresh = () => {
-    fetchTBAData();
-  };
-
   const formatLastUpdated = (timestamp: string | null) => {
     if (!timestamp) return 'Never';
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString();
+    return new Date(timestamp).toLocaleTimeString();
   };
 
-  // Sort matches by time for display
+  const toggleMatch = (key: string) => {
+    setExpandedMatch(prev => prev === key ? null : key);
+  };
+
+  const climbLabel = (val: unknown) => {
+    if (val === 'Level3') return 'L3';
+    if (val === 'Level2') return 'L2';
+    if (val === 'Level1') return 'L1';
+    return '—';
+  };
+
+  const renderScoreBreakdown = (match: TBAMatch) => {
+    const bd = match.score_breakdown;
+    if (!bd) return <p className="text-xs text-textMuted py-2 px-3">No score breakdown available.</p>;
+    const r = bd.red as Record<string, unknown>;
+    const b = bd.blue as Record<string, unknown>;
+    const hub = (side: Record<string, unknown>) => side.hubScore as Record<string, unknown> | undefined;
+
+    const row = (label: string, red: unknown, blue: unknown, unit = '') => (
+      <tr key={label} className="border-b border-border/30">
+        <td className="py-1 px-2 text-xs text-textSecondary">{label}</td>
+        <td className="py-1 px-2 text-xs text-center text-redAlliance font-medium">{String(red ?? '—')}{unit}</td>
+        <td className="py-1 px-2 text-xs text-center text-blueAlliance font-medium">{String(blue ?? '—')}{unit}</td>
+      </tr>
+    );
+
+    return (
+      <div className="px-3 pb-3 pt-1 bg-surfaceElevated/50">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-border">
+              <th className="text-left py-1 px-2 text-xs text-textMuted"></th>
+              <th className="text-center py-1 px-2 text-xs font-semibold text-redAlliance">Red</th>
+              <th className="text-center py-1 px-2 text-xs font-semibold text-blueAlliance">Blue</th>
+            </tr>
+          </thead>
+          <tbody>
+            {row('Auto Hub', hub(r)?.autoCount, hub(b)?.autoCount, ' balls')}
+            {row('Auto Hub Pts', hub(r)?.autoPoints, hub(b)?.autoPoints, ' pts')}
+            {row('Auto Tower', `${climbLabel(r.autoTowerRobot1)} / ${climbLabel(r.autoTowerRobot2)} / ${climbLabel(r.autoTowerRobot3)}`,
+                              `${climbLabel(b.autoTowerRobot1)} / ${climbLabel(b.autoTowerRobot2)} / ${climbLabel(b.autoTowerRobot3)}`)}
+            {row('Auto Tower Pts', r.autoTowerPoints, b.autoTowerPoints, ' pts')}
+            {row('Total Auto', r.totalAutoPoints, b.totalAutoPoints, ' pts')}
+            <tr><td colSpan={3} className="pt-1 pb-0"></td></tr>
+            {row('Teleop Hub', hub(r)?.teleopCount, hub(b)?.teleopCount, ' balls')}
+            {row('Teleop Hub Pts', hub(r)?.teleopPoints, hub(b)?.teleopPoints, ' pts')}
+            {row('Total Teleop', r.totalTeleopPoints, b.totalTeleopPoints, ' pts')}
+            <tr><td colSpan={3} className="pt-1 pb-0"></td></tr>
+            {row('Endgame Climb', `${climbLabel(r.endGameTowerRobot1)} / ${climbLabel(r.endGameTowerRobot2)} / ${climbLabel(r.endGameTowerRobot3)}`,
+                                 `${climbLabel(b.endGameTowerRobot1)} / ${climbLabel(b.endGameTowerRobot2)} / ${climbLabel(b.endGameTowerRobot3)}`)}
+            {row('Endgame Tower Pts', r.endGameTowerPoints, b.endGameTowerPoints, ' pts')}
+            {row('Foul Pts', r.foulPoints, b.foulPoints, ' pts')}
+            <tr><td colSpan={3} className="pt-1 pb-0"></td></tr>
+            {row('Total Score', r.totalPoints, b.totalPoints, ' pts')}
+            {row('RPs Earned', r.rp, b.rp)}
+            {row('Energized RP', r.energizedAchieved ? '✓' : '✗', b.energizedAchieved ? '✓' : '✗')}
+            {row('Supercharged RP', r.superchargedAchieved ? '✓' : '✗', b.superchargedAchieved ? '✓' : '✗')}
+            {row('Traversal RP', r.traversalAchieved ? '✓' : '✗', b.traversalAchieved ? '✓' : '✗')}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
   const sortedMatches = tbaData?.matches?.slice().sort((a, b) => {
-    // Sort by comp_level first (qm, ef, qf, sf, f)
-    const levelOrder = { qm: 0, ef: 1, qf: 2, sf: 3, f: 4 };
+    const levelOrder: Record<string, number> = { qm: 0, ef: 1, qf: 2, sf: 3, f: 4 };
     if (levelOrder[a.comp_level] !== levelOrder[b.comp_level]) {
       return levelOrder[a.comp_level] - levelOrder[b.comp_level];
     }
-    // Then by match number
     return a.match_number - b.match_number;
   }) || [];
 
@@ -180,9 +123,9 @@ function EventSetup() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Event Setup</h1>
-        <p className="text-textSecondary mt-2">
-          Load event data from The Blue Alliance and manage your pick list
+        <h1 className="text-3xl font-bold">Event</h1>
+        <p className="text-textSecondary mt-1 text-sm">
+          Live event data from The Blue Alliance · Event setup is managed in Admin Settings
         </p>
       </div>
 
@@ -190,15 +133,14 @@ function EventSetup() {
       <div className="bg-surface p-6 rounded-lg border border-border">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <Settings size={24} className="text-blueAlliance" />
-            <h2 className="text-xl font-bold">Current Event</h2>
+            <Clock size={20} className="text-blueAlliance" />
+            <h2 className="text-xl font-bold">{tbaData?.event?.name ?? eventCode}</h2>
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={handleRefresh}
+              onClick={() => fetchTBAData()}
               disabled={tbaLoading}
               className="flex items-center gap-2 px-3 py-2 bg-surfaceElevated hover:bg-interactive rounded-lg transition-colors text-sm"
-              title="Refresh TBA Data"
             >
               <RefreshCw size={16} className={tbaLoading ? 'animate-spin' : ''} />
               Refresh
@@ -237,24 +179,40 @@ function EventSetup() {
           </div>
         </div>
 
+        {/* Scout data sync status */}
+        {syncMeta && (
+          <div className="mt-4 grid grid-cols-3 gap-3">
+            <div className="bg-surfaceElevated p-3 rounded-lg">
+              <p className="text-xs text-textSecondary">Scout Entries</p>
+              <p className="text-xl font-bold">{realScoutEntries.length}</p>
+            </div>
+            <div className="bg-surfaceElevated p-3 rounded-lg">
+              <p className="text-xs text-textSecondary">Last Sync</p>
+              <p className="text-sm font-semibold">
+                {new Date(syncMeta.lastSyncAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              </p>
+            </div>
+            <div className="bg-surfaceElevated p-3 rounded-lg">
+              <p className="text-xs text-textSecondary">Sync Duration</p>
+              <p className="text-xl font-bold">{(syncMeta.syncDurationMs / 1000).toFixed(1)}s</p>
+            </div>
+          </div>
+        )}
+
         {tbaData?.event && (
-          <div className="mt-4 p-4 bg-surfaceElevated rounded-lg">
-            <p className="font-bold text-lg">{tbaData.event.name}</p>
-            <p className="text-sm text-textSecondary">
-              {tbaData.event.city}, {tbaData.event.state_prov} • {tbaData.event.start_date} to {tbaData.event.end_date}
-            </p>
+          <div className="mt-4 p-3 bg-surfaceElevated rounded-lg text-sm text-textSecondary">
+            {tbaData.event.city}, {tbaData.event.state_prov} · {tbaData.event.start_date} to {tbaData.event.end_date}
           </div>
         )}
 
         {tbaError && (
-          <div className="mt-4 p-3 bg-danger/10 border border-danger/30 rounded-lg text-danger text-sm flex items-center gap-2">
-            <AlertCircle size={16} />
+          <div className="mt-4 p-3 bg-danger/10 border border-danger/30 rounded-lg text-danger text-sm">
             {tbaError}
           </div>
         )}
       </div>
 
-      {/* Rankings Section */}
+      {/* Rankings */}
       {tbaData?.rankings && tbaData.rankings.rankings.length > 0 && (
         <div className="bg-surface p-6 rounded-lg border border-border">
           <div className="flex items-center gap-3 mb-4">
@@ -274,16 +232,14 @@ function EventSetup() {
                 </tr>
               </thead>
               <tbody>
-                {tbaData.rankings.rankings.slice(0, 20).map(r => {
+                {tbaData.rankings.rankings.map(r => {
                   const team = tbaData.teams.find(t => t.key === r.team_key);
                   return (
                     <tr key={r.team_key} className="border-b border-border/50 hover:bg-surfaceElevated">
                       <td className="py-2 px-2 font-bold">{r.rank}</td>
                       <td className="py-2 px-2">
                         <span className="font-semibold">{teamKeyToNumber(r.team_key)}</span>
-                        {team?.nickname && (
-                          <span className="text-textSecondary ml-2">{team.nickname}</span>
-                        )}
+                        {team?.nickname && <span className="text-textSecondary ml-2">{team.nickname}</span>}
                       </td>
                       <td className="py-2 px-2 text-center font-semibold text-warning">{r.extra_stats?.[0] ?? '-'}</td>
                       <td className="py-2 px-2 text-center">{r.record.wins}-{r.record.losses}-{r.record.ties}</td>
@@ -293,11 +249,6 @@ function EventSetup() {
                 })}
               </tbody>
             </table>
-            {tbaData.rankings.rankings.length > 20 && (
-              <p className="text-xs text-textMuted mt-2 text-center">
-                Showing top 20 of {tbaData.rankings.rankings.length} teams
-              </p>
-            )}
           </div>
         </div>
       )}
@@ -315,10 +266,7 @@ function EventSetup() {
                 <p className="font-bold text-sm mb-2">Alliance {idx + 1}</p>
                 <div className="space-y-1">
                   {alliance.picks.map((teamKey, pickIdx) => (
-                    <div
-                      key={teamKey}
-                      className={`text-sm ${pickIdx === 0 ? 'font-bold text-warning' : ''}`}
-                    >
+                    <div key={teamKey} className={`text-sm ${pickIdx === 0 ? 'font-bold text-warning' : ''}`}>
                       {pickIdx === 0 ? '★ ' : ''}{teamKeyToNumber(teamKey)}
                     </div>
                   ))}
@@ -334,14 +282,15 @@ function EventSetup() {
         </div>
       )}
 
-      {/* Match Schedule Summary */}
+      {/* Match Schedule */}
       {tbaData?.matches && tbaData.matches.length > 0 && (
         <div className="bg-surface p-6 rounded-lg border border-border">
           <div className="flex items-center gap-3 mb-4">
             <Calendar size={24} className="text-blueAlliance" />
-            <h2 className="text-xl font-bold">Match Schedule</h2>
+            <h2 className="text-xl font-bold">Matches</h2>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <div className="bg-surfaceElevated p-3 rounded-lg">
               <p className="text-xs text-textSecondary">Qual Matches</p>
               <p className="text-xl font-bold">{qualMatches.length}</p>
@@ -360,155 +309,84 @@ function EventSetup() {
             </div>
           </div>
 
-          {/* Recent/Upcoming Matches */}
-          <div className="space-y-2">
-            <p className="text-sm font-semibold text-textSecondary">Recent/Upcoming Qual Matches</p>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="text-left py-2 px-2">Match</th>
-                    <th className="text-center py-2 px-2 text-redAlliance">Red Alliance</th>
-                    <th className="text-center py-2 px-2">Score</th>
-                    <th className="text-center py-2 px-2 text-blueAlliance">Blue Alliance</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {qualMatches.slice(-10).map(match => (
-                    <tr key={match.key} className="border-b border-border/50 hover:bg-surfaceElevated">
-                      <td className="py-2 px-2 font-bold">Q{match.match_number}</td>
-                      <td className="py-2 px-2 text-center text-redAlliance">
-                        {match.alliances.red.team_keys.map(k => teamKeyToNumber(k)).join(', ')}
-                      </td>
-                      <td className="py-2 px-2 text-center font-mono">
-                        {match.alliances.red.score >= 0 ? (
-                          <span>
-                            <span className={match.alliances.red.score > match.alliances.blue.score ? 'text-success font-bold' : ''}>
-                              {match.alliances.red.score}
-                            </span>
-                            {' - '}
-                            <span className={match.alliances.blue.score > match.alliances.red.score ? 'text-success font-bold' : ''}>
-                              {match.alliances.blue.score}
-                            </span>
-                          </span>
-                        ) : (
-                          <span className="text-textMuted">--</span>
-                        )}
-                      </td>
-                      <td className="py-2 px-2 text-center text-blueAlliance">
-                        {match.alliances.blue.team_keys.map(k => teamKeyToNumber(k)).join(', ')}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          <div className="space-y-4">
+            {(['qm', 'qf', 'sf', 'f'] as const).map(level => {
+              const levelMatches = sortedMatches.filter(m => m.comp_level === level);
+              if (levelMatches.length === 0) return null;
+              const levelLabel: Record<string, string> = { qm: 'Qualifications', qf: 'Quarterfinals', sf: 'Semifinals', f: 'Finals' };
+              return (
+                <div key={level} className="space-y-1">
+                  <p className="text-sm font-semibold text-textSecondary">{levelLabel[level]}</p>
+                  <div className="rounded-lg overflow-hidden border border-border">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-surfaceElevated border-b border-border">
+                          <th className="text-left py-2 px-3 w-6"></th>
+                          <th className="text-left py-2 px-2">Match</th>
+                          <th className="text-center py-2 px-2 text-redAlliance">Red</th>
+                          <th className="text-center py-2 px-2">Score</th>
+                          <th className="text-center py-2 px-2 text-blueAlliance">Blue</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {levelMatches.map(match => {
+                          const isExpanded = expandedMatch === match.key;
+                          const played = match.alliances.red.score >= 0;
+                          const matchLabel = level === 'qm'
+                            ? `Q${match.match_number}`
+                            : `${level.toUpperCase()} ${match.set_number}-${match.match_number}`;
+                          return (
+                            <>
+                              <tr
+                                key={match.key}
+                                onClick={() => toggleMatch(match.key)}
+                                className={`border-b border-border/50 cursor-pointer transition-colors ${isExpanded ? 'bg-surfaceElevated' : 'hover:bg-surfaceElevated/60'}`}
+                              >
+                                <td className="py-2 px-3 text-textMuted">
+                                  {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                                </td>
+                                <td className="py-2 px-2 font-bold">{matchLabel}</td>
+                                <td className="py-2 px-2 text-center text-redAlliance text-xs">
+                                  {match.alliances.red.team_keys.map(k => teamKeyToNumber(k)).join(', ')}
+                                </td>
+                                <td className="py-2 px-2 text-center font-mono">
+                                  {played ? (
+                                    <span>
+                                      <span className={match.alliances.red.score > match.alliances.blue.score ? 'text-redAlliance font-bold' : 'text-textSecondary'}>
+                                        {match.alliances.red.score}
+                                      </span>
+                                      <span className="text-textMuted"> – </span>
+                                      <span className={match.alliances.blue.score > match.alliances.red.score ? 'text-blueAlliance font-bold' : 'text-textSecondary'}>
+                                        {match.alliances.blue.score}
+                                      </span>
+                                    </span>
+                                  ) : (
+                                    <span className="text-textMuted text-xs">TBD</span>
+                                  )}
+                                </td>
+                                <td className="py-2 px-2 text-center text-blueAlliance text-xs">
+                                  {match.alliances.blue.team_keys.map(k => teamKeyToNumber(k)).join(', ')}
+                                </td>
+                              </tr>
+                              {isExpanded && (
+                                <tr key={`${match.key}-detail`}>
+                                  <td colSpan={5} className="p-0">
+                                    {renderScoreBreakdown(match)}
+                                  </td>
+                                </tr>
+                              )}
+                            </>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
-
-      {/* Load New Event */}
-      <div className="bg-surface p-6 rounded-lg border border-border">
-        <h2 className="text-xl font-bold mb-4">Load New Event</h2>
-
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm text-textSecondary mb-2">
-              Event Code
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={inputEventCode}
-                onChange={e => setInputEventCode(e.target.value.toLowerCase())}
-                placeholder="e.g., 2025txcmp1"
-                className="flex-1 px-4 py-2 bg-background border border-border rounded-lg text-textPrimary focus:outline-none focus:ring-2 focus:ring-white"
-              />
-              <button
-                onClick={handleCheckEvent}
-                disabled={tbaLoading}
-                className={`flex items-center gap-2 px-6 py-2 rounded-lg font-semibold transition-colors ${
-                  tbaLoading
-                    ? 'bg-textMuted text-background cursor-not-allowed'
-                    : 'bg-blueAlliance text-white hover:bg-blueAlliance/90'
-                }`}
-              >
-                {tbaLoading ? <Loader size={20} className="animate-spin" /> : <Download size={20} />}
-                Check
-              </button>
-            </div>
-            <p className="text-xs text-textMuted mt-2">
-              Format: [year][region][event]. Find events on{' '}
-              <a
-                href="https://www.thebluealliance.com/events"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blueAlliance hover:underline"
-              >
-                TBA Events Page
-              </a>
-            </p>
-          </div>
-
-          {/* Initialize Button */}
-          {tbaData && inputEventCode !== eventCode && (
-            <div className="p-4 bg-surfaceElevated rounded-lg border border-success/50">
-              <button
-                onClick={handleInitializeEvent}
-                disabled={isInitializing}
-                className={`w-full flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold transition-colors ${
-                  isInitializing
-                    ? 'bg-textMuted text-background cursor-not-allowed'
-                    : 'bg-success text-background hover:bg-success/90'
-                }`}
-              >
-                {isInitializing ? <Loader size={20} className="animate-spin" /> : <CheckCircle size={20} />}
-                Initialize Event & Reset Pick List
-              </button>
-              <p className="text-xs text-textMuted mt-2 text-center">
-                This will clear your current pick list and import teams from TBA rankings
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Status Messages */}
-      {status.type && (
-        <div
-          className={`p-4 rounded-lg border flex items-start gap-3 ${
-            status.type === 'success'
-              ? 'bg-success/10 border-success text-success'
-              : 'bg-danger/10 border-danger text-danger'
-          }`}
-        >
-          {status.type === 'success' ? <CheckCircle size={20} /> : <AlertCircle size={20} />}
-          <p className="flex-1">{status.message}</p>
-        </div>
-      )}
-
-      {/* Danger Zone */}
-      <div className="bg-danger/5 p-6 rounded-lg border border-danger">
-        <div className="flex items-center gap-3 mb-4">
-          <Trash2 size={24} className="text-danger" />
-          <h2 className="text-xl font-bold text-danger">Danger Zone</h2>
-        </div>
-
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="font-semibold">Reset Pick List</p>
-            <p className="text-sm text-textSecondary">
-              Clear all teams from your pick list
-            </p>
-          </div>
-          <button
-            onClick={handleResetPickList}
-            className="px-4 py-2 bg-danger text-white rounded-lg hover:bg-danger/90 transition-colors font-semibold"
-          >
-            Clear Pick List
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

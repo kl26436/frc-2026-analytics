@@ -59,6 +59,10 @@ export interface TBAMatch {
       score: number;
     };
   };
+  score_breakdown?: {
+    red: Record<string, unknown>;
+    blue: Record<string, unknown>;
+  } | null;
   time: number;
   predicted_time: number;
   actual_time: number;

@@ -1,7 +1,7 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { useEffect } from 'react';
 import { useAnalyticsStore } from './store/useAnalyticsStore';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import AppLayout from './components/AppLayout';
 import TeamList from './pages/TeamList';
@@ -18,14 +18,31 @@ import PitScouting from './pages/PitScouting';
 import AdminSettings from './pages/AdminSettings';
 
 function AppContent() {
-  const loadMockData = useAnalyticsStore(state => state.loadMockData);
+  const setEventCode = useAnalyticsStore(state => state.setEventCode);
+  const setHomeTeamNumber = useAnalyticsStore(state => state.setHomeTeamNumber);
+  const subscribeToRealData = useAnalyticsStore(state => state.subscribeToRealData);
+  const unsubscribeFromRealData = useAnalyticsStore(state => state.unsubscribeFromRealData);
+  const storeEventCode = useAnalyticsStore(state => state.eventCode);
+  const { eventConfig, user } = useAuth();
 
-  // Load event data on mount
+  // Sync admin-configured event settings to local store for all users
   useEffect(() => {
-    loadMockData().catch(error => {
-      console.error('Failed to load mock data:', error);
-    });
-  }, [loadMockData]);
+    if (eventConfig) {
+      setEventCode(eventConfig.eventCode);
+      setHomeTeamNumber(eventConfig.homeTeamNumber);
+    }
+  }, [eventConfig, setEventCode, setHomeTeamNumber]);
+
+  // Subscribe to real Firestore data — only after auth, use eventConfig with store fallback
+  const activeEventCode = eventConfig?.eventCode || storeEventCode;
+  useEffect(() => {
+    if (user && activeEventCode) {
+      subscribeToRealData(activeEventCode);
+    }
+    return () => {
+      unsubscribeFromRealData();
+    };
+  }, [user, activeEventCode, subscribeToRealData, unsubscribeFromRealData]);
 
   return (
     <Routes>

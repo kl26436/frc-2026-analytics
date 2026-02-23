@@ -4,7 +4,6 @@ import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { usePickListStore } from '../store/usePickListStore';
 import { useMetricsStore } from '../store/useMetricsStore';
 import { X, AlertCircle, Play, ArrowLeft, Sliders } from 'lucide-react';
-import type { TeamStatistics } from '../types/scouting';
 import type { TBAMatch } from '../types/tba';
 import type { MetricColumn, MetricCategory } from '../types/metrics';
 import { CATEGORY_LABELS } from '../types/metrics';
@@ -12,14 +11,13 @@ import { getTeamEventMatches, getMatchVideoUrl, teamNumberToKey } from '../utils
 
 // Fields where lower is better (for coloring)
 const LOWER_IS_BETTER_FIELDS = [
-  'noShowRate', 'diedRate', 'tippedRate', 'mechanicalIssuesRate',
-  'yellowCardRate', 'redCardRate', 'avgClimbTime', 'minClimbTime',
-  'avgAutoFuelMissed', 'avgTeleopFuelMissed', 'wasDefendedRate'
+  'lostConnectionRate', 'noRobotRate', 'climbNoneRate', 'climbFailedRate',
+  'autoDidNothingRate', 'bulldozedFuelRate', 'poorAccuracyRate',
 ];
 
 function TeamComparison() {
   const navigate = useNavigate();
-  const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
+  const teamStatistics = useAnalyticsStore(state => state.realTeamStatistics);
   const selectedTeams = useAnalyticsStore(state => state.selectedTeams);
   const toggleTeamSelection = useAnalyticsStore(state => state.toggleTeamSelection);
   const eventCode = useAnalyticsStore(state => state.eventCode);
@@ -34,18 +32,11 @@ function TeamComparison() {
   // Get enabled metrics grouped by category
   const enabledColumns = getEnabledColumns();
   const metricsByCategory = useMemo(() => {
-    const grouped: Record<MetricCategory, MetricColumn[]> = {
-      overall: [],
-      auto: [],
-      teleop: [],
-      endgame: [],
-      defense: [],
-      performance: [],
-      reliability: [],
-    };
+    const grouped: Partial<Record<MetricCategory, MetricColumn[]>> = {};
 
     enabledColumns.forEach(col => {
-      grouped[col.category].push(col);
+      if (!grouped[col.category]) grouped[col.category] = [];
+      grouped[col.category]!.push(col);
     });
 
     return grouped;
@@ -103,8 +94,8 @@ function TeamComparison() {
   const MetricStatRow = ({ column }: { column: MetricColumn }) => {
     const higherIsBetter = !LOWER_IS_BETTER_FIELDS.includes(column.field);
 
-    const getValue = (team: TeamStatistics): number => {
-      return (team as unknown as Record<string, number>)[column.field] || 0;
+    const getValue = (team: typeof teamStatistics[0]): number => {
+      return (team as any)[column.field] || 0;
     };
 
     const values = selectedTeamStats.map(getValue);
@@ -236,7 +227,7 @@ function TeamComparison() {
             {/* Dynamically render each category that has enabled metrics */}
             {(Object.keys(metricsByCategory) as MetricCategory[]).map(category => {
               const columns = metricsByCategory[category];
-              if (columns.length === 0) return null;
+              if (!columns || columns.length === 0) return null;
 
               return (
                 <React.Fragment key={category}>
