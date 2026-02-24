@@ -12,8 +12,8 @@ type ViewMode = 'table' | 'cards';
 type SortCriteria = { field: string; direction: SortDirection };
 
 function TeamList() {
-  const teamStatistics = useAnalyticsStore(state => state.realTeamStatistics);
-  const realScoutEntries = useAnalyticsStore(state => state.realScoutEntries);
+  const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
+  const scoutEntries = useAnalyticsStore(state => state.scoutEntries);
   const tbaData = useAnalyticsStore(state => state.tbaData);
   const getEnabledColumns = useMetricsStore(state => state.getEnabledColumns);
 
@@ -79,8 +79,8 @@ function TeamList() {
         } else {
           const col = enabledColumns.find(c => c.field === criteria.field || c.id === criteria.field);
           if (col?.rawMetric) {
-            aValue = getMetricValue(col, a, realScoutEntries);
-            bValue = getMetricValue(col, b, realScoutEntries);
+            aValue = getMetricValue(col, a, scoutEntries);
+            bValue = getMetricValue(col, b, scoutEntries);
           } else {
             aValue = (a as unknown as Record<string, number>)[criteria.field];
             bValue = (b as unknown as Record<string, number>)[criteria.field];
@@ -102,7 +102,7 @@ function TeamList() {
     });
 
     return teams;
-  }, [teamStatistics, searchQuery, sortCriteria, teamRankMap, enabledColumns, realScoutEntries]);
+  }, [teamStatistics, searchQuery, sortCriteria, teamRankMap, enabledColumns, scoutEntries]);
 
   const handleSort = (field: string, shiftKey: boolean) => {
     setSortCriteria(prev => {
@@ -350,7 +350,7 @@ function TeamList() {
                       {team.matchesPlayed}
                     </td>
                     {enabledColumns.map(column => {
-                      const value = getMetricValue(column, team, realScoutEntries);
+                      const value = getMetricValue(column, team, scoutEntries);
                       return (
                         <td key={column.id} className="px-4 py-4 text-right">
                           {formatMetricValue(value, column.format, column.decimals, team.matchesPlayed)}
@@ -411,7 +411,7 @@ function TeamList() {
                     <p className="font-semibold">{team.matchesPlayed}</p>
                   </div>
                   {enabledColumns.slice(0, 3).map(column => {
-                    const value = getMetricValue(column, team, realScoutEntries);
+                    const value = getMetricValue(column, team, scoutEntries);
                     return (
                       <div key={column.id} className="bg-surfaceElevated rounded p-2">
                         <p className="text-textSecondary text-xs truncate">{column.label}</p>

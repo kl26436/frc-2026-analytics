@@ -16,12 +16,14 @@ import AllianceSelection from './pages/AllianceSelection';
 import AllianceSelectionJoin from './pages/AllianceSelectionJoin';
 import PitScouting from './pages/PitScouting';
 import AdminSettings from './pages/AdminSettings';
+import DataQuality from './pages/DataQuality';
+import MatchReplay from './pages/MatchReplay';
 
 function AppContent() {
   const setEventCode = useAnalyticsStore(state => state.setEventCode);
   const setHomeTeamNumber = useAnalyticsStore(state => state.setHomeTeamNumber);
-  const subscribeToRealData = useAnalyticsStore(state => state.subscribeToRealData);
-  const unsubscribeFromRealData = useAnalyticsStore(state => state.unsubscribeFromRealData);
+  const subscribeToData = useAnalyticsStore(state => state.subscribeToData);
+  const unsubscribeFromData = useAnalyticsStore(state => state.unsubscribeFromData);
   const storeEventCode = useAnalyticsStore(state => state.eventCode);
   const { eventConfig, user } = useAuth();
 
@@ -37,12 +39,12 @@ function AppContent() {
   const activeEventCode = eventConfig?.eventCode || storeEventCode;
   useEffect(() => {
     if (user && activeEventCode) {
-      subscribeToRealData(activeEventCode);
+      subscribeToData(activeEventCode);
     }
     return () => {
-      unsubscribeFromRealData();
+      unsubscribeFromData();
     };
-  }, [user, activeEventCode, subscribeToRealData, unsubscribeFromRealData]);
+  }, [user, activeEventCode, subscribeToData, unsubscribeFromData]);
 
   return (
     <Routes>
@@ -64,6 +66,8 @@ function AppContent() {
         <Route path="/alliance-selection" element={<AllianceSelection />} />
         <Route path="/alliance-selection/:sessionCode" element={<AllianceSelection />} />
         <Route path="/pit-scouting" element={<PitScouting />} />
+        <Route path="/data-quality" element={<DataQuality />} />
+        <Route path="/replay/:matchNumber" element={<MatchReplay />} />
         <Route path="/event" element={<EventSetup />} />
         <Route path="/metrics" element={<MetricsSettings />} />
         <Route path="/admin" element={<AdminSettings />} />

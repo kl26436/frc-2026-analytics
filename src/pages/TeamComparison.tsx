@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
-import { usePickListStore } from '../store/usePickListStore';
+
 import { useMetricsStore } from '../store/useMetricsStore';
 import { X, AlertCircle, Play, ArrowLeft, Sliders } from 'lucide-react';
 import type { TBAMatch } from '../types/tba';
@@ -18,12 +18,12 @@ const LOWER_IS_BETTER_FIELDS = [
 
 function TeamComparison() {
   const navigate = useNavigate();
-  const teamStatistics = useAnalyticsStore(state => state.realTeamStatistics);
-  const realScoutEntries = useAnalyticsStore(state => state.realScoutEntries);
+  const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
+  const scoutEntries = useAnalyticsStore(state => state.scoutEntries);
   const selectedTeams = useAnalyticsStore(state => state.selectedTeams);
   const toggleTeamSelection = useAnalyticsStore(state => state.toggleTeamSelection);
   const eventCode = useAnalyticsStore(state => state.eventCode);
-  const tbaApiKey = usePickListStore(state => state.tbaApiKey);
+  const tbaApiKey = useAnalyticsStore(state => state.tbaApiKey);
   const getEnabledColumns = useMetricsStore(state => state.getEnabledColumns);
 
   const [selectedVideoTeam, setSelectedVideoTeam] = useState<number | null>(null);
@@ -97,7 +97,7 @@ function TeamComparison() {
     const higherIsBetter = !LOWER_IS_BETTER_FIELDS.includes(column.field);
 
     const getValue = (team: typeof teamStatistics[0]): number => {
-      return getMetricValue(column, team, realScoutEntries);
+      return getMetricValue(column, team, scoutEntries);
     };
 
     const values = selectedTeamStats.map(getValue);

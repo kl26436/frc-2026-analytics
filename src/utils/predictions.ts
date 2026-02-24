@@ -1,7 +1,7 @@
 // ─── Interfaces ───────────────────────────────────────────────
 
 /**
- * Common subset of TeamStatistics / RealTeamStatistics that predictions need.
+ * Common subset of TeamStatistics that predictions need.
  * Both stat types provide these fields with the same names and 0-100 rate convention.
  */
 interface PredictableStats {

@@ -1,11 +1,11 @@
 import { useEffect } from 'react';
 import { X, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
-import type { RealScoutEntry, RealTeamStatistics } from '../types/scoutingReal';
-import { estimateMatchFuel, estimateMatchPoints, parseClimbLevel, getAlliance, getStation } from '../types/scoutingReal';
+import type { ScoutEntry, TeamStatistics } from '../types/scouting';
+import { estimateMatchFuel, estimateMatchPoints, parseClimbLevel, getAlliance, getStation } from '../types/scouting';
 
 interface MatchDetailModalProps {
-  match: RealScoutEntry;
-  teamStats?: RealTeamStatistics;
+  match: ScoutEntry;
+  teamStats?: TeamStatistics;
   onClose: () => void;
 }
 

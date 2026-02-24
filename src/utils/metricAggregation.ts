@@ -1,11 +1,11 @@
-import type { RealScoutEntry, RealTeamStatistics } from '../types/scoutingReal';
+import type { ScoutEntry, TeamStatistics } from '../types/scouting';
 import type { MetricColumn, MetricAggregation, MetricCategory } from '../types/metrics';
-import { estimateMatchFuel, estimateMatchPoints, parseClimbLevel } from '../types/scoutingReal';
+import { estimateMatchFuel, estimateMatchPoints, parseClimbLevel } from '../types/scouting';
 
 // ── Raw Metric Extractors ─────────────────────────────────────────────────
-// Each extractor pulls a single number from one RealScoutEntry (one match).
+// Each extractor pulls a single number from one ScoutEntry (one match).
 
-type Extractor = (entry: RealScoutEntry) => number;
+type Extractor = (entry: ScoutEntry) => number;
 
 const RAW_METRICS: Record<string, Extractor> = {
   // Fuel estimates (computed from SCORE_PLUS formula)
@@ -116,7 +116,7 @@ export function aggregate(values: number[], method: MetricAggregation): number {
 // ── Compute a metric for a specific team ──────────────────────────────────
 
 export function computeMetric(
-  allEntries: RealScoutEntry[],
+  allEntries: ScoutEntry[],
   teamNumber: number,
   rawMetricId: string,
   aggregation: MetricAggregation
@@ -135,8 +135,8 @@ export function computeMetric(
 
 export function getMetricValue(
   column: MetricColumn,
-  team: RealTeamStatistics,
-  allEntries: RealScoutEntry[]
+  team: TeamStatistics,
+  allEntries: ScoutEntry[]
 ): number {
   // Dynamic metric — compute from raw entries
   if (column.rawMetric) {

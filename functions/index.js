@@ -355,6 +355,80 @@ async function batchWrite(collectionPath, docs, idField) {
   return written;
 }
 
+// ── Action Data Queries ─────────────────────────────────────────────────────
+
+async function fetchAutoActions(client, eventKey) {
+  const result = await client.query(
+    `SELECT x, y, time_stamp, type, team_number, match_number, value, score
+     FROM public.auton_actions
+     WHERE event_key = $1
+     ORDER BY match_number, team_number, time_stamp`,
+    [eventKey]
+  );
+  return result.rows;
+}
+
+async function fetchTeleopActions(client, eventKey) {
+  const result = await client.query(
+    `SELECT x, y, time_stamp, type, team_number, match_number, value, score
+     FROM public.teleop_actions
+     WHERE event_key = $1
+     ORDER BY match_number, team_number, time_stamp`,
+    [eventKey]
+  );
+  return result.rows;
+}
+
+/**
+ * Group raw action rows by match_number + team_number → one Firestore doc per robot per match
+ * with auto[] and teleop[] action arrays sorted by timestamp.
+ */
+function groupActionsByRobot(autoRows, teleopRows) {
+  const map = new Map(); // key: "matchNum_teamNum"
+
+  for (const row of autoRows) {
+    const matchNum = coalesceNum(row.match_number);
+    const teamNum = coalesceNum(row.team_number);
+    const key = `${matchNum}_${teamNum}`;
+    if (!map.has(key)) {
+      map.set(key, { id: key, match_number: matchNum, team_number: teamNum, auto: [], teleop: [] });
+    }
+    map.get(key).auto.push({
+      x: row.x ?? 0,
+      y: row.y ?? 0,
+      time_stamp: coalesceNum(row.time_stamp),
+      type: row.type || "",
+      value: coalesceNum(row.value),
+      score: coalesceNum(row.score),
+    });
+  }
+
+  for (const row of teleopRows) {
+    const matchNum = coalesceNum(row.match_number);
+    const teamNum = coalesceNum(row.team_number);
+    const key = `${matchNum}_${teamNum}`;
+    if (!map.has(key)) {
+      map.set(key, { id: key, match_number: matchNum, team_number: teamNum, auto: [], teleop: [] });
+    }
+    map.get(key).teleop.push({
+      x: row.x ?? 0,
+      y: row.y ?? 0,
+      time_stamp: coalesceNum(row.time_stamp),
+      type: row.type || "",
+      value: coalesceNum(row.value),
+      score: coalesceNum(row.score),
+    });
+  }
+
+  // Sort each array by timestamp
+  for (const doc of map.values()) {
+    doc.auto.sort((a, b) => a.time_stamp - b.time_stamp);
+    doc.teleop.sort((a, b) => a.time_stamp - b.time_stamp);
+  }
+
+  return Array.from(map.values());
+}
+
 // ── Core Sync Logic ─────────────────────────────────────────────────────────
 
 async function performSync(eventKey, triggeredBy) {
@@ -368,11 +442,14 @@ async function performSync(eventKey, triggeredBy) {
     const scoutRows = await fetchScoutData(pgClient, eventKey);
     const tbaRows = await fetchTBAMatches(pgClient, eventKey);
     const rankingRows = await fetchTBARankings(pgClient, eventKey);
+    const autoActionRows = await fetchAutoActions(pgClient, eventKey);
+    const teleopActionRows = await fetchTeleopActions(pgClient, eventKey);
 
     // Transform
     const scoutEntries = scoutRows.map(transformScoutRow);
     const tbaMatches = tbaRows.map(transformTBAMatch);
     const rankings = rankingRows.map(transformRanking);
+    const actionDocs = groupActionsByRobot(autoActionRows, teleopActionRows);
 
     // Write to Firestore
     const scoutWritten = await batchWrite(
@@ -384,6 +461,9 @@ async function performSync(eventKey, triggeredBy) {
     const rankingsWritten = await batchWrite(
       `tbaData/${eventKey}/rankings`, rankings, "team_key"
     );
+    const actionsWritten = await batchWrite(
+      `scoutActions/${eventKey}/actions`, actionDocs, "id"
+    );
 
     // Update sync metadata
     const durationMs = Date.now() - startTime;
@@ -393,6 +473,7 @@ async function performSync(eventKey, triggeredBy) {
       scoutEntriesCount: scoutWritten,
       tbaMatchesCount: matchesWritten,
       tbaRankingsCount: rankingsWritten,
+      scoutActionsCount: actionsWritten,
       eventKey,
       syncDurationMs: durationMs,
     };
@@ -426,6 +507,10 @@ exports.syncScoutData = onCall(
     timeoutSeconds: 120,
     memory: "256MiB",
     region: "us-central1",
+    cors: [
+      "https://kl26436.github.io",
+      "http://localhost:5173",
+    ],
   },
   async (request) => {
     // Require authentication
@@ -439,9 +524,12 @@ exports.syncScoutData = onCall(
     }
 
     try {
+      console.log(`syncScoutData: starting sync for eventKey=${eventKey}`);
       const result = await performSync(eventKey, request.auth.token.email || "callable");
+      console.log(`syncScoutData: sync complete`, JSON.stringify(result));
       return result;
     } catch (err) {
+      console.error(`syncScoutData: FAILED`, err.message, err.stack);
       throw new HttpsError("internal", `Sync failed: ${err.message}`);
     }
   }

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
-import { BarChart3, Users, ClipboardList, Menu, X, Calendar, Swords, Handshake, ClipboardCheck, ChevronDown, Search, Target, Shield, LogOut } from 'lucide-react';
+import { BarChart3, Users, ClipboardList, Menu, X, Calendar, Swords, Handshake, ClipboardCheck, ChevronDown, Search, Target, Shield, LogOut, AlertTriangle, PlayCircle } from 'lucide-react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { useAuth } from '../contexts/AuthContext';
 import ActiveSessionBanner from './ActiveSessionBanner';
@@ -63,6 +63,8 @@ function NavDropdown({ label, icon: Icon, items, isActive }: NavDropdownProps) {
 const scoutingItems = [
   { to: '/teams', icon: Users, label: 'Teams' },
   { to: '/pit-scouting', icon: ClipboardCheck, label: 'Pit Scout' },
+  { to: '/data-quality', icon: AlertTriangle, label: 'Data Quality' },
+  { to: '/replay/1', icon: PlayCircle, label: 'Match Replay' },
 ];
 
 const strategyItems = [

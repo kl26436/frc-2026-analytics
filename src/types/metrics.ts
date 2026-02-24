@@ -6,7 +6,7 @@ export type MetricCategory = 'overall' | 'auto' | 'teleop' | 'endgame' | 'fuel' 
 export interface MetricColumn {
   id: string;
   label: string;
-  field: string; // Field from RealTeamStatistics (or TeamStatistics in mock mode)
+  field: string; // Field from TeamStatistics (or TeamStatistics in mock mode)
   rawMetric?: string; // If set, compute on-the-fly from raw scout entries instead of reading `field`
   aggregation: MetricAggregation;
   format: 'number' | 'percentage' | 'time' | 'count';
@@ -21,7 +21,7 @@ export interface MetricsConfig {
   lastUpdated: string;
 }
 
-// All available metrics from RealTeamStatistics, organized by category
+// All available metrics from TeamStatistics, organized by category
 export const DEFAULT_METRICS: MetricColumn[] = [
   // ========== OVERALL ==========
   {

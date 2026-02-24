@@ -8,7 +8,7 @@ import type { PitScoutEntry, DriveType, ClimbLevel, VibeCheck } from '../types/p
 
 function PitScouting() {
   const eventCode = useAnalyticsStore(state => state.eventCode);
-  const teamStatistics = useAnalyticsStore(state => state.realTeamStatistics);
+  const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
   const { entries, error, lastScoutName, setLastScoutName, addEntry, uploadPhoto, loadEntriesFromFirestore } = usePitScoutStore();
   const { user, loading: authLoading, signIn } = useFirebaseAuth();
 

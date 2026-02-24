@@ -104,6 +104,14 @@ service cloud.firestore {
                       get(/databases/$(database)/documents/config/access).data.adminEmails;
     }
 
+    // ── Synced Scout Actions (Postgres → Firestore) ──
+    match /scoutActions/{eventKey}/actions/{actionId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+                   && request.auth.token.email in
+                      get(/databases/$(database)/documents/config/access).data.adminEmails;
+    }
+
     // ── Synced TBA Data (Postgres → Firestore) ──
     match /tbaData/{eventKey}/matches/{matchId} {
       allow read: if request.auth != null;

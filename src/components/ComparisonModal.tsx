@@ -6,7 +6,7 @@ import type { MetricCategory, MetricColumn } from '../types/metrics';
 import { CATEGORY_LABELS } from '../types/metrics';
 import { useMetricsStore } from '../store/useMetricsStore';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
-import { usePickListStore } from '../store/usePickListStore';
+
 import { getTeamEventMatches, getMatchVideoUrl, teamNumberToKey } from '../utils/tbaApi';
 import { getMetricValue } from '../utils/metricAggregation';
 
@@ -32,8 +32,8 @@ interface ComparisonModalProps {
 function ComparisonModal({ team1, team2, onPickTeam, onClose }: ComparisonModalProps) {
   const getEnabledColumns = useMetricsStore(state => state.getEnabledColumns);
   const eventCode = useAnalyticsStore(state => state.eventCode);
-  const realScoutEntries = useAnalyticsStore(state => state.realScoutEntries);
-  const tbaApiKey = usePickListStore(state => state.tbaApiKey);
+  const scoutEntries = useAnalyticsStore(state => state.scoutEntries);
+  const tbaApiKey = useAnalyticsStore(state => state.tbaApiKey);
 
   const [teamVideos, setTeamVideos] = useState<Record<number, TBAMatch[]>>({});
   const [expandedVideoTeam, setExpandedVideoTeam] = useState<number | null>(null);
@@ -86,7 +86,7 @@ function ComparisonModal({ team1, team2, onPickTeam, onClose }: ComparisonModalP
     const higherIsBetter = !LOWER_IS_BETTER_FIELDS.includes(column.field);
 
     const getValue = (team: TeamLike): number =>
-      getMetricValue(column, team as any, realScoutEntries);
+      getMetricValue(column, team as any, scoutEntries);
 
     const value1 = getValue(team1);
     const value2 = getValue(team2);

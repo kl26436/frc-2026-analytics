@@ -267,7 +267,7 @@ type Mode = 'quals' | 'playoffs' | 'custom';
 
 export default function AlliancePredictor() {
   const tbaData = useAnalyticsStore(s => s.tbaData);
-  const teamStatistics = useAnalyticsStore(s => s.realTeamStatistics);
+  const teamStatistics = useAnalyticsStore(s => s.teamStatistics);
   const homeTeamNumber = useAnalyticsStore(s => s.homeTeamNumber);
 
   const alliances = tbaData?.alliances ?? [];

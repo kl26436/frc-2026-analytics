@@ -66,7 +66,8 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import type { PickListTeam, PickListConfig, FilterConfig } from '../types/pickList';
 import type { LiveComment, LiveSuggestion, LiveLockStatus } from '../types/pickList';
-import type { RealTeamStatistics } from '../types/scoutingReal';
+import type { TeamStatistics } from '../types/scouting';
+import { doesTeamPassAllFilters, countTeamsPassingFilter } from '../utils/filterUtils';
 
 // Multi-column DnD collision strategy:
 //   1. If the pointer is directly over a team card → use that card (precise within-tier insertion)
@@ -116,7 +117,7 @@ const FILTER_ICONS: Record<string, LucideIcon> = {
   wrench: Wrench,
 };
 
-const STAT_OPTIONS: { value: keyof RealTeamStatistics; label: string }[] = [
+const STAT_OPTIONS: { value: keyof TeamStatistics; label: string }[] = [
   { value: 'avgTotalPoints', label: 'Avg Total Points' },
   { value: 'avgAutoPoints', label: 'Avg Auto Points' },
   { value: 'avgTeleopPoints', label: 'Avg Teleop Points' },
@@ -553,7 +554,7 @@ function LivePickListView({
   compareTeams, onToggleCompare,
   allowedUsers,
 }: LivePickListViewProps) {
-  const teamStatistics = useAnalyticsStore(s => s.realTeamStatistics);
+  const teamStatistics = useAnalyticsStore(s => s.teamStatistics);
   const [showSuggestionSummary, setShowSuggestionSummary] = useState(false);
   const [initializing, setInitializing] = useState(false);
   const [showLiveSettings, setShowLiveSettings] = useState(false);
@@ -645,38 +646,15 @@ function LivePickListView({
 
   const countLivePassingTeams = (filter: FilterConfig): number => {
     if (!liveList) return 0;
-    return liveList.teams.filter(t => {
-      const stats = teamStatistics.find(s => s.teamNumber === t.teamNumber);
-      if (!stats) return false;
-      const value = (stats as unknown as Record<string, number>)[filter.field];
-      switch (filter.operator) {
-        case '>=': return value >= filter.threshold;
-        case '<=': return value <= filter.threshold;
-        case '>': return value > filter.threshold;
-        case '<': return value < filter.threshold;
-      }
-    }).length;
+    return countTeamsPassingFilter(filter, liveList.teams, teamStatistics);
   };
 
   // Use Firestore-synced filter configs when available; fall back to local defaults
   const effectiveFilterConfigs = liveFilterConfigs ?? filterConfigs;
   const liveHasActiveFilters = effectiveFilterConfigs.some(f => f.active);
 
-  const liveTeamPassesFilters = (teamNumber: number): boolean => {
-    const activeFilters = effectiveFilterConfigs.filter(f => f.active);
-    if (activeFilters.length === 0) return true;
-    const stats = teamStatistics.find(t => t.teamNumber === teamNumber);
-    if (!stats) return false;
-    return activeFilters.every(filter => {
-      const value = (stats as unknown as Record<string, number>)[filter.field];
-      switch (filter.operator) {
-        case '>=': return value >= filter.threshold;
-        case '<=': return value <= filter.threshold;
-        case '>': return value > filter.threshold;
-        case '<': return value < filter.threshold;
-      }
-    });
-  };
+  const liveTeamPassesFilters = (teamNumber: number): boolean =>
+    doesTeamPassAllFilters(teamNumber, effectiveFilterConfigs, teamStatistics);
 
   // When admin toggles a filter, update locally AND push to Firestore
   const handleLiveToggleFilter = (id: string) => {
@@ -1374,7 +1352,7 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onT
 
   const isPickListTeam = 'tier' in team;
   const teamStats = useAnalyticsStore(state =>
-    state.realTeamStatistics.find(t => t.teamNumber === team.teamNumber)
+    state.teamStatistics.find(t => t.teamNumber === team.teamNumber)
   );
 
   const [isEditingNotes, setIsEditingNotes] = useState(false);
@@ -1386,8 +1364,6 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onT
       setNotes((team as PickListTeam).notes);
     }
   }, [isPickListTeam ? (team as PickListTeam).notes : '']); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const displayStats = teamStats || team;
 
   return (
     <div
@@ -1435,9 +1411,9 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onT
 
           {/* Quick stats */}
           <div className="flex gap-2 text-xs text-textSecondary">
-            <span>{(displayStats as any).avgTotalPoints?.toFixed(0) ?? '0'} pts</span>
-            <span>L3: {(displayStats as any).level3ClimbRate?.toFixed(0) ?? '0'}%</span>
-            <span>A: {(displayStats as any).avgAutoPoints?.toFixed(0) ?? '0'}</span>
+            <span>{teamStats?.avgTotalPoints?.toFixed(0) ?? '0'} pts</span>
+            <span>L3: {teamStats?.level3ClimbRate?.toFixed(0) ?? '0'}%</span>
+            <span>A: {teamStats?.avgAutoPoints?.toFixed(0) ?? '0'}</span>
           </div>
 
           {/* Notes for teams in tiers */}
@@ -1729,7 +1705,7 @@ function PickList() {
   const getWatchlistTeams = usePickListStore(state => state.getWatchlistTeams);
 
   const eventCode = useAnalyticsStore(state => state.eventCode);
-  const teamStatistics = useAnalyticsStore(state => state.realTeamStatistics);
+  const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
   const tbaData = useAnalyticsStore(state => state.tbaData);
 
   // Auth + live sync (always subscribed so badge count shows in personal mode too)
@@ -1808,37 +1784,12 @@ function PickList() {
   // Count teams passing a specific filter
   const countPassingTeams = (filter: FilterConfig): number => {
     if (!pickList) return 0;
-    return pickList.teams.filter(t => {
-      const stats = teamStatistics.find(s => s.teamNumber === t.teamNumber);
-      if (!stats) return false;
-      const value = (stats as unknown as Record<string, number>)[filter.field];
-      switch (filter.operator) {
-        case '>=': return value >= filter.threshold;
-        case '<=': return value <= filter.threshold;
-        case '>': return value > filter.threshold;
-        case '<': return value < filter.threshold;
-      }
-    }).length;
+    return countTeamsPassingFilter(filter, pickList.teams, teamStatistics);
   };
 
   // Check if a team passes all active filters
-  const teamPassesFilters = (teamNumber: number): boolean => {
-    const activeFilters = filterConfigs.filter(f => f.active);
-    if (activeFilters.length === 0) return true;
-
-    const stats = teamStatistics.find(t => t.teamNumber === teamNumber);
-    if (!stats) return false;
-
-    return activeFilters.every(filter => {
-      const value = (stats as unknown as Record<string, number>)[filter.field];
-      switch (filter.operator) {
-        case '>=': return value >= filter.threshold;
-        case '<=': return value <= filter.threshold;
-        case '>': return value > filter.threshold;
-        case '<': return value < filter.threshold;
-      }
-    });
-  };
+  const teamPassesFilters = (teamNumber: number): boolean =>
+    doesTeamPassAllFilters(teamNumber, filterConfigs, teamStatistics);
 
   const hasActiveFilters = filterConfigs.some(f => f.active);
 
@@ -2403,7 +2354,7 @@ function PickList() {
                 />
                 <select
                   value={filter.field}
-                  onChange={e => updateFilter(filter.id, { field: e.target.value as keyof RealTeamStatistics })}
+                  onChange={e => updateFilter(filter.id, { field: e.target.value as keyof TeamStatistics })}
                   className="flex-1 min-w-[140px] px-2 py-1.5 bg-background border border-border rounded text-sm"
                 >
                   {STAT_OPTIONS.map(opt => (

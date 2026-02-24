@@ -23,7 +23,7 @@ function EventSetup() {
   const autoRefreshEnabled = useAnalyticsStore(state => state.autoRefreshEnabled);
   const setAutoRefresh = useAnalyticsStore(state => state.setAutoRefresh);
   const syncMeta = useAnalyticsStore(state => state.syncMeta);
-  const realScoutEntries = useAnalyticsStore(state => state.realScoutEntries);
+  const scoutEntries = useAnalyticsStore(state => state.scoutEntries);
 
   const [expandedMatch, setExpandedMatch] = useState<string | null>(null);
   const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -184,7 +184,7 @@ function EventSetup() {
           <div className="mt-4 grid grid-cols-3 gap-3">
             <div className="bg-surfaceElevated p-3 rounded-lg">
               <p className="text-xs text-textSecondary">Scout Entries</p>
-              <p className="text-xl font-bold">{realScoutEntries.length}</p>
+              <p className="text-xl font-bold">{scoutEntries.length}</p>
             </div>
             <div className="bg-surfaceElevated p-3 rounded-lg">
               <p className="text-xs text-textSecondary">Last Sync</p>

@@ -3,21 +3,27 @@ import { persist } from 'zustand/middleware';
 import { collection, doc, onSnapshot } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { db, functions } from '../lib/firebase';
-import type { RealScoutEntry, RealTeamStatistics, PgTBAMatch, SyncMeta } from '../types/scoutingReal';
+import type { ScoutEntry, TeamStatistics, PgTBAMatch, SyncMeta, RobotActions } from '../types/scouting';
 import type { TBAEventData } from '../types/tba';
-import { calculateAllRealTeamStatistics } from '../utils/realStatistics';
+import { calculateAllTeamStatistics } from '../utils/statistics';
+import { computeMatchFuelAttribution, aggregateTeamFuel } from '../utils/fuelAttribution';
+import type { RobotMatchFuel, TeamFuelStats } from '../utils/fuelAttribution';
 import { getAllEventData } from '../utils/tbaApi';
 
 interface AnalyticsState {
   // ── Scout data ──
-  realScoutEntries: RealScoutEntry[];
-  realTeamStatistics: RealTeamStatistics[];
+  scoutEntries: ScoutEntry[];
+  teamStatistics: TeamStatistics[];
   pgTbaMatches: PgTBAMatch[];
+  scoutActions: RobotActions[];
+  matchFuelAttribution: RobotMatchFuel[];
+  teamFuelStats: TeamFuelStats[];
   syncMeta: SyncMeta | null;
-  realDataLoading: boolean;
-  realDataError: string | null;
+  dataLoading: boolean;
+  dataError: string | null;
 
   // ── TBA data ──
+  tbaApiKey: string;
   tbaData: TBAEventData | null;
   tbaLoading: boolean;
   tbaError: string | null;
@@ -29,13 +35,15 @@ interface AnalyticsState {
   homeTeamNumber: number;
 
   // ── Actions ──
-  subscribeToRealData: (eventKey: string) => void;
-  unsubscribeFromRealData: () => void;
+  subscribeToData: (eventKey: string) => void;
+  unsubscribeFromData: () => void;
   calculateRealStats: () => void;
+  calculateFuelAttribution: () => void;
   toggleTeamSelection: (teamNumber: number) => void;
   clearTeamSelection: () => void;
   setEventCode: (code: string) => void;
   setHomeTeamNumber: (n: number) => void;
+  setTBAApiKey: (key: string) => void;
   fetchTBAData: (eventCode?: string) => Promise<TBAEventData | null>;
   setAutoRefresh: (enabled: boolean) => void;
   clearTBAData: () => void;
@@ -46,21 +54,26 @@ interface AnalyticsState {
 let _unsubScout: (() => void) | null = null;
 let _unsubSyncMeta: (() => void) | null = null;
 let _unsubTbaMatches: (() => void) | null = null;
+let _unsubActions: (() => void) | null = null;
 let _subscribedEventKey: string | null = null;
 
 export const useAnalyticsStore = create<AnalyticsState>()(
   persist(
     (set, get) => ({
       // Initial state
-      realScoutEntries: [],
-      realTeamStatistics: [],
+      scoutEntries: [],
+      teamStatistics: [],
       pgTbaMatches: [],
+      scoutActions: [],
+      matchFuelAttribution: [],
+      teamFuelStats: [],
       syncMeta: null,
-      realDataLoading: false,
-      realDataError: null,
+      dataLoading: false,
+      dataError: null,
       selectedTeams: [],
       eventCode: '2026week0',
       homeTeamNumber: 148,
+      tbaApiKey: '',
       tbaData: null,
       tbaLoading: false,
       tbaError: null,
@@ -68,21 +81,24 @@ export const useAnalyticsStore = create<AnalyticsState>()(
 
       // ── Real Data Subscriptions ──────────────────────────────────────
 
-      subscribeToRealData: (eventKey: string) => {
+      subscribeToData: (eventKey: string) => {
         // Don't re-subscribe if already listening to this event
         if (_subscribedEventKey === eventKey && _unsubScout) return;
 
         // Clean up previous listeners
-        get().unsubscribeFromRealData();
+        get().unsubscribeFromData();
 
         // Clear stale data immediately so old event data doesn't flash
         _subscribedEventKey = eventKey;
         set({
-          realDataLoading: true,
-          realDataError: null,
-          realScoutEntries: [],
-          realTeamStatistics: [],
+          dataLoading: true,
+          dataError: null,
+          scoutEntries: [],
+          teamStatistics: [],
           pgTbaMatches: [],
+          scoutActions: [],
+          matchFuelAttribution: [],
+          teamFuelStats: [],
         });
 
         // 1. Subscribe to scout entries: scoutData/{eventKey}/entries
@@ -90,16 +106,16 @@ export const useAnalyticsStore = create<AnalyticsState>()(
         _unsubScout = onSnapshot(
           entriesRef,
           (snapshot) => {
-            const entries: RealScoutEntry[] = snapshot.docs.map(d => ({
+            const entries: ScoutEntry[] = snapshot.docs.map(d => ({
               ...d.data(),
               id: d.id,
-            })) as RealScoutEntry[];
-            set({ realScoutEntries: entries, realDataLoading: false, realDataError: null });
+            })) as ScoutEntry[];
+            set({ scoutEntries: entries, dataLoading: false, dataError: null });
             get().calculateRealStats();
           },
           (error) => {
             console.error('Scout data listener error:', error);
-            set({ realDataError: error.message, realDataLoading: false });
+            set({ dataError: error.message, dataLoading: false });
           }
         );
 
@@ -124,24 +140,62 @@ export const useAnalyticsStore = create<AnalyticsState>()(
           (snapshot) => {
             const matches: PgTBAMatch[] = snapshot.docs.map(d => d.data()) as PgTBAMatch[];
             set({ pgTbaMatches: matches });
+            get().calculateFuelAttribution();
           },
           (error) => {
             console.error('TBA matches listener error:', error);
           }
         );
+
+        // 4. Subscribe to scout actions: scoutActions/{eventKey}/actions
+        const actionsRef = collection(db, 'scoutActions', eventKey, 'actions');
+        _unsubActions = onSnapshot(
+          actionsRef,
+          (snapshot) => {
+            const actions: RobotActions[] = snapshot.docs.map(d => d.data()) as RobotActions[];
+            set({ scoutActions: actions });
+            get().calculateFuelAttribution();
+          },
+          (error) => {
+            console.error('Scout actions listener error:', error);
+          }
+        );
       },
 
-      unsubscribeFromRealData: () => {
+      unsubscribeFromData: () => {
         if (_unsubScout) { _unsubScout(); _unsubScout = null; }
         if (_unsubSyncMeta) { _unsubSyncMeta(); _unsubSyncMeta = null; }
         if (_unsubTbaMatches) { _unsubTbaMatches(); _unsubTbaMatches = null; }
+        if (_unsubActions) { _unsubActions(); _unsubActions = null; }
         _subscribedEventKey = null;
       },
 
       calculateRealStats: () => {
-        const { realScoutEntries } = get();
-        const realTeamStatistics = calculateAllRealTeamStatistics(realScoutEntries);
-        set({ realTeamStatistics });
+        const { scoutEntries } = get();
+        const teamStatistics = calculateAllTeamStatistics(scoutEntries);
+        set({ teamStatistics });
+        get().calculateFuelAttribution();
+      },
+
+      calculateFuelAttribution: () => {
+        const { scoutEntries, scoutActions, pgTbaMatches } = get();
+        if (scoutEntries.length === 0 || pgTbaMatches.length === 0) return;
+        const matchFuelAttribution = computeMatchFuelAttribution(scoutEntries, scoutActions, pgTbaMatches);
+        const teamFuelStats = aggregateTeamFuel(matchFuelAttribution);
+        set({ matchFuelAttribution, teamFuelStats });
+        // TODO: remove debug logs after validation
+        console.table(teamFuelStats.map(t => ({
+          team: t.teamNumber,
+          matches: t.matchesPlayed,
+          avgScored: Math.round(t.avgShotsScored * 10) / 10,
+          avgShots: Math.round(t.avgShots * 10) / 10,
+          avgPasses: Math.round(t.avgPasses * 10) / 10,
+          avgMoved: Math.round(t.avgMoved * 10) / 10,
+          accuracy: `${Math.round(t.scoringAccuracy * 100)}%`,
+          passerMatches: t.dedicatedPasserMatches || '',
+          actionData: `${t.actionDataMatches}/${t.matchesPlayed}`,
+        })));
+        console.log(`[FuelAttribution] ${matchFuelAttribution.length} match rows, ${teamFuelStats.length} teams`);
       },
 
       // ── Team Selection ─────────────────────────────────────────────
@@ -169,9 +223,12 @@ export const useAnalyticsStore = create<AnalyticsState>()(
             eventCode: code,
             tbaData: null,
             tbaError: null,
-            realScoutEntries: [],
-            realTeamStatistics: [],
+            scoutEntries: [],
+            teamStatistics: [],
             pgTbaMatches: [],
+            scoutActions: [],
+            matchFuelAttribution: [],
+            teamFuelStats: [],
             syncMeta: null,
             selectedTeams: [],
           });
@@ -182,6 +239,10 @@ export const useAnalyticsStore = create<AnalyticsState>()(
 
       setHomeTeamNumber: (n: number) => {
         set({ homeTeamNumber: n });
+      },
+
+      setTBAApiKey: (key: string) => {
+        set({ tbaApiKey: key });
       },
 
       // ── TBA Data ───────────────────────────────────────────────────
@@ -222,6 +283,7 @@ export const useAnalyticsStore = create<AnalyticsState>()(
         eventCode: state.eventCode,
         homeTeamNumber: state.homeTeamNumber,
         selectedTeams: state.selectedTeams,
+        tbaApiKey: state.tbaApiKey,
         tbaData: state.tbaData,
         autoRefreshEnabled: state.autoRefreshEnabled,
       }),

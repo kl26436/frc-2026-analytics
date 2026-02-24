@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { PickList, PickListTeam, PickListConfig } from '../types/pickList';
 import type { TBAEventRankings } from '../types/tba';
-import type { RealTeamStatistics } from '../types/scoutingReal';
+import type { TeamStatistics } from '../types/scouting';
 import { teamKeyToNumber } from '../utils/tbaApi';
 
 // Red flag auto-detection thresholds
@@ -22,37 +22,28 @@ export const DEFAULT_RED_FLAG_THRESHOLDS: RedFlagThresholds = {
 
 interface PickListState {
   pickList: PickList | null;
-  tbaApiKey: string;
   redFlagThresholds: RedFlagThresholds;
 
   // Actions
   initializePickList: (eventKey: string, tier1Name?: string, tier2Name?: string, tier3Name?: string, tier4Name?: string) => void;
   setTierNames: (tier1: string, tier2: string, tier3: string, tier4: string) => void;
-  setTBAApiKey: (key: string) => void;
 
   // Team management
   addTeamToTier: (teamNumber: number, tier: 'tier1' | 'tier2' | 'tier3' | 'tier4', notes?: string) => void;
   moveTeam: (teamNumber: number, newTier: 'tier1' | 'tier2' | 'tier3' | 'tier4', newRank: number) => void;
-  removeTeam: (teamNumber: number) => void;
   swapTeamRanks: (teamNumber1: number, teamNumber2: number) => void;
   moveTeamAbove: (winnerTeamNumber: number, loserTeamNumber: number) => void;
 
   // Team metadata
   updateNotes: (teamNumber: number, notes: string) => void;
-  togglePicked: (teamNumber: number, pickedBy?: number) => void;
-  addTag: (teamNumber: number, tag: string) => void;
-  removeTag: (teamNumber: number, tag: string) => void;
   toggleFlag: (teamNumber: number) => void;
 
   // Red flag auto-detection
   setRedFlagThresholds: (thresholds: RedFlagThresholds) => void;
-  autoFlagTeams: (teamStatistics: RealTeamStatistics[]) => number; // Returns count of newly flagged teams
+  autoFlagTeams: (teamStatistics: TeamStatistics[]) => number; // Returns count of newly flagged teams
 
   // TBA integration
   importFromTBARankings: (rankings: TBAEventRankings) => void;
-
-  // Sorting
-  sortTier: (tier: 'tier1' | 'tier2' | 'tier3' | 'tier4', sortBy: 'rank' | 'teamNumber' | 'points' | 'climb' | 'auto') => void;
 
   // Watchlist - for tracking final morning teams
   toggleWatchlist: (teamNumber: number) => void;
@@ -73,7 +64,6 @@ export const usePickListStore = create<PickListState>()(
   persist(
     (set, get) => ({
       pickList: null,
-      tbaApiKey: '',
       redFlagThresholds: DEFAULT_RED_FLAG_THRESHOLDS,
 
       // Initialize a new pick list
@@ -113,11 +103,6 @@ export const usePickListStore = create<PickListState>()(
             },
           },
         });
-      },
-
-      // Set TBA API key
-      setTBAApiKey: (key) => {
-        set({ tbaApiKey: key });
       },
 
       // Add team to a tier
@@ -181,19 +166,6 @@ export const usePickListStore = create<PickListState>()(
               ...pickList.config,
               lastUpdated: new Date().toISOString(),
             },
-          },
-        });
-      },
-
-      // Remove team from pick list
-      removeTeam: (teamNumber) => {
-        const { pickList } = get();
-        if (!pickList) return;
-
-        set({
-          pickList: {
-            ...pickList,
-            teams: pickList.teams.filter(t => t.teamNumber !== teamNumber),
           },
         });
       },
@@ -274,57 +246,6 @@ export const usePickListStore = create<PickListState>()(
             ...pickList,
             teams: pickList.teams.map(t =>
               t.teamNumber === teamNumber ? { ...t, notes } : t
-            ),
-          },
-        });
-      },
-
-      // Toggle picked status
-      togglePicked: (teamNumber, pickedBy) => {
-        const { pickList } = get();
-        if (!pickList) return;
-
-        set({
-          pickList: {
-            ...pickList,
-            teams: pickList.teams.map(t =>
-              t.teamNumber === teamNumber
-                ? { ...t, isPicked: !t.isPicked, pickedBy: !t.isPicked ? pickedBy : undefined }
-                : t
-            ),
-          },
-        });
-      },
-
-      // Add tag
-      addTag: (teamNumber, tag) => {
-        const { pickList } = get();
-        if (!pickList) return;
-
-        set({
-          pickList: {
-            ...pickList,
-            teams: pickList.teams.map(t =>
-              t.teamNumber === teamNumber && !t.tags.includes(tag)
-                ? { ...t, tags: [...t.tags, tag] }
-                : t
-            ),
-          },
-        });
-      },
-
-      // Remove tag
-      removeTag: (teamNumber, tag) => {
-        const { pickList } = get();
-        if (!pickList) return;
-
-        set({
-          pickList: {
-            ...pickList,
-            teams: pickList.teams.map(t =>
-              t.teamNumber === teamNumber
-                ? { ...t, tags: t.tags.filter(tg => tg !== tag) }
-                : t
             ),
           },
         });
@@ -650,36 +571,6 @@ export const usePickListStore = create<PickListState>()(
         });
       },
 
-      // Sort a tier
-      sortTier: (tier, sortBy) => {
-        const { pickList } = get();
-        if (!pickList) return;
-
-        // This is a placeholder - actual sorting would need access to team statistics
-        // For now, just re-rank by team number
-        const tierTeams = pickList.teams.filter(t => t.tier === tier);
-        const otherTeams = pickList.teams.filter(t => t.tier !== tier);
-
-        tierTeams.sort((a, b) => {
-          if (sortBy === 'teamNumber') {
-            return a.teamNumber - b.teamNumber;
-          }
-          return a.rank - b.rank;
-        });
-
-        // Re-assign ranks
-        tierTeams.forEach((team, index) => {
-          team.rank = index + 1;
-        });
-
-        set({
-          pickList: {
-            ...pickList,
-            teams: [...otherTeams, ...tierTeams],
-          },
-        });
-      },
-
       // Clear entire pick list
       clearPickList: () => {
         set({ pickList: null });
@@ -705,7 +596,6 @@ export const usePickListStore = create<PickListState>()(
       name: 'frc-picklist-storage',
       partialize: (state) => ({
         pickList: state.pickList,
-        tbaApiKey: state.tbaApiKey,
       }),
     }
   )

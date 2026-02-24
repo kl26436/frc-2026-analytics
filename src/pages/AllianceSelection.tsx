@@ -16,7 +16,7 @@ function AllianceSelection() {
   const { user, loading: authLoading, signIn } = useFirebaseAuth();
   const { isAdmin, liveSession, setLiveSession, clearLiveSession } = useAuth();
   const pickList = usePickListStore(state => state.pickList);
-  const teamStatistics = useAnalyticsStore(state => state.realTeamStatistics);
+  const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
   const setLastSessionCode = useAllianceSelectionStore(state => state.setLastSessionCode);
   const setLastDisplayName = useAllianceSelectionStore(state => state.setLastDisplayName);
   const setLastTeamNumber = useAllianceSelectionStore(state => state.setLastTeamNumber);

@@ -2,9 +2,625 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ==========================================================================
+   1. DESIGN TOKENS (CSS Custom Properties)
+   Team 148 Robowranglers — Dark Mode Design System
+   HSL values stored without wrapper for Tailwind alpha compatibility
+   ========================================================================== */
+
+:root {
+  /* ── Surface Layers ─────────────────────────────────────────────────── */
+  --background:        0 0% 0%;
+  --surface-alt:       0 0% 4%;
+  --surface:           0 0% 7%;
+  --surface-elevated:  0 0% 12%;
+  --card:              0 0% 14%;
+  --border:            0 0% 20%;
+  --interactive:       0 0% 16%;
+
+  /* ── Text ───────────────────────────────────────────────────────────── */
+  --text-primary:      0 0% 100%;
+  --text-secondary:    0 0% 64%;
+  --text-muted:        0 0% 45%;
+
+  /* ── Semantic ───────────────────────────────────────────────────────── */
+  --success:           142 71% 45%;
+  --warning:           48 96% 47%;
+  --danger:            0 84% 60%;
+
+  /* ── Alliance ───────────────────────────────────────────────────────── */
+  --red-alliance:      0 84% 50%;
+  --blue-alliance:     217 91% 53%;
+
+  /* ── Brand / Accent (Team 148 Red) ──────────────────────────────────── */
+  --accent:            0 84% 50%;
+
+  /* ── Transition Defaults ────────────────────────────────────────────── */
+  --transition-fast:   150ms;
+  --transition-base:   200ms;
+  --transition-slow:   300ms;
+
+  /* ── Border Radius Defaults ─────────────────────────────────────────── */
+  --radius-sm:   0.375rem;
+  --radius-md:   0.5rem;
+  --radius-lg:   0.75rem;
+  --radius-xl:   1rem;
+
+  /* ── Z-Index Scale ──────────────────────────────────────────────────── */
+  --z-dropdown:  50;
+  --z-modal:     100;
+  --z-toast:     200;
+}
+
+/* ==========================================================================
+   2. BASE LAYER
+   ========================================================================== */
+
 @layer base {
   body {
     @apply bg-background text-textPrimary;
     font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Improve focus visibility for accessibility */
+  *:focus-visible {
+    outline: 2px solid hsl(var(--accent) / 0.7);
+    outline-offset: 2px;
+  }
+
+  /* Scrollbar styling for the tech aesthetic */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: hsl(var(--surface) / 1);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border) / 1);
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--text-muted) / 1);
+  }
+
+  /* Selection color (Team 148 red) */
+  ::selection {
+    background: hsl(var(--accent) / 0.3);
+    color: hsl(var(--text-primary) / 1);
+  }
+}
+
+/* ==========================================================================
+   3. COMPONENT CLASSES
+   Reusable patterns extracted from existing code.
+   Existing components do NOT need to change — these are ADDITIVE classes
+   that can be adopted incrementally. All prefixed with ds- (design system).
+   ========================================================================== */
+
+@layer components {
+
+  /* ── Cards ────────────────────────────────────────────────────────────── */
+
+  .ds-card {
+    @apply bg-surface rounded-xl border border-border p-6 shadow-card;
+  }
+
+  .ds-card-elevated {
+    @apply bg-surface rounded-xl border border-border p-6;
+    box-shadow:
+      0 4px 20px rgba(0, 0, 0, 0.4),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+  }
+
+  .ds-card-accent {
+    @apply bg-surface rounded-xl border border-border p-6 shadow-card;
+    border-top: 2px solid hsl(var(--accent) / 0.6);
+  }
+
+  .ds-card-header {
+    @apply text-base font-bold flex items-center gap-2 mb-4;
+  }
+
+  .ds-card-interactive {
+    @apply bg-surface rounded-xl border border-border p-6 shadow-card
+           transition-all duration-200 cursor-pointer;
+  }
+
+  .ds-card-interactive:hover {
+    @apply border-textMuted;
+    box-shadow:
+      0 8px 30px rgba(0, 0, 0, 0.5),
+      0 0 1px rgba(255, 255, 255, 0.05);
+    transform: translateY(-1px);
+  }
+
+  /* ── Buttons ──────────────────────────────────────────────────────────── */
+
+  .ds-btn {
+    @apply inline-flex items-center justify-center gap-2
+           font-semibold rounded-lg
+           transition-all duration-200
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .ds-btn-primary {
+    @apply ds-btn px-5 py-2.5
+           bg-success text-background
+           hover:bg-success/90
+           active:scale-[0.98];
+  }
+
+  .ds-btn-secondary {
+    @apply ds-btn px-5 py-2.5
+           bg-surfaceElevated border border-border text-textPrimary
+           hover:bg-interactive
+           active:scale-[0.98];
+  }
+
+  .ds-btn-ghost {
+    @apply ds-btn px-3 py-2
+           text-textSecondary
+           hover:bg-surfaceElevated hover:text-textPrimary
+           active:scale-[0.98];
+  }
+
+  .ds-btn-danger {
+    @apply ds-btn px-5 py-2.5
+           bg-danger/10 text-danger border border-danger/20
+           hover:bg-danger/20
+           active:scale-[0.98];
+  }
+
+  .ds-btn-danger-solid {
+    @apply ds-btn px-5 py-2.5
+           bg-danger text-white
+           hover:bg-danger/90
+           active:scale-[0.98];
+  }
+
+  .ds-btn-accent {
+    @apply ds-btn px-5 py-2.5
+           bg-accent text-white
+           hover:bg-accent/90
+           active:scale-[0.98];
+    box-shadow: 0 0 15px -3px hsl(var(--accent) / 0.3);
+  }
+
+  .ds-btn-accent:hover {
+    box-shadow: 0 0 20px -3px hsl(var(--accent) / 0.5);
+  }
+
+  .ds-btn-blue-alliance {
+    @apply ds-btn px-5 py-2.5
+           bg-blueAlliance text-white
+           hover:bg-blueAlliance/90
+           active:scale-[0.98];
+  }
+
+  .ds-btn-sm {
+    @apply px-3 py-1.5 text-sm;
+  }
+
+  .ds-btn-lg {
+    @apply px-6 py-3 text-base;
+  }
+
+  .ds-btn-icon {
+    @apply p-2;
+  }
+
+  /* ── Inputs ───────────────────────────────────────────────────────────── */
+
+  .ds-input {
+    @apply w-full px-3 py-2.5
+           bg-card border border-border rounded-lg
+           text-textPrimary placeholder-textMuted
+           focus:outline-none
+           transition-colors duration-200;
+    --tw-ring-color: hsl(var(--accent) / 0.15);
+  }
+
+  .ds-input:focus {
+    border-color: hsl(var(--accent) / 1);
+    box-shadow: 0 0 0 3px hsl(var(--accent) / 0.15);
+  }
+
+  .ds-input-sm {
+    @apply px-3 py-1.5 text-sm;
+  }
+
+  .ds-input-lg {
+    @apply px-4 py-3 text-lg;
+  }
+
+  .ds-input-with-icon {
+    @apply pl-10;
+  }
+
+  .ds-label {
+    @apply text-sm text-textSecondary block mb-1 font-medium;
+  }
+
+  .ds-select {
+    @apply w-full px-3 py-2.5
+           bg-card border border-border rounded-lg
+           text-textPrimary
+           focus:outline-none
+           transition-colors duration-200
+           appearance-none cursor-pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23737373' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    padding-right: 2.5rem;
+  }
+
+  .ds-select:focus {
+    border-color: hsl(var(--accent) / 1);
+    box-shadow: 0 0 0 3px hsl(var(--accent) / 0.15);
+  }
+
+  /* ── Badges ───────────────────────────────────────────────────────────── */
+
+  .ds-badge {
+    @apply inline-flex items-center gap-1
+           px-2 py-0.5 rounded text-xs font-bold;
+  }
+
+  .ds-badge-success {
+    @apply ds-badge bg-success/20 text-success;
+  }
+
+  .ds-badge-warning {
+    @apply ds-badge bg-warning/20 text-warning;
+  }
+
+  .ds-badge-danger {
+    @apply ds-badge bg-danger/20 text-danger;
+  }
+
+  .ds-badge-info {
+    @apply ds-badge bg-blueAlliance/20 text-blueAlliance;
+  }
+
+  .ds-badge-red-alliance {
+    @apply ds-badge bg-redAlliance/20 text-redAlliance uppercase;
+  }
+
+  .ds-badge-blue-alliance {
+    @apply ds-badge bg-blueAlliance/20 text-blueAlliance uppercase;
+  }
+
+  .ds-badge-accent {
+    @apply ds-badge bg-accent/20 text-accent;
+  }
+
+  .ds-badge-muted {
+    @apply ds-badge bg-textMuted/20 text-textMuted;
+  }
+
+  .ds-badge-pill {
+    @apply rounded-full px-2.5;
+  }
+
+  /* ── Tables ───────────────────────────────────────────────────────────── */
+
+  .ds-table {
+    @apply w-full text-sm;
+  }
+
+  .ds-table thead {
+    @apply bg-surfaceElevated border-b border-border;
+  }
+
+  .ds-table th {
+    @apply py-2 px-3 text-left text-textSecondary text-xs font-semibold;
+  }
+
+  .ds-table tbody tr {
+    @apply border-b border-border/50 transition-colors;
+  }
+
+  .ds-table tbody tr:hover {
+    @apply bg-surfaceElevated;
+  }
+
+  .ds-table td {
+    @apply py-2.5 px-3;
+  }
+
+  .ds-table-striped tbody tr:nth-child(even) {
+    @apply bg-surfaceAlt;
+  }
+
+  /* ── Modals / Overlays ────────────────────────────────────────────────── */
+
+  .ds-modal-backdrop {
+    @apply fixed inset-0 bg-black/60 backdrop-blur-sm
+           flex items-center justify-center p-4;
+    z-index: var(--z-modal);
+  }
+
+  .ds-modal {
+    @apply bg-surface border border-border rounded-xl
+           w-full overflow-hidden;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5), 0 0 1px rgba(255, 255, 255, 0.05);
+    animation: fade-in-scale 0.2s ease-out;
+  }
+
+  .ds-modal-header {
+    @apply flex items-center justify-between p-4 border-b border-border;
+  }
+
+  .ds-modal-body {
+    @apply p-4 overflow-y-auto;
+  }
+
+  .ds-modal-footer {
+    @apply flex items-center justify-end gap-3 p-4 border-t border-border;
+  }
+
+  /* ── Dropdown Menus ───────────────────────────────────────────────────── */
+
+  .ds-dropdown {
+    @apply bg-surface border border-border rounded-lg shadow-lg py-1
+           min-w-[160px] overflow-hidden;
+    z-index: var(--z-dropdown);
+    animation: fade-in-scale 0.15s ease-out;
+  }
+
+  .ds-dropdown-item {
+    @apply flex items-center gap-3 px-4 py-2.5
+           text-sm text-textSecondary
+           hover:bg-interactive hover:text-textPrimary
+           transition-colors cursor-pointer;
+  }
+
+  /* ── Alerts / Banners ─────────────────────────────────────────────────── */
+
+  .ds-alert {
+    @apply flex items-center gap-3 px-4 py-3 rounded-lg border;
+  }
+
+  .ds-alert-success {
+    @apply ds-alert bg-success/10 border-success/30 text-success;
+  }
+
+  .ds-alert-warning {
+    @apply ds-alert bg-warning/10 border-warning/30 text-warning;
+  }
+
+  .ds-alert-danger {
+    @apply ds-alert bg-danger/10 border-danger/30 text-danger;
+  }
+
+  .ds-alert-info {
+    @apply ds-alert bg-blueAlliance/10 border-blueAlliance/30 text-blueAlliance;
+  }
+
+  .ds-alert-accent {
+    @apply ds-alert bg-accent/10 border-accent/30;
+  }
+
+  /* ── Nav Links ────────────────────────────────────────────────────────── */
+
+  .ds-nav-link {
+    @apply flex items-center gap-2 px-3 py-2 rounded-t
+           text-sm text-textSecondary
+           hover:text-textPrimary hover:bg-surfaceElevated
+           transition-colors;
+  }
+
+  .ds-nav-link-active {
+    @apply ds-nav-link border-b-2 border-success text-success;
+  }
+
+  .ds-nav-mobile-link {
+    @apply flex items-center gap-3 px-4 py-3 rounded
+           transition-colors;
+  }
+
+  .ds-nav-mobile-link-active {
+    @apply ds-nav-mobile-link bg-success/20 text-success;
+  }
+
+  /* ── Dividers ─────────────────────────────────────────────────────────── */
+
+  .ds-divider {
+    @apply border-t border-border;
+  }
+
+  .ds-divider-subtle {
+    @apply border-t border-border/50;
+  }
+
+  /* ── Toggle / Switch ──────────────────────────────────────────────────── */
+
+  .ds-toggle {
+    @apply relative inline-flex items-center h-6 w-11
+           bg-surfaceElevated border border-border rounded-full
+           cursor-pointer transition-colors duration-200;
+  }
+
+  .ds-toggle[aria-checked="true"],
+  .ds-toggle.active {
+    @apply bg-accent border-accent;
+  }
+
+  .ds-toggle::after {
+    content: '';
+    @apply absolute left-0.5 top-0.5 h-4 w-4
+           bg-textPrimary rounded-full
+           transition-transform duration-200;
+  }
+
+  .ds-toggle[aria-checked="true"]::after,
+  .ds-toggle.active::after {
+    transform: translateX(1.25rem);
+  }
+
+  /* ── Stat Cards ───────────────────────────────────────────────────────── */
+
+  .ds-stat {
+    @apply bg-surfaceElevated rounded-lg p-3;
+  }
+
+  .ds-stat-label {
+    @apply text-textSecondary text-xs;
+  }
+
+  .ds-stat-value {
+    @apply font-semibold text-lg;
+  }
+
+  /* ── Tooltip ──────────────────────────────────────────────────────────── */
+
+  .ds-tooltip {
+    @apply absolute px-2 py-1
+           bg-surfaceElevated border border-border rounded
+           text-xs text-textSecondary shadow-lg
+           pointer-events-none;
+    z-index: var(--z-toast);
+    animation: fade-in 0.15s ease-out;
+  }
+
+  /* ── Loading States ───────────────────────────────────────────────────── */
+
+  .ds-skeleton {
+    @apply bg-surfaceElevated rounded;
+    background: linear-gradient(
+      90deg,
+      hsl(var(--surface-elevated) / 1) 25%,
+      hsl(var(--card) / 1) 50%,
+      hsl(var(--surface-elevated) / 1) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 2s linear infinite;
+  }
+
+  .ds-spinner {
+    @apply animate-spin text-textSecondary;
+  }
+
+  /* ── Section Header ───────────────────────────────────────────────────── */
+
+  .ds-section-label {
+    @apply text-xs font-semibold text-textMuted uppercase tracking-wider;
+  }
+
+  /* ── Pill Tabs ────────────────────────────────────────────────────────── */
+
+  .ds-tab-group {
+    @apply flex gap-1 bg-surface border border-border rounded-lg p-1;
+  }
+
+  .ds-tab {
+    @apply flex items-center gap-1.5 px-3 py-2 rounded
+           text-sm text-textSecondary
+           hover:bg-surfaceElevated
+           transition-colors;
+  }
+
+  .ds-tab-active {
+    @apply ds-tab bg-interactive text-textPrimary;
+  }
+}
+
+/* ==========================================================================
+   4. UTILITY CLASSES
+   ========================================================================== */
+
+@layer utilities {
+
+  /* ── Team 148 Accent Glow Effects ─────────────────────────────────────── */
+
+  .u-accent-glow-top {
+    background-image: radial-gradient(
+      ellipse 80% 50% at 50% 0%,
+      hsl(var(--accent) / 0.06) 0%,
+      transparent 70%
+    );
+  }
+
+  .u-glow-border {
+    animation: border-glow 2s ease-in-out infinite;
+  }
+
+  .u-glow-pulse {
+    animation: glow-pulse 3s ease-in-out infinite;
+  }
+
+  .u-accent-line-top {
+    border-top: 2px solid hsl(var(--accent) / 0.5);
+  }
+
+  .u-accent-line-left {
+    border-left: 2px solid hsl(var(--accent) / 0.5);
+  }
+
+  /* ── Grid Overlay (tech aesthetic) ────────────────────────────────────── */
+
+  .u-grid-overlay {
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  /* ── Gradient Text ────────────────────────────────────────────────────── */
+
+  .u-text-gradient-accent {
+    background: linear-gradient(
+      135deg,
+      hsl(var(--text-primary) / 1),
+      hsl(var(--accent) / 0.8)
+    );
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* ── Shimmer Loading Effect ───────────────────────────────────────────── */
+
+  .u-shimmer {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--surface-elevated) / 1) 25%,
+      hsl(var(--card) / 1) 50%,
+      hsl(var(--surface-elevated) / 1) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 2s linear infinite;
+  }
+
+  /* ── Glass Effect ─────────────────────────────────────────────────────── */
+
+  .u-glass {
+    background: hsl(var(--surface) / 0.8);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  /* ── Inner Light (top edge highlight for depth) ───────────────────────── */
+
+  .u-inner-light {
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+  }
+
+  /* ── Staggered Animation Delays ───────────────────────────────────────── */
+
+  .u-stagger-1 { animation-delay: 50ms; }
+  .u-stagger-2 { animation-delay: 100ms; }
+  .u-stagger-3 { animation-delay: 150ms; }
+  .u-stagger-4 { animation-delay: 200ms; }
+  .u-stagger-5 { animation-delay: 250ms; }
+
+  .u-fill-both {
+    animation-fill-mode: both;
   }
 }

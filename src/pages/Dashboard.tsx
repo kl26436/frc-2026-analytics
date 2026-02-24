@@ -1,20 +1,18 @@
 import { useEffect, useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
-import { Trophy, Target, TrendingUp, RefreshCw, ChevronDown, ChevronUp, AlertTriangle, Hash, WifiOff, Eye, Flag, Clock, MessageSquare } from 'lucide-react';
+import { Trophy, Target, TrendingUp, RefreshCw, ChevronDown, ChevronUp, Hash, WifiOff, Eye, Flag, Clock, MessageSquare } from 'lucide-react';
 import { teamKeyToNumber } from '../utils/tbaApi';
 import { computeMatchup } from '../utils/predictions';
-import { estimateMatchFuel, parseClimbLevel } from '../types/scoutingReal';
-import type { PgTBAMatch } from '../types/scoutingReal';
 
 const OUR_TEAM = 148;
 const MATCHES_TO_SHOW = 3;
 const RANKINGS_TO_SHOW = 5;
 
 function Dashboard() {
-  const teamStatistics = useAnalyticsStore(state => state.realTeamStatistics);
-  const realScoutEntries = useAnalyticsStore(state => state.realScoutEntries);
-  const pgTbaMatches = useAnalyticsStore(state => state.pgTbaMatches);
+  const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
+
+
   const homeTeamNumber = useAnalyticsStore(state => state.homeTeamNumber);
   const tbaData = useAnalyticsStore(state => state.tbaData);
   const tbaLoading = useAnalyticsStore(state => state.tbaLoading);
@@ -90,85 +88,6 @@ function Dashboard() {
   const nextUpcoming = upcomingMatches.slice(0, MATCHES_TO_SHOW);
   const displayMatches = showAllMatches ? homeMatches : [...recentCompleted, ...nextUpcoming];
   const hasMoreMatches = homeMatches.length > displayMatches.length;
-
-  // ── Data Quality Alerts ──
-  const dataAlerts = useMemo(() => {
-    if (realScoutEntries.length === 0) return null;
-
-    const secondReview = realScoutEntries.filter(e => e.second_review);
-
-    const allQualMatches = tbaData?.matches?.filter(m => m.comp_level === 'qm' && m.alliances.red.score >= 0) ?? [];
-    const scoutedMatchNums = new Set(realScoutEntries.map(e => e.match_number));
-    const missingMatches = allQualMatches.filter(m => !scoutedMatchNums.has(m.match_number));
-
-    const teamEntryCounts = new Map<number, number>();
-    realScoutEntries.forEach(e => {
-      teamEntryCounts.set(e.team_number, (teamEntryCounts.get(e.team_number) || 0) + 1);
-    });
-    const maxEntries = Math.max(...teamEntryCounts.values(), 0);
-    const lowCoverageTeams = [...teamEntryCounts.entries()]
-      .filter(([, count]) => count <= 1 && maxEntries > 2)
-      .map(([team]) => team);
-
-    // Cross-validate scout data vs TBA score breakdowns
-    const fuelMismatches: string[] = [];
-    const climbMismatches: string[] = [];
-
-    if (pgTbaMatches.length > 0) {
-      const tbaByMatch = new Map<number, PgTBAMatch>();
-      pgTbaMatches.forEach(m => {
-        if (m.comp_level === 'qm') tbaByMatch.set(m.match_number, m);
-      });
-
-      const byMatchAlliance = new Map<string, typeof realScoutEntries>();
-      realScoutEntries.forEach(e => {
-        const alliance = e.configured_team.startsWith('red') ? 'red' : 'blue';
-        const key = `${e.match_number}_${alliance}`;
-        if (!byMatchAlliance.has(key)) byMatchAlliance.set(key, []);
-        byMatchAlliance.get(key)!.push(e);
-      });
-
-      for (const [key, entries] of byMatchAlliance) {
-        const [matchNumStr, alliance] = key.split('_');
-        const matchNum = parseInt(matchNumStr);
-        const tbaMatch = tbaByMatch.get(matchNum);
-        if (!tbaMatch) continue;
-
-        const scoutFuelSum = entries.reduce((sum, e) => sum + estimateMatchFuel(e).total, 0);
-        const tbaHubCount = alliance === 'red'
-          ? tbaMatch.red_hubScore?.totalCount ?? 0
-          : tbaMatch.blue_hubScore?.totalCount ?? 0;
-
-        if (tbaHubCount > 0 && Math.abs(scoutFuelSum - tbaHubCount) > Math.max(tbaHubCount * 0.5, 5)) {
-          fuelMismatches.push(`Q${matchNum} ${alliance}: scout=${scoutFuelSum} vs TBA=${tbaHubCount}`);
-        }
-
-        entries.forEach(e => {
-          const station = e.configured_team.split('_')[1];
-          const tbaClimbField = `${alliance}_endGameTowerRobot${station}` as keyof PgTBAMatch;
-          const tbaClimbStr = tbaMatch[tbaClimbField] as string | undefined;
-          if (!tbaClimbStr) return;
-
-          const tbaLevel = tbaClimbStr.includes('3') ? 3 : tbaClimbStr.includes('2') ? 2 : tbaClimbStr.includes('1') ? 1 : 0;
-          const scoutLevel = parseClimbLevel(e.climb_level);
-
-          if (Math.abs(tbaLevel - scoutLevel) >= 2) {
-            climbMismatches.push(`Q${matchNum} ${e.team_number}: scout=L${scoutLevel} vs TBA=L${tbaLevel}`);
-          }
-        });
-      }
-    }
-
-    const alerts: { type: 'error' | 'warning' | 'info'; label: string; count: number; details: string }[] = [];
-
-    if (secondReview.length > 0) alerts.push({ type: 'error', label: 'Flagged for Review', count: secondReview.length, details: secondReview.map(e => `Q${e.match_number} - ${e.team_number}`).join(', ') });
-    if (missingMatches.length > 0) alerts.push({ type: 'error', label: 'Unscounted Matches', count: missingMatches.length, details: missingMatches.map(m => `Q${m.match_number}`).join(', ') });
-    if (fuelMismatches.length > 0) alerts.push({ type: 'error', label: 'Fuel Count Mismatch (vs TBA)', count: fuelMismatches.length, details: fuelMismatches.join(' | ') });
-    if (climbMismatches.length > 0) alerts.push({ type: 'error', label: 'Climb Mismatch (vs TBA)', count: climbMismatches.length, details: climbMismatches.join(' | ') });
-    if (lowCoverageTeams.length > 0) alerts.push({ type: 'info', label: 'Low Scouting Coverage', count: lowCoverageTeams.length, details: `Teams: ${lowCoverageTeams.join(', ')}` });
-
-    return alerts.length > 0 ? alerts : null;
-  }, [realScoutEntries, tbaData, pgTbaMatches]);
 
   // ── Event Rankings (top N, always includes home team) ──
   const eventRankings = useMemo(() => {
@@ -666,41 +585,6 @@ function Dashboard() {
                     </Link>
                   );
                 })}
-              </div>
-            </div>
-          )}
-
-          {/* Data Quality Alerts */}
-          {dataAlerts && (
-            <div className={`${card} !border-danger/30`}>
-              <h2 className={cardHeader}>
-                <AlertTriangle className="text-danger" size={18} />
-                Data Quality
-              </h2>
-              <div className="space-y-1.5">
-                {dataAlerts.map((alert, i) => (
-                  <details key={i} className="group">
-                    <summary className={`flex items-center justify-between cursor-pointer rounded-lg px-3 py-2 text-sm ${
-                      alert.type === 'error' ? 'bg-danger/10 hover:bg-danger/15' :
-                      alert.type === 'warning' ? 'bg-warning/10 hover:bg-warning/15' :
-                      'bg-blueAlliance/10 hover:bg-blueAlliance/15'
-                    }`}>
-                      <div className="flex items-center gap-2">
-                        <span className={`w-1.5 h-1.5 rounded-full ${
-                          alert.type === 'error' ? 'bg-danger' : alert.type === 'warning' ? 'bg-warning' : 'bg-blueAlliance'
-                        }`} />
-                        <span className="font-medium">{alert.label}</span>
-                        <ChevronDown size={12} className="transition-transform group-open:rotate-180 text-textMuted" />
-                      </div>
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-                        alert.type === 'error' ? 'bg-danger/20 text-danger' :
-                        alert.type === 'warning' ? 'bg-warning/20 text-warning' :
-                        'bg-blueAlliance/20 text-blueAlliance'
-                      }`}>{alert.count}</span>
-                    </summary>
-                    <div className="mt-1 px-3 py-2 text-xs text-textSecondary bg-surfaceElevated rounded-lg">{alert.details}</div>
-                  </details>
-                ))}
               </div>
             </div>
           )}

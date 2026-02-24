@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { usePickListStore } from '../store/usePickListStore';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { getTeamEventMatches, getMatchVideoUrl, teamNumberToKey } from '../utils/tbaApi';
 import { Play, ExternalLink, AlertCircle, Loader } from 'lucide-react';
@@ -11,7 +10,7 @@ interface MatchVideosProps {
 }
 
 function MatchVideos({ teamNumber, eventKey: propEventKey }: MatchVideosProps) {
-  const tbaApiKey = usePickListStore(state => state.tbaApiKey);
+  const tbaApiKey = useAnalyticsStore(state => state.tbaApiKey);
   const currentEventKey = useAnalyticsStore(state => state.eventCode);
   const eventKey = propEventKey || currentEventKey;
 

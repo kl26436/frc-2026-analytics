@@ -1,11 +1,11 @@
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useState, useEffect, useMemo } from 'react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
-import { usePickListStore } from '../store/usePickListStore';
-import { ArrowLeft, TrendingUp, TrendingDown, Minus, Play, X, Trophy, Hash, Droplets, ArrowUpCircle } from 'lucide-react';
+
+import { ArrowLeft, TrendingUp, TrendingDown, Minus, Play, X, Trophy, Hash, Droplets, ArrowUpCircle, PlayCircle } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
-import { estimateMatchFuel, estimateMatchPoints, parseClimbLevel } from '../types/scoutingReal';
-import type { RealScoutEntry } from '../types/scoutingReal';
+import { estimateMatchFuel, estimateMatchPoints, parseClimbLevel } from '../types/scouting';
+import type { ScoutEntry } from '../types/scouting';
 import type { TBAMatch } from '../types/tba';
 import { getTeamEventMatches, getMatchVideoUrl, teamNumberToKey } from '../utils/tbaApi';
 import MatchDetailModal from '../components/MatchDetailModal';
@@ -14,24 +14,24 @@ function TeamDetail() {
   const { teamNumber } = useParams<{ teamNumber: string }>();
   const navigate = useNavigate();
 
-  const teamStatistics = useAnalyticsStore(s => s.realTeamStatistics);
-  const realScoutEntries = useAnalyticsStore(s => s.realScoutEntries);
+  const teamStatistics = useAnalyticsStore(s => s.teamStatistics);
+  const scoutEntries = useAnalyticsStore(s => s.scoutEntries);
   const eventCode = useAnalyticsStore(s => s.eventCode);
-  const tbaApiKey = usePickListStore(s => s.tbaApiKey);
+  const tbaApiKey = useAnalyticsStore(s => s.tbaApiKey);
 
   const [tbaMatches, setTbaMatches] = useState<TBAMatch[]>([]);
   const [selectedVideo, setSelectedVideo] = useState<{ matchNumber: number; videoUrl: string } | null>(null);
-  const [selectedMatch, setSelectedMatch] = useState<RealScoutEntry | null>(null);
+  const [selectedMatch, setSelectedMatch] = useState<ScoutEntry | null>(null);
 
   const teamNum = parseInt(teamNumber || '0');
   const teamStats = teamStatistics.find(t => t.teamNumber === teamNum);
 
   // Get real scout entries for this team
   const teamEntries = useMemo(() =>
-    realScoutEntries
+    scoutEntries
       .filter(e => e.team_number === teamNum)
       .sort((a, b) => a.match_number - b.match_number),
-    [realScoutEntries, teamNum]
+    [scoutEntries, teamNum]
   );
 
   // Calculate per-match data from real entries
@@ -353,6 +353,7 @@ function TeamDetail() {
                 <tr>
                   <th className="px-3 py-3 text-left text-textSecondary text-sm font-semibold">Match</th>
                   <th className="px-3 py-3 text-center text-textSecondary text-sm font-semibold">Video</th>
+                  <th className="px-3 py-3 text-center text-textSecondary text-sm font-semibold">Replay</th>
                   <th className="px-3 py-3 text-center text-textSecondary text-sm font-semibold">Alliance</th>
                   <th className="px-3 py-3 text-right text-textSecondary text-sm font-semibold">Total Pts</th>
                   <th className="px-3 py-3 text-right text-textSecondary text-sm font-semibold">Auto Fuel</th>
@@ -394,6 +395,15 @@ function TeamDetail() {
                         ) : (
                           <span className="text-textMuted text-xs">-</span>
                         )}
+                      </td>
+                      <td className="px-3 py-3 text-center">
+                        <Link
+                          to={`/replay/${entry.match_number}`}
+                          className="p-1 text-textMuted hover:text-success rounded transition-colors inline-block"
+                          title="Match Replay"
+                        >
+                          <PlayCircle size={16} />
+                        </Link>
                       </td>
                       <td className="px-3 py-3 text-center">
                         <span className={`px-3 py-1 rounded text-sm font-bold ${

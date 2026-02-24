@@ -30,8 +30,8 @@ function AdminSettings() {
 
   // Scout data state
   const syncMeta = useAnalyticsStore(s => s.syncMeta);
-  const realScoutEntries = useAnalyticsStore(s => s.realScoutEntries);
-  const realTeamStatistics = useAnalyticsStore(s => s.realTeamStatistics);
+  const scoutEntries = useAnalyticsStore(s => s.scoutEntries);
+  const teamStatistics = useAnalyticsStore(s => s.teamStatistics);
   const pgTbaMatches = useAnalyticsStore(s => s.pgTbaMatches);
   const triggerSync = useAnalyticsStore(s => s.triggerSync);
 
@@ -252,12 +252,12 @@ function AdminSettings() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
           <div className="bg-card rounded-lg p-3 border border-border">
             <p className="text-xs text-textMuted mb-1">Scout Entries</p>
-            <p className="text-xl font-bold">{realScoutEntries.length}</p>
+            <p className="text-xl font-bold">{scoutEntries.length}</p>
             {syncMeta && <p className="text-xs text-textMuted">{syncMeta.scoutEntriesCount} synced</p>}
           </div>
           <div className="bg-card rounded-lg p-3 border border-border">
             <p className="text-xs text-textMuted mb-1">Teams</p>
-            <p className="text-xl font-bold">{realTeamStatistics.length}</p>
+            <p className="text-xl font-bold">{teamStatistics.length}</p>
           </div>
           <div className="bg-card rounded-lg p-3 border border-border">
             <p className="text-xs text-textMuted mb-1">TBA Matches</p>
@@ -325,7 +325,7 @@ function AdminSettings() {
           </button>
         </div>
 
-        {realScoutEntries.length === 0 && !syncing && (
+        {scoutEntries.length === 0 && !syncing && (
           <div className="flex items-center gap-2 p-3 mt-4 bg-warning/10 rounded-lg border border-warning/30 text-sm text-warning">
             <RefreshCw size={14} />
             No scout data loaded — click Sync Now to pull from Postgres
