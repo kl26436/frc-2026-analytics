@@ -13,6 +13,8 @@ function TBASettings() {
   const eventCode = useAnalyticsStore(state => state.eventCode);
   const setEventCode = useAnalyticsStore(state => state.setEventCode);
   const clearTeamSelection = useAnalyticsStore(state => state.clearTeamSelection);
+  const clearTBAData = useAnalyticsStore(state => state.clearTBAData);
+  const fetchTBAData = useAnalyticsStore(state => state.fetchTBAData);
 
   const [apiKey, setApiKey] = useState(tbaApiKey);
   const [event, setEvent] = useState(eventCode);
@@ -60,8 +62,8 @@ function TBASettings() {
     }
   };
 
-  const handleResetEvent = () => {
-    if (!confirm('Are you sure you want to reset the event? This will clear all pick list data, team selections, and reload mock data.')) {
+  const handleResetEvent = async () => {
+    if (!confirm('Are you sure you want to reset the event? This will clear all pick list data, team selections, rankings, and cached data.')) {
       return;
     }
 
@@ -74,9 +76,13 @@ function TBASettings() {
     // Clear team selections
     clearTeamSelection();
 
+    // Clear and re-fetch TBA data (rankings, matches, teams)
+    clearTBAData();
+    await fetchTBAData(event);
+
     setStatus({
       type: 'success',
-      message: `Event reset successfully! Pick list cleared for event: ${event}`,
+      message: `Event reset successfully! All data cleared and refreshed for: ${event}`,
     });
   };
 

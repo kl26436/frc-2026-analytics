@@ -9,6 +9,7 @@ export default {
       colors: {
         // Team 148 #AllBlackEverything theme
         background: '#000000',
+        surfaceAlt: '#0A0A0A',
         surface: '#121212',
         surfaceElevated: '#1E1E1E',
         card: '#242424',
@@ -22,6 +23,9 @@ export default {
         warning: '#EAB308',
         danger: '#EF4444',
         interactive: '#2A2A2A',
+      },
+      boxShadow: {
+        card: '0 4px 20px rgba(0,0,0,0.4)',
       },
     },
   },

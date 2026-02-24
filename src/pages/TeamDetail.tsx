@@ -2,7 +2,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useState, useEffect, useMemo } from 'react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { usePickListStore } from '../store/usePickListStore';
-import { ArrowLeft, TrendingUp, TrendingDown, Minus, Play, X } from 'lucide-react';
+import { ArrowLeft, TrendingUp, TrendingDown, Minus, Play, X, Trophy, Hash, Droplets, ArrowUpCircle } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { estimateMatchFuel, estimateMatchPoints, parseClimbLevel } from '../types/scoutingReal';
 import type { RealScoutEntry } from '../types/scoutingReal';
 import type { TBAMatch } from '../types/tba';
@@ -72,6 +73,8 @@ function TeamDetail() {
     );
   }
 
+  const n = teamStats.matchesPlayed;
+
   // Calculate trend from match points
   const getTrend = () => {
     if (matchData.length < 3) return 'stable';
@@ -90,8 +93,17 @@ function TeamDetail() {
     return ['None', 'L1', 'L2', 'L3'][level] ?? 'None';
   };
 
-  // Safe access to real stat fields (works regardless of which stats type is loaded)
-  const rs = teamStats as any;
+  // Reusable totals row component
+  const TotalsRow = ({ items }: { items: { label: string; value: string; color?: string }[] }) => (
+    <div className="flex flex-wrap gap-x-4 gap-y-1">
+      {items.map(({ label, value, color }) => (
+        <span key={label} className="text-sm">
+          <span className="text-textSecondary">{label}:</span>{' '}
+          <span className={`font-semibold ${color || ''}`}>{value}</span>
+        </span>
+      ))}
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -117,23 +129,215 @@ function TeamDetail() {
         </div>
       </div>
 
-      {/* Stats Summary Cards */}
+      {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-surface p-6 rounded-lg border border-border">
-          <p className="text-textSecondary text-sm">Avg Total Points</p>
-          <p className="text-3xl font-bold mt-1">{teamStats.avgTotalPoints.toFixed(1)}</p>
+        <div className="bg-surface p-6 rounded-lg border border-border border-l-4 border-l-warning">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-textSecondary text-sm">Avg Total Points</p>
+            <Trophy size={20} className="text-warning" />
+          </div>
+          <p className="text-3xl font-bold">{teamStats.avgTotalPoints.toFixed(1)}</p>
         </div>
-        <div className="bg-surface p-6 rounded-lg border border-border">
-          <p className="text-textSecondary text-sm">Matches Played</p>
-          <p className="text-3xl font-bold mt-1">{teamStats.matchesPlayed}</p>
+        <div className="bg-surface p-6 rounded-lg border border-border border-l-4 border-l-blueAlliance">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-textSecondary text-sm">Matches Played</p>
+            <Hash size={20} className="text-blueAlliance" />
+          </div>
+          <p className="text-3xl font-bold">{n}</p>
         </div>
-        <div className="bg-surface p-6 rounded-lg border border-border">
-          <p className="text-textSecondary text-sm">Avg Total Fuel</p>
-          <p className="text-3xl font-bold mt-1">{(rs.avgTotalFuelEstimate ?? 0).toFixed(1)}</p>
+        <div className="bg-surface p-6 rounded-lg border border-border border-l-4 border-l-success">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-textSecondary text-sm">Avg Total Fuel</p>
+            <Droplets size={20} className="text-success" />
+          </div>
+          <p className="text-3xl font-bold">{teamStats.avgTotalFuelEstimate.toFixed(1)}</p>
         </div>
+        <div className="bg-surface p-6 rounded-lg border border-border border-l-4 border-l-danger">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-textSecondary text-sm">L3 Climb</p>
+            <ArrowUpCircle size={20} className="text-danger" />
+          </div>
+          <p className="text-3xl font-bold">{teamStats.level3ClimbCount}/{n}</p>
+          <p className="text-xs text-textSecondary mt-0.5">({teamStats.level3ClimbRate.toFixed(0)}%)</p>
+        </div>
+      </div>
+
+      {/* Match Performance Trend Chart */}
+      {matchData.length >= 2 && (
         <div className="bg-surface p-6 rounded-lg border border-border">
-          <p className="text-textSecondary text-sm">L3 Climb Rate</p>
-          <p className="text-3xl font-bold mt-1">{teamStats.level3ClimbRate.toFixed(0)}%</p>
+          <h2 className="text-xl font-bold mb-4">Match Performance Trend</h2>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={matchData.map(({ entry, points }) => ({
+                match: `Q${entry.match_number}`,
+                total: points.total,
+                auto: points.autoPoints,
+                teleop: points.teleopPoints,
+              }))}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#333333" />
+                <XAxis
+                  dataKey="match"
+                  stroke="#737373"
+                  tick={{ fill: '#A3A3A3', fontSize: 12 }}
+                />
+                <YAxis
+                  stroke="#737373"
+                  tick={{ fill: '#A3A3A3', fontSize: 12 }}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#1E1E1E',
+                    border: '1px solid #333333',
+                    borderRadius: '8px',
+                    color: '#FFFFFF',
+                  }}
+                  labelStyle={{ color: '#A3A3A3' }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="total"
+                  stroke="#22C55E"
+                  strokeWidth={2}
+                  dot={{ fill: '#22C55E', r: 4 }}
+                  name="Total Points"
+                />
+                <Line
+                  type="monotone"
+                  dataKey="auto"
+                  stroke="#EAB308"
+                  strokeWidth={1.5}
+                  dot={{ fill: '#EAB308', r: 3 }}
+                  name="Auto"
+                  strokeDasharray="5 5"
+                />
+                <Line
+                  type="monotone"
+                  dataKey="teleop"
+                  stroke="#2563EB"
+                  strokeWidth={1.5}
+                  dot={{ fill: '#2563EB', r: 3 }}
+                  name="Teleop"
+                  strokeDasharray="5 5"
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* Scouting Totals — raw database counts */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      <div className="bg-surface rounded-lg border border-border">
+        <div className="p-6 border-b border-border">
+          <h2 className="text-xl font-bold">Scouting Totals</h2>
+          <p className="text-xs text-textSecondary mt-1">Raw counts from {n} scouted matches</p>
+        </div>
+        <div className="p-6 space-y-5">
+          {/* Climb Distribution */}
+          <div>
+            <h3 className="text-sm font-bold text-textSecondary mb-2">Endgame Climb</h3>
+            <div className="flex flex-wrap gap-3">
+              {[
+                { label: 'None', count: teamStats.climbNoneCount, color: 'text-textMuted' },
+                { label: 'L1', count: teamStats.level1ClimbCount, color: '' },
+                { label: 'L2', count: teamStats.level2ClimbCount, color: 'text-blueAlliance' },
+                { label: 'L3', count: teamStats.level3ClimbCount, color: 'text-success' },
+                { label: 'Failed', count: teamStats.climbFailedCount, color: 'text-danger' },
+              ].map(({ label, count, color }) => (
+                <div key={label} className="bg-surfaceElevated rounded-lg px-4 py-2 text-center min-w-[60px]">
+                  <p className="text-xs text-textSecondary">{label}</p>
+                  <p className={`text-lg font-bold ${color}`}>{count}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Auto */}
+          <div>
+            <h3 className="text-sm font-bold text-textSecondary mb-2">Autonomous</h3>
+            <TotalsRow items={[
+              { label: 'Auto Climb', value: `${teamStats.autoClimbCount}/${n}` },
+              { label: 'Did Nothing', value: `${teamStats.autoDidNothingCount}/${n}`, color: teamStats.autoDidNothingCount > 0 ? 'text-danger' : '' },
+              { label: 'Passer', value: `${teamStats.dedicatedPasserCount}/${n}` },
+            ]} />
+          </div>
+
+          {/* Fuel Scoring */}
+          <div>
+            <h3 className="text-sm font-bold text-textSecondary mb-2">Fuel Scoring</h3>
+            <TotalsRow items={[
+              { label: 'Auto Fuel', value: `${teamStats.totalAutoFuelEstimate} total (${teamStats.avgAutoFuelEstimate.toFixed(1)} avg)` },
+              { label: 'Teleop Fuel', value: `${teamStats.totalTeleopFuelEstimate} total (${teamStats.avgTeleopFuelEstimate.toFixed(1)} avg)` },
+              { label: 'Passes', value: `${teamStats.totalAutoFuelPass + teamStats.totalTeleopFuelPass} total (${teamStats.avgTotalPass.toFixed(1)} avg)` },
+            ]} />
+          </div>
+
+          {/* Bonus Buckets */}
+          <div>
+            <h3 className="text-sm font-bold text-textSecondary mb-2">Bonus Buckets (Total Counts)</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="bg-surfaceElevated rounded p-3">
+                <p className="text-xs text-textSecondary mb-2">Auto</p>
+                <div className="flex gap-4 text-center">
+                  {[
+                    { label: '+1', val: teamStats.totalAutoPlus1 },
+                    { label: '+2', val: teamStats.totalAutoPlus2 },
+                    { label: '+3', val: teamStats.totalAutoPlus3 },
+                    { label: '+5', val: teamStats.totalAutoPlus5 },
+                    { label: '+10', val: teamStats.totalAutoPlus10 },
+                  ].map(b => (
+                    <div key={b.label}>
+                      <p className="text-xs text-textMuted">{b.label}</p>
+                      <p className="font-bold">{b.val}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="bg-surfaceElevated rounded p-3">
+                <p className="text-xs text-textSecondary mb-2">Teleop</p>
+                <div className="flex gap-4 text-center">
+                  {[
+                    { label: '+1', val: teamStats.totalTeleopPlus1 },
+                    { label: '+2', val: teamStats.totalTeleopPlus2 },
+                    { label: '+3', val: teamStats.totalTeleopPlus3 },
+                    { label: '+5', val: teamStats.totalTeleopPlus5 },
+                    { label: '+10', val: teamStats.totalTeleopPlus10 },
+                  ].map(b => (
+                    <div key={b.label}>
+                      <p className="text-xs text-textMuted">{b.label}</p>
+                      <p className="font-bold">{b.val}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Flags */}
+          <div>
+            <h3 className="text-sm font-bold text-textSecondary mb-2">Flags</h3>
+            <TotalsRow items={[
+              { label: 'Lost Conn', value: `${teamStats.lostConnectionCount}/${n}`, color: teamStats.lostConnectionCount > 0 ? 'text-danger' : '' },
+              { label: 'No Robot', value: `${teamStats.noRobotCount}/${n}`, color: teamStats.noRobotCount > 0 ? 'text-danger' : '' },
+              { label: 'Bulldozed', value: `${teamStats.bulldozedFuelCount}/${n}`, color: teamStats.bulldozedFuelCount > 0 ? 'text-warning' : '' },
+              { label: 'Poor Accuracy', value: `${teamStats.poorAccuracyCount}/${n}`, color: teamStats.poorAccuracyCount > 0 ? 'text-warning' : '' },
+              { label: '2nd Review', value: `${teamStats.secondReviewCount}/${n}`, color: teamStats.secondReviewCount > 0 ? 'text-danger' : '' },
+            ]} />
+          </div>
+
+          {/* Start Zones */}
+          <div>
+            <h3 className="text-sm font-bold text-textSecondary mb-2">Start Zones</h3>
+            <div className="flex flex-wrap gap-3">
+              {teamStats.startZoneCounts.map((count, i) => (
+                <div key={i} className="bg-surfaceElevated rounded-lg px-4 py-2 text-center min-w-[50px]">
+                  <p className="text-xs text-textSecondary">Z{i + 1}</p>
+                  <p className={`text-lg font-bold ${count > 0 ? '' : 'text-textMuted'}`}>{count}</p>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -145,7 +349,7 @@ function TeamDetail() {
           </div>
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-surfaceElevated border-b border-border">
+              <thead className="bg-surfaceElevated border-b border-border sticky top-0 z-10">
                 <tr>
                   <th className="px-3 py-3 text-left text-textSecondary text-sm font-semibold">Match</th>
                   <th className="px-3 py-3 text-center text-textSecondary text-sm font-semibold">Video</th>
@@ -160,7 +364,7 @@ function TeamDetail() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {matchData.map(({ entry, fuel, points, climbLevel }) => {
+                {matchData.map(({ entry, fuel, points, climbLevel }, index) => {
                   const alliance = entry.configured_team.startsWith('red') ? 'red' : 'blue';
                   const tbaMatch = tbaMatches.find(
                     m => m.comp_level === 'qm' && m.match_number === entry.match_number
@@ -168,7 +372,7 @@ function TeamDetail() {
                   const videoUrl = tbaMatch ? getMatchVideoUrl(tbaMatch) : null;
 
                   return (
-                    <tr key={entry.id} className="hover:bg-interactive transition-colors">
+                    <tr key={entry.id} className={`hover:bg-interactive transition-colors ${index % 2 === 0 ? 'bg-surfaceAlt' : ''}`}>
                       <td className="px-3 py-3 font-semibold">
                         <button
                           onClick={() => setSelectedMatch(entry)}
@@ -192,7 +396,7 @@ function TeamDetail() {
                         )}
                       </td>
                       <td className="px-3 py-3 text-center">
-                        <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                        <span className={`px-3 py-1 rounded text-sm font-bold ${
                           alliance === 'red' ? 'bg-redAlliance/20 text-redAlliance' : 'bg-blueAlliance/20 text-blueAlliance'
                         }`}>
                           {alliance.toUpperCase()}
@@ -229,28 +433,31 @@ function TeamDetail() {
         </div>
       )}
 
-      {/* Performance Breakdown */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* Derived Statistics — calculated averages/rates */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Auto Performance */}
         <div className="bg-surface p-6 rounded-lg border border-border">
-          <h3 className="text-lg font-bold mb-4">Auto Performance</h3>
+          <h3 className="text-lg font-bold mb-1">Auto Performance</h3>
+          <p className="text-xs text-textSecondary mb-4">Calculated averages</p>
           <div className="space-y-3">
             <div className="flex justify-between">
               <span className="text-textSecondary">Avg Auto Fuel Estimate</span>
-              <span className="font-semibold">{(rs.avgAutoFuelEstimate ?? 0).toFixed(1)}</span>
+              <span className="font-semibold">{teamStats.avgAutoFuelEstimate.toFixed(1)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-textSecondary">Avg Auto Points</span>
               <span className="font-semibold">{teamStats.avgAutoPoints.toFixed(1)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-textSecondary">Auto Climb Rate</span>
-              <span className="font-semibold">{(rs.autoClimbRate ?? 0).toFixed(0)}%</span>
+              <span className="text-textSecondary">Auto Climb</span>
+              <span className="font-semibold">{teamStats.autoClimbCount}/{n} ({teamStats.autoClimbRate.toFixed(0)}%)</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-textSecondary">Did Nothing Rate</span>
-              <span className={`font-semibold ${(rs.autoDidNothingRate ?? 0) > 20 ? 'text-danger' : ''}`}>
-                {(rs.autoDidNothingRate ?? 0).toFixed(0)}%
+              <span className="text-textSecondary">Did Nothing</span>
+              <span className={`font-semibold ${teamStats.autoDidNothingCount > 0 ? 'text-danger' : ''}`}>
+                {teamStats.autoDidNothingCount}/{n} ({teamStats.autoDidNothingRate.toFixed(0)}%)
               </span>
             </div>
           </div>
@@ -258,11 +465,12 @@ function TeamDetail() {
 
         {/* Teleop Performance */}
         <div className="bg-surface p-6 rounded-lg border border-border">
-          <h3 className="text-lg font-bold mb-4">Teleop Performance</h3>
+          <h3 className="text-lg font-bold mb-1">Teleop Performance</h3>
+          <p className="text-xs text-textSecondary mb-4">Calculated averages</p>
           <div className="space-y-3">
             <div className="flex justify-between">
               <span className="text-textSecondary">Avg Teleop Fuel Estimate</span>
-              <span className="font-semibold">{(rs.avgTeleopFuelEstimate ?? 0).toFixed(1)}</span>
+              <span className="font-semibold">{teamStats.avgTeleopFuelEstimate.toFixed(1)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-textSecondary">Avg Teleop Points</span>
@@ -270,39 +478,40 @@ function TeamDetail() {
             </div>
             <div className="flex justify-between">
               <span className="text-textSecondary">Avg Passes</span>
-              <span className="font-semibold">{(rs.avgTotalPass ?? 0).toFixed(1)}</span>
+              <span className="font-semibold">{teamStats.avgTotalPass.toFixed(1)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-textSecondary">Dedicated Passer Rate</span>
-              <span className="font-semibold">{(rs.dedicatedPasserRate ?? 0).toFixed(0)}%</span>
+              <span className="text-textSecondary">Dedicated Passer</span>
+              <span className="font-semibold">{teamStats.dedicatedPasserCount}/{n} ({teamStats.dedicatedPasserRate.toFixed(0)}%)</span>
             </div>
           </div>
         </div>
 
         {/* Endgame Performance */}
         <div className="bg-surface p-6 rounded-lg border border-border">
-          <h3 className="text-lg font-bold mb-4">Endgame Performance</h3>
+          <h3 className="text-lg font-bold mb-1">Endgame Performance</h3>
+          <p className="text-xs text-textSecondary mb-4">Climb distribution</p>
           <div className="space-y-3">
             <div className="flex justify-between">
               <span className="text-textSecondary">No Climb</span>
-              <span className="font-semibold">{(rs.climbNoneRate ?? 0).toFixed(0)}%</span>
+              <span className="font-semibold">{teamStats.climbNoneCount}/{n} ({teamStats.climbNoneRate.toFixed(0)}%)</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-textSecondary">Level 1 Rate</span>
-              <span className="font-semibold">{teamStats.level1ClimbRate.toFixed(0)}%</span>
+              <span className="text-textSecondary">Level 1</span>
+              <span className="font-semibold">{teamStats.level1ClimbCount}/{n} ({teamStats.level1ClimbRate.toFixed(0)}%)</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-textSecondary">Level 2 Rate</span>
-              <span className="font-semibold">{teamStats.level2ClimbRate.toFixed(0)}%</span>
+              <span className="text-textSecondary">Level 2</span>
+              <span className="font-semibold">{teamStats.level2ClimbCount}/{n} ({teamStats.level2ClimbRate.toFixed(0)}%)</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-textSecondary">Level 3 Rate</span>
-              <span className="font-semibold text-success">{teamStats.level3ClimbRate.toFixed(0)}%</span>
+              <span className="text-textSecondary">Level 3</span>
+              <span className="font-semibold text-success">{teamStats.level3ClimbCount}/{n} ({teamStats.level3ClimbRate.toFixed(0)}%)</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-textSecondary">Climb Failed Rate</span>
-              <span className={`font-semibold ${(rs.climbFailedRate ?? 0) > 10 ? 'text-danger' : ''}`}>
-                {(rs.climbFailedRate ?? 0).toFixed(0)}%
+              <span className="text-textSecondary">Climb Failed</span>
+              <span className={`font-semibold ${teamStats.climbFailedCount > 0 ? 'text-danger' : ''}`}>
+                {teamStats.climbFailedCount}/{n} ({teamStats.climbFailedRate.toFixed(0)}%)
               </span>
             </div>
           </div>
@@ -310,30 +519,31 @@ function TeamDetail() {
 
         {/* Reliability */}
         <div className="bg-surface p-6 rounded-lg border border-border">
-          <h3 className="text-lg font-bold mb-4">Reliability & Quality</h3>
+          <h3 className="text-lg font-bold mb-1">Reliability & Quality</h3>
+          <p className="text-xs text-textSecondary mb-4">Flag counts</p>
           <div className="space-y-3">
             <div className="flex justify-between">
               <span className="text-textSecondary">Lost Connection</span>
-              <span className={`font-semibold ${(rs.lostConnectionRate ?? 0) > 10 ? 'text-danger' : ''}`}>
-                {(rs.lostConnectionRate ?? 0).toFixed(0)}%
+              <span className={`font-semibold ${teamStats.lostConnectionCount > 0 ? 'text-danger' : ''}`}>
+                {teamStats.lostConnectionCount}/{n} ({teamStats.lostConnectionRate.toFixed(0)}%)
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-textSecondary">No Robot on Field</span>
-              <span className={`font-semibold ${(rs.noRobotRate ?? 0) > 0 ? 'text-danger' : ''}`}>
-                {(rs.noRobotRate ?? 0).toFixed(0)}%
+              <span className={`font-semibold ${teamStats.noRobotCount > 0 ? 'text-danger' : ''}`}>
+                {teamStats.noRobotCount}/{n} ({teamStats.noRobotRate.toFixed(0)}%)
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-textSecondary">Bulldozed Fuel</span>
-              <span className={`font-semibold ${(rs.bulldozedFuelRate ?? 0) > 20 ? 'text-warning' : ''}`}>
-                {(rs.bulldozedFuelRate ?? 0).toFixed(0)}%
+              <span className={`font-semibold ${teamStats.bulldozedFuelCount > 0 ? 'text-warning' : ''}`}>
+                {teamStats.bulldozedFuelCount}/{n} ({teamStats.bulldozedFuelRate.toFixed(0)}%)
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-textSecondary">Poor Accuracy Flag</span>
-              <span className={`font-semibold ${(rs.poorAccuracyRate ?? 0) > 20 ? 'text-warning' : ''}`}>
-                {(rs.poorAccuracyRate ?? 0).toFixed(0)}%
+              <span className={`font-semibold ${teamStats.poorAccuracyCount > 0 ? 'text-warning' : ''}`}>
+                {teamStats.poorAccuracyCount}/{n} ({teamStats.poorAccuracyRate.toFixed(0)}%)
               </span>
             </div>
           </div>
@@ -341,11 +551,11 @@ function TeamDetail() {
       </div>
 
       {/* Scout Notes */}
-      {rs.notesList && rs.notesList.length > 0 && (
+      {teamStats.notesList && teamStats.notesList.length > 0 && (
         <div className="bg-surface p-6 rounded-lg border border-border">
-          <h3 className="text-lg font-bold mb-4">Scout Notes ({rs.notesList.length})</h3>
+          <h3 className="text-lg font-bold mb-4">Scout Notes ({teamStats.notesList.length})</h3>
           <div className="space-y-2">
-            {rs.notesList.map((note: string, i: number) => (
+            {teamStats.notesList.map((note: string, i: number) => (
               <div key={i} className="p-3 bg-surfaceElevated rounded-lg text-sm text-textSecondary">
                 {note}
               </div>
@@ -358,6 +568,7 @@ function TeamDetail() {
       {selectedMatch && (
         <MatchDetailModal
           match={selectedMatch}
+          teamStats={teamStats}
           onClose={() => setSelectedMatch(null)}
         />
       )}

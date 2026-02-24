@@ -110,7 +110,7 @@ export const useMetricsStore = create<MetricsState>()(
     }),
     {
       name: 'frc-metrics-storage',
-      version: 2,
+      version: 4,
       migrate: () => ({
         config: {
           columns: DEFAULT_METRICS,

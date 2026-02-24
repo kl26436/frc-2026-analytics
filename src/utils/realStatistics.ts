@@ -13,9 +13,12 @@ const max = (values: number[]): number => {
   return Math.max(...values);
 };
 
+const sum = (values: number[]): number =>
+  values.reduce((s, v) => s + v, 0);
+
 const pct = (count: number, total: number): number => {
   if (total === 0) return 0;
-  return (count / total) * 100; // 0–100 percentage (matches existing mock convention)
+  return (count / total) * 100; // 0–100 percentage
 };
 
 // ── Single Team Statistics ─────────────────────────────────────────────────
@@ -32,30 +35,73 @@ export function calculateRealTeamStatistics(
     return emptyStats(teamNumber, teamName);
   }
 
-  // ── Fuel estimates per match ──
+  // ── Per-match estimates ──
   const fuelPerMatch = entries.map(e => estimateMatchFuel(e));
   const pointsPerMatch = entries.map(e => estimateMatchPoints(e));
 
-  // ── Climb levels ──
-  const climbLevels = entries.map(e => parseClimbLevel(e.climb_level));
-  const climbNone = climbLevels.filter(l => l === 0).length;
-  const climb1 = climbLevels.filter(l => l === 1).length;
-  const climb2 = climbLevels.filter(l => l === 2).length;
-  const climb3 = climbLevels.filter(l => l === 3).length;
-  const climbFailed = entries.filter(e => e.teleop_climb_failed).length;
+  // ══════════════════════════════════════════════════════════════════════
+  // RAW COUNTS (compute these first, derive rates from them)
+  // ══════════════════════════════════════════════════════════════════════
 
-  // ── Start zone distribution ──
-  const startZoneDistribution = [1, 2, 3, 4, 5, 6].map(zone => {
+  // ── Climb counts ──
+  const climbLevels = entries.map(e => parseClimbLevel(e.climb_level));
+  const climbNoneCount = climbLevels.filter(l => l === 0).length;
+  const level1ClimbCount = climbLevels.filter(l => l === 1).length;
+  const level2ClimbCount = climbLevels.filter(l => l === 2).length;
+  const level3ClimbCount = climbLevels.filter(l => l === 3).length;
+  const climbFailedCount = entries.filter(e => e.teleop_climb_failed).length;
+
+  // ── Auto counts ──
+  const autoClimbCount = entries.filter(e => e.auton_AUTON_CLIMBED > 0).length;
+  const autoDidNothingCount = entries.filter(e => e.auton_did_nothing).length;
+
+  // ── Start zone counts ──
+  const startZoneCounts = [1, 2, 3, 4, 5, 6].map(zone => {
     const key = `prematch_AUTON_START_ZONE_${zone}` as keyof RealScoutEntry;
-    const count = entries.filter(e => (e[key] as number) > 0).length;
-    return pct(count, n);
+    return entries.filter(e => (e[key] as number) > 0).length;
   });
+
+  // ── Flag counts ──
+  const dedicatedPasserCount = entries.filter(e => e.dedicated_passer).length;
+  const bulldozedFuelCount = entries.filter(e => e.eff_rep_bulldozed_fuel).length;
+  const poorAccuracyCount = entries.filter(e => e.poor_fuel_scoring_accuracy).length;
+  const lostConnectionCount = entries.filter(e => e.lost_connection).length;
+  const noRobotCount = entries.filter(e => e.no_robot_on_field).length;
+  const secondReviewCount = entries.filter(e => e.second_review).length;
+
+  // ── Fuel scoring totals ──
+  const totalAutoFuelScore = sum(entries.map(e => e.auton_FUEL_SCORE));
+  const totalTeleopFuelScore = sum(entries.map(e => e.teleop_FUEL_SCORE));
+  const totalAutoFuelPass = sum(entries.map(e => e.auton_FUEL_PASS));
+  const totalTeleopFuelPass = sum(entries.map(e => e.teleop_FUEL_PASS));
+
+  // ── Bonus bucket totals ──
+  const totalAutoPlus1 = sum(entries.map(e => e.auton_SCORE_PLUS_1));
+  const totalAutoPlus2 = sum(entries.map(e => e.auton_SCORE_PLUS_2));
+  const totalAutoPlus3 = sum(entries.map(e => e.auton_SCORE_PLUS_3));
+  const totalAutoPlus5 = sum(entries.map(e => e.auton_SCORE_PLUS_5));
+  const totalAutoPlus10 = sum(entries.map(e => e.auton_SCORE_PLUS_10));
+  const totalTeleopPlus1 = sum(entries.map(e => e.teleop_SCORE_PLUS_1));
+  const totalTeleopPlus2 = sum(entries.map(e => e.teleop_SCORE_PLUS_2));
+  const totalTeleopPlus3 = sum(entries.map(e => e.teleop_SCORE_PLUS_3));
+  const totalTeleopPlus5 = sum(entries.map(e => e.teleop_SCORE_PLUS_5));
+  const totalTeleopPlus10 = sum(entries.map(e => e.teleop_SCORE_PLUS_10));
+
+  // ── Fuel estimate totals ──
+  const totalAutoFuelEstimate = sum(fuelPerMatch.map(f => f.auto));
+  const totalTeleopFuelEstimate = sum(fuelPerMatch.map(f => f.teleop));
+  const totalTotalFuelEstimate = sum(fuelPerMatch.map(f => f.total));
+
+  // ── Points estimate totals ──
+  const totalAutoPoints = sum(pointsPerMatch.map(p => p.autoPoints));
+  const totalTeleopPoints = sum(pointsPerMatch.map(p => p.teleopPoints));
+  const totalEndgamePoints = sum(pointsPerMatch.map(p => p.endgamePoints));
+  const totalTotalPoints = sum(pointsPerMatch.map(p => p.total));
 
   // ── Pass totals ──
   const totalPassPerMatch = entries.map(e => e.auton_FUEL_PASS + e.teleop_FUEL_PASS);
-  const totalScorePerMatch = fuelPerMatch.map(f => f.total);
   const avgTotalPass = avg(totalPassPerMatch);
-  const avgTotalFuelEstimate = avg(totalScorePerMatch);
+  const avgTotalFuelEstimate = totalTotalFuelEstimate / n;
   const passerRatio =
     avgTotalFuelEstimate + avgTotalPass > 0
       ? avgTotalPass / (avgTotalFuelEstimate + avgTotalPass)
@@ -66,68 +112,109 @@ export function calculateRealTeamStatistics(
     .map(e => e.notes)
     .filter(n => n && n.trim().length > 0);
 
+  // ══════════════════════════════════════════════════════════════════════
+  // BUILD RESULT — raw counts + derived stats
+  // ══════════════════════════════════════════════════════════════════════
+
   return {
     teamNumber,
     teamName,
     matchesPlayed: n,
 
-    // Fuel scoring
-    avgAutoFuelEstimate: avg(fuelPerMatch.map(f => f.auto)),
-    avgTeleopFuelEstimate: avg(fuelPerMatch.map(f => f.teleop)),
+    // ── Raw Counts ──
+    climbNoneCount,
+    level1ClimbCount,
+    level2ClimbCount,
+    level3ClimbCount,
+    climbFailedCount,
+    autoClimbCount,
+    autoDidNothingCount,
+    startZoneCounts,
+    dedicatedPasserCount,
+    bulldozedFuelCount,
+    poorAccuracyCount,
+    lostConnectionCount,
+    noRobotCount,
+    secondReviewCount,
+    totalAutoFuelScore,
+    totalTeleopFuelScore,
+    totalAutoFuelPass,
+    totalTeleopFuelPass,
+    totalAutoPlus1,
+    totalAutoPlus2,
+    totalAutoPlus3,
+    totalAutoPlus5,
+    totalAutoPlus10,
+    totalTeleopPlus1,
+    totalTeleopPlus2,
+    totalTeleopPlus3,
+    totalTeleopPlus5,
+    totalTeleopPlus10,
+    totalAutoFuelEstimate,
+    totalTeleopFuelEstimate,
+    totalTotalFuelEstimate,
+    totalAutoPoints,
+    totalTeleopPoints,
+    totalEndgamePoints,
+    totalTotalPoints,
+
+    // ── Derived: Fuel Averages ──
+    avgAutoFuelEstimate: totalAutoFuelEstimate / n,
+    avgTeleopFuelEstimate: totalTeleopFuelEstimate / n,
     avgTotalFuelEstimate,
     maxAutoFuelEstimate: max(fuelPerMatch.map(f => f.auto)),
     maxTeleopFuelEstimate: max(fuelPerMatch.map(f => f.teleop)),
     maxTotalFuelEstimate: max(fuelPerMatch.map(f => f.total)),
 
-    // Raw counts
-    avgAutoFuelScore: avg(entries.map(e => e.auton_FUEL_SCORE)),
-    avgTeleopFuelScore: avg(entries.map(e => e.teleop_FUEL_SCORE)),
-    avgAutoFuelPass: avg(entries.map(e => e.auton_FUEL_PASS)),
-    avgTeleopFuelPass: avg(entries.map(e => e.teleop_FUEL_PASS)),
+    // ── Derived: Raw Fuel Averages ──
+    avgAutoFuelScore: totalAutoFuelScore / n,
+    avgTeleopFuelScore: totalTeleopFuelScore / n,
+    avgAutoFuelPass: totalAutoFuelPass / n,
+    avgTeleopFuelPass: totalTeleopFuelPass / n,
 
-    // Climb rates (0–1 fractions)
-    climbNoneRate: pct(climbNone, n),
-    level1ClimbRate: pct(climb1, n),
-    level2ClimbRate: pct(climb2, n),
-    level3ClimbRate: pct(climb3, n),
-    climbFailedRate: pct(climbFailed, n),
+    // ── Derived: Climb Rates ──
+    climbNoneRate: pct(climbNoneCount, n),
+    level1ClimbRate: pct(level1ClimbCount, n),
+    level2ClimbRate: pct(level2ClimbCount, n),
+    level3ClimbRate: pct(level3ClimbCount, n),
+    climbFailedRate: pct(climbFailedCount, n),
 
-    // Auto
-    autoClimbRate: pct(entries.filter(e => e.auton_AUTON_CLIMBED > 0).length, n),
-    autoDidNothingRate: pct(entries.filter(e => e.auton_did_nothing).length, n),
-    startZoneDistribution,
+    // ── Derived: Auto Rates ──
+    autoClimbRate: pct(autoClimbCount, n),
+    autoDidNothingRate: pct(autoDidNothingCount, n),
+    startZoneDistribution: startZoneCounts.map(c => pct(c, n)),
 
-    // Quality flags
-    dedicatedPasserRate: pct(entries.filter(e => e.dedicated_passer).length, n),
-    bulldozedFuelRate: pct(entries.filter(e => e.eff_rep_bulldozed_fuel).length, n),
-    poorAccuracyRate: pct(entries.filter(e => e.poor_fuel_scoring_accuracy).length, n),
-    lostConnectionRate: pct(entries.filter(e => e.lost_connection).length, n),
-    noRobotRate: pct(entries.filter(e => e.no_robot_on_field).length, n),
+    // ── Derived: Flag Rates ──
+    dedicatedPasserRate: pct(dedicatedPasserCount, n),
+    bulldozedFuelRate: pct(bulldozedFuelCount, n),
+    poorAccuracyRate: pct(poorAccuracyCount, n),
+    lostConnectionRate: pct(lostConnectionCount, n),
+    noRobotRate: pct(noRobotCount, n),
 
-    // Bonus bucket breakdown (avg count per match)
-    avgAutoPlus1: avg(entries.map(e => e.auton_SCORE_PLUS_1)),
-    avgAutoPlus2: avg(entries.map(e => e.auton_SCORE_PLUS_2)),
-    avgAutoPlus3: avg(entries.map(e => e.auton_SCORE_PLUS_3)),
-    avgAutoPlus5: avg(entries.map(e => e.auton_SCORE_PLUS_5)),
-    avgAutoPlus10: avg(entries.map(e => e.auton_SCORE_PLUS_10)),
-    avgTeleopPlus1: avg(entries.map(e => e.teleop_SCORE_PLUS_1)),
-    avgTeleopPlus2: avg(entries.map(e => e.teleop_SCORE_PLUS_2)),
-    avgTeleopPlus3: avg(entries.map(e => e.teleop_SCORE_PLUS_3)),
-    avgTeleopPlus5: avg(entries.map(e => e.teleop_SCORE_PLUS_5)),
-    avgTeleopPlus10: avg(entries.map(e => e.teleop_SCORE_PLUS_10)),
+    // ── Derived: Bonus Bucket Averages ──
+    avgAutoPlus1: totalAutoPlus1 / n,
+    avgAutoPlus2: totalAutoPlus2 / n,
+    avgAutoPlus3: totalAutoPlus3 / n,
+    avgAutoPlus5: totalAutoPlus5 / n,
+    avgAutoPlus10: totalAutoPlus10 / n,
+    avgTeleopPlus1: totalTeleopPlus1 / n,
+    avgTeleopPlus2: totalTeleopPlus2 / n,
+    avgTeleopPlus3: totalTeleopPlus3 / n,
+    avgTeleopPlus5: totalTeleopPlus5 / n,
+    avgTeleopPlus10: totalTeleopPlus10 / n,
 
-    // Estimated points
-    avgAutoPoints: avg(pointsPerMatch.map(p => p.autoPoints)),
-    avgTeleopPoints: avg(pointsPerMatch.map(p => p.teleopPoints)),
-    avgEndgamePoints: avg(pointsPerMatch.map(p => p.endgamePoints)),
-    avgTotalPoints: avg(pointsPerMatch.map(p => p.total)),
+    // ── Derived: Points Averages ──
+    avgAutoPoints: totalAutoPoints / n,
+    avgTeleopPoints: totalTeleopPoints / n,
+    avgEndgamePoints: totalEndgamePoints / n,
+    avgTotalPoints: totalTotalPoints / n,
     maxTotalPoints: max(pointsPerMatch.map(p => p.total)),
 
-    // Passing
+    // ── Passing ──
     avgTotalPass,
     passerRatio,
 
-    // Notes
+    // ── Notes ──
     notesList,
   };
 }
@@ -151,6 +238,45 @@ function emptyStats(teamNumber: number, teamName?: string): RealTeamStatistics {
     teamNumber,
     teamName,
     matchesPlayed: 0,
+
+    // Raw counts
+    climbNoneCount: 0,
+    level1ClimbCount: 0,
+    level2ClimbCount: 0,
+    level3ClimbCount: 0,
+    climbFailedCount: 0,
+    autoClimbCount: 0,
+    autoDidNothingCount: 0,
+    startZoneCounts: [0, 0, 0, 0, 0, 0],
+    dedicatedPasserCount: 0,
+    bulldozedFuelCount: 0,
+    poorAccuracyCount: 0,
+    lostConnectionCount: 0,
+    noRobotCount: 0,
+    secondReviewCount: 0,
+    totalAutoFuelScore: 0,
+    totalTeleopFuelScore: 0,
+    totalAutoFuelPass: 0,
+    totalTeleopFuelPass: 0,
+    totalAutoPlus1: 0,
+    totalAutoPlus2: 0,
+    totalAutoPlus3: 0,
+    totalAutoPlus5: 0,
+    totalAutoPlus10: 0,
+    totalTeleopPlus1: 0,
+    totalTeleopPlus2: 0,
+    totalTeleopPlus3: 0,
+    totalTeleopPlus5: 0,
+    totalTeleopPlus10: 0,
+    totalAutoFuelEstimate: 0,
+    totalTeleopFuelEstimate: 0,
+    totalTotalFuelEstimate: 0,
+    totalAutoPoints: 0,
+    totalTeleopPoints: 0,
+    totalEndgamePoints: 0,
+    totalTotalPoints: 0,
+
+    // Derived
     avgAutoFuelEstimate: 0,
     avgTeleopFuelEstimate: 0,
     avgTotalFuelEstimate: 0,

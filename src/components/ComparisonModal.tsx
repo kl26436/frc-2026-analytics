@@ -8,6 +8,7 @@ import { useMetricsStore } from '../store/useMetricsStore';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { usePickListStore } from '../store/usePickListStore';
 import { getTeamEventMatches, getMatchVideoUrl, teamNumberToKey } from '../utils/tbaApi';
+import { getMetricValue } from '../utils/metricAggregation';
 
 // Fields where lower is better (for coloring)
 const LOWER_IS_BETTER_FIELDS = [
@@ -31,6 +32,7 @@ interface ComparisonModalProps {
 function ComparisonModal({ team1, team2, onPickTeam, onClose }: ComparisonModalProps) {
   const getEnabledColumns = useMetricsStore(state => state.getEnabledColumns);
   const eventCode = useAnalyticsStore(state => state.eventCode);
+  const realScoutEntries = useAnalyticsStore(state => state.realScoutEntries);
   const tbaApiKey = usePickListStore(state => state.tbaApiKey);
 
   const [teamVideos, setTeamVideos] = useState<Record<number, TBAMatch[]>>({});
@@ -84,14 +86,17 @@ function ComparisonModal({ team1, team2, onPickTeam, onClose }: ComparisonModalP
     const higherIsBetter = !LOWER_IS_BETTER_FIELDS.includes(column.field);
 
     const getValue = (team: TeamLike): number =>
-      (team as unknown as Record<string, number>)[column.field] || 0;
+      getMetricValue(column, team as any, realScoutEntries);
 
     const value1 = getValue(team1);
     const value2 = getValue(team2);
     const maxVal = Math.max(value1, value2);
     const minVal = Math.min(value1, value2);
 
-    const formatValue = (value: number) => {
+    const formatValue = (value: number, matchesPlayed?: number) => {
+      if (column.format === 'count') {
+        return `${Math.round(value)}/${matchesPlayed ?? '?'}`;
+      }
       switch (column.format) {
         case 'percentage': return `${value.toFixed(column.decimals)}%`;
         case 'time': return `${value.toFixed(column.decimals)}s`;
@@ -111,8 +116,8 @@ function ComparisonModal({ team1, team2, onPickTeam, onClose }: ComparisonModalP
     return (
       <div className="grid grid-cols-[1fr_80px_80px] sm:grid-cols-[1fr_100px_100px] gap-2 py-2 border-b border-border">
         <div className="text-sm text-textSecondary" title={column.description}>{column.label}</div>
-        <div className={`text-sm text-center ${getColorClass(value1)}`}>{formatValue(value1)}</div>
-        <div className={`text-sm text-center ${getColorClass(value2)}`}>{formatValue(value2)}</div>
+        <div className={`text-sm text-center ${getColorClass(value1)}`}>{formatValue(value1, team1.matchesPlayed)}</div>
+        <div className={`text-sm text-center ${getColorClass(value2)}`}>{formatValue(value2, team2.matchesPlayed)}</div>
       </div>
     );
   };

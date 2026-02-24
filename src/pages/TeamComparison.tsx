@@ -8,6 +8,7 @@ import type { TBAMatch } from '../types/tba';
 import type { MetricColumn, MetricCategory } from '../types/metrics';
 import { CATEGORY_LABELS } from '../types/metrics';
 import { getTeamEventMatches, getMatchVideoUrl, teamNumberToKey } from '../utils/tbaApi';
+import { getMetricValue } from '../utils/metricAggregation';
 
 // Fields where lower is better (for coloring)
 const LOWER_IS_BETTER_FIELDS = [
@@ -18,6 +19,7 @@ const LOWER_IS_BETTER_FIELDS = [
 function TeamComparison() {
   const navigate = useNavigate();
   const teamStatistics = useAnalyticsStore(state => state.realTeamStatistics);
+  const realScoutEntries = useAnalyticsStore(state => state.realScoutEntries);
   const selectedTeams = useAnalyticsStore(state => state.selectedTeams);
   const toggleTeamSelection = useAnalyticsStore(state => state.toggleTeamSelection);
   const eventCode = useAnalyticsStore(state => state.eventCode);
@@ -95,14 +97,17 @@ function TeamComparison() {
     const higherIsBetter = !LOWER_IS_BETTER_FIELDS.includes(column.field);
 
     const getValue = (team: typeof teamStatistics[0]): number => {
-      return (team as any)[column.field] || 0;
+      return getMetricValue(column, team, realScoutEntries);
     };
 
     const values = selectedTeamStats.map(getValue);
     const maxValue = Math.max(...values);
     const minValue = Math.min(...values);
 
-    const formatValue = (value: number) => {
+    const formatValue = (value: number, matchesPlayed?: number) => {
+      if (column.format === 'count') {
+        return `${Math.round(value)}/${matchesPlayed ?? '?'}`;
+      }
       switch (column.format) {
         case 'percentage':
           return `${value.toFixed(column.decimals)}%`;
@@ -140,7 +145,7 @@ function TeamComparison() {
               key={team.teamNumber}
               className={`px-4 py-3 text-center ${getColorClass(value)}`}
             >
-              {formatValue(value)}
+              {formatValue(value, team.matchesPlayed)}
             </td>
           );
         })}

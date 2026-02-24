@@ -4,6 +4,7 @@ import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { useMetricsStore } from '../store/useMetricsStore';
 import { ArrowUp, ArrowDown, Search, Sliders, LayoutGrid, Table2, X } from 'lucide-react';
 import { teamKeyToNumber } from '../utils/tbaApi';
+import { getMetricValue } from '../utils/metricAggregation';
 import ComparisonModal from '../components/ComparisonModal';
 
 type SortDirection = 'asc' | 'desc';
@@ -12,6 +13,7 @@ type SortCriteria = { field: string; direction: SortDirection };
 
 function TeamList() {
   const teamStatistics = useAnalyticsStore(state => state.realTeamStatistics);
+  const realScoutEntries = useAnalyticsStore(state => state.realScoutEntries);
   const tbaData = useAnalyticsStore(state => state.tbaData);
   const getEnabledColumns = useMetricsStore(state => state.getEnabledColumns);
 
@@ -75,8 +77,14 @@ function TeamList() {
           aValue = teamRankMap.get(a.teamNumber) ?? 999;
           bValue = teamRankMap.get(b.teamNumber) ?? 999;
         } else {
-          aValue = (a as any)[criteria.field];
-          bValue = (b as any)[criteria.field];
+          const col = enabledColumns.find(c => c.field === criteria.field || c.id === criteria.field);
+          if (col?.rawMetric) {
+            aValue = getMetricValue(col, a, realScoutEntries);
+            bValue = getMetricValue(col, b, realScoutEntries);
+          } else {
+            aValue = (a as unknown as Record<string, number>)[criteria.field];
+            bValue = (b as unknown as Record<string, number>)[criteria.field];
+          }
         }
 
         if (aValue === undefined) aValue = 0;
@@ -94,7 +102,7 @@ function TeamList() {
     });
 
     return teams;
-  }, [teamStatistics, searchQuery, sortCriteria, teamRankMap]);
+  }, [teamStatistics, searchQuery, sortCriteria, teamRankMap, enabledColumns, realScoutEntries]);
 
   const handleSort = (field: string, shiftKey: boolean) => {
     setSortCriteria(prev => {
@@ -151,10 +159,10 @@ function TeamList() {
             {sortCriteria.length > 1 && (
               <button
                 onClick={(e) => removeSortCriteria(field, e)}
-                className="ml-0.5 opacity-0 group-hover:opacity-100 hover:text-danger transition-opacity"
+                className="ml-0.5 p-0.5 opacity-0 group-hover:opacity-100 hover:text-danger transition-opacity"
                 title="Remove this sort"
               >
-                <X size={12} />
+                <X size={14} />
               </button>
             )}
           </span>
@@ -163,7 +171,10 @@ function TeamList() {
     );
   };
 
-  const formatMetricValue = (value: number, format: 'number' | 'percentage' | 'time', decimals: number) => {
+  const formatMetricValue = (value: number, format: 'number' | 'percentage' | 'time' | 'count', decimals: number, matchesPlayed?: number) => {
+    if (format === 'count') {
+      return `${Math.round(value)}/${matchesPlayed ?? '?'}`;
+    }
     const formatted = value.toFixed(decimals);
     switch (format) {
       case 'percentage': return `${formatted}%`;
@@ -203,21 +214,23 @@ function TeamList() {
           <div className="flex gap-1 bg-surface border border-border rounded-lg p-1">
             <button
               onClick={() => setViewMode('cards')}
-              className={`p-2 rounded transition-colors ${
-                viewMode === 'cards' ? 'bg-interactive' : 'hover:bg-surfaceElevated'
+              className={`flex items-center gap-1.5 px-3 py-2 rounded transition-colors text-sm ${
+                viewMode === 'cards' ? 'bg-interactive text-textPrimary' : 'text-textSecondary hover:bg-surfaceElevated'
               }`}
               title="Card view"
             >
-              <LayoutGrid size={18} />
+              <LayoutGrid size={16} />
+              <span className="hidden sm:inline">Cards</span>
             </button>
             <button
               onClick={() => setViewMode('table')}
-              className={`p-2 rounded transition-colors ${
-                viewMode === 'table' ? 'bg-interactive' : 'hover:bg-surfaceElevated'
+              className={`flex items-center gap-1.5 px-3 py-2 rounded transition-colors text-sm ${
+                viewMode === 'table' ? 'bg-interactive text-textPrimary' : 'text-textSecondary hover:bg-surfaceElevated'
               }`}
               title="Table view"
             >
-              <Table2 size={18} />
+              <Table2 size={16} />
+              <span className="hidden sm:inline">Table</span>
             </button>
           </div>
 
@@ -265,10 +278,10 @@ function TeamList() {
               )}
               <button
                 onClick={(e) => removeSortCriteria(criteria.field, e)}
-                className="ml-1 hover:text-danger transition-colors"
+                className="ml-1 p-0.5 hover:text-danger transition-colors"
                 title="Remove this sort"
               >
-                <X size={12} />
+                <X size={14} />
               </button>
             </span>
           ))}
@@ -283,7 +296,7 @@ function TeamList() {
         <div className="bg-surface rounded-lg border border-border overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
-            <thead className="bg-surfaceElevated border-b border-border">
+            <thead className="bg-surfaceElevated border-b border-border sticky top-0 z-10">
               <tr>
                 <th className="px-4 py-3 text-left text-textSecondary text-sm font-semibold">
                   <SortButton field="teamNumber" label="Team" />
@@ -302,7 +315,7 @@ function TeamList() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {filteredAndSortedTeams.map((team) => {
+              {filteredAndSortedTeams.map((team, index) => {
                 const isSelected = compareTeams.includes(team.teamNumber);
                 return (
                   <tr
@@ -311,7 +324,7 @@ function TeamList() {
                     className={`transition-colors cursor-pointer ${
                       isSelected
                         ? 'bg-blueAlliance/10 border-l-2 border-l-blueAlliance'
-                        : 'hover:bg-interactive'
+                        : `${index % 2 === 0 ? 'bg-surfaceAlt' : ''} hover:bg-interactive`
                     }`}
                   >
                     <td className="px-4 py-4">
@@ -337,10 +350,10 @@ function TeamList() {
                       {team.matchesPlayed}
                     </td>
                     {enabledColumns.map(column => {
-                      const value = (team as any)[column.field];
+                      const value = getMetricValue(column, team, realScoutEntries);
                       return (
                         <td key={column.id} className="px-4 py-4 text-right">
-                          {formatMetricValue(value || 0, column.format, column.decimals)}
+                          {formatMetricValue(value, column.format, column.decimals, team.matchesPlayed)}
                         </td>
                       );
                     })}
@@ -398,12 +411,12 @@ function TeamList() {
                     <p className="font-semibold">{team.matchesPlayed}</p>
                   </div>
                   {enabledColumns.slice(0, 3).map(column => {
-                    const value = (team as any)[column.field];
+                    const value = getMetricValue(column, team, realScoutEntries);
                     return (
                       <div key={column.id} className="bg-surfaceElevated rounded p-2">
                         <p className="text-textSecondary text-xs truncate">{column.label}</p>
                         <p className="font-semibold">
-                          {formatMetricValue(value || 0, column.format, column.decimals)}
+                          {formatMetricValue(value, column.format, column.decimals, team.matchesPlayed)}
                         </p>
                       </div>
                     );

@@ -31,8 +31,8 @@ function NavDropdown({ label, icon: Icon, items, isActive }: NavDropdownProps) {
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setOpen(!open)}
-        className={`flex items-center gap-2 px-3 xl:px-4 py-2 rounded transition-colors text-sm xl:text-base ${
-          isActive ? 'bg-success/20 text-success' : 'bg-surfaceElevated hover:bg-interactive'
+        className={`flex items-center gap-2 px-3 xl:px-4 py-2 rounded-t transition-colors text-sm xl:text-base ${
+          isActive ? 'border-b-2 border-success text-success' : 'text-textSecondary hover:text-textPrimary hover:bg-surfaceElevated'
         }`}
       >
         <Icon size={20} />
@@ -71,6 +71,54 @@ const strategyItems = [
   { to: '/alliance-selection', icon: Handshake, label: 'Alliance' },
 ];
 
+function UserDropdown() {
+  const { user, signOut } = useAuth();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  return (
+    <div className="relative pl-3 border-l border-border ml-2" ref={ref}>
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-2 p-1 rounded-full hover:ring-2 hover:ring-border transition-all"
+      >
+        {user?.photoURL ? (
+          <img src={user.photoURL} alt="" className="h-8 w-8 rounded-full" />
+        ) : (
+          <div className="h-8 w-8 rounded-full bg-surfaceElevated flex items-center justify-center text-sm font-bold">
+            {user?.displayName?.charAt(0) || user?.email?.charAt(0) || '?'}
+          </div>
+        )}
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-2 bg-surface border border-border rounded-lg shadow-lg py-2 min-w-[200px] z-50">
+          <div className="px-4 py-2 border-b border-border">
+            <p className="text-sm font-medium text-textPrimary truncate">
+              {user?.displayName || 'User'}
+            </p>
+            <p className="text-xs text-textMuted truncate">{user?.email}</p>
+          </div>
+          <button
+            onClick={() => { setOpen(false); signOut(); }}
+            className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-danger hover:bg-danger/10 transition-colors"
+          >
+            <LogOut size={16} />
+            Sign Out
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AppLayout() {
   const eventCode = useAnalyticsStore(state => state.eventCode);
   const { user, isAdmin, signOut } = useAuth();
@@ -99,12 +147,12 @@ function AppLayout() {
             </div>
 
             {/* Desktop Navigation */}
-            <nav className="hidden lg:flex gap-2 xl:gap-3">
+            <nav className="hidden lg:flex gap-2 xl:gap-3 items-center border-l border-border pl-3 ml-3">
               {/* Dashboard - standalone */}
               <Link
                 to="/"
-                className={`flex items-center gap-2 px-3 xl:px-4 py-2 rounded transition-colors text-sm xl:text-base ${
-                  location.pathname === '/' ? 'bg-success/20 text-success' : 'bg-surfaceElevated hover:bg-interactive'
+                className={`flex items-center gap-2 px-3 xl:px-4 py-2 rounded-t transition-colors text-sm xl:text-base ${
+                  location.pathname === '/' ? 'border-b-2 border-success text-success' : 'text-textSecondary hover:text-textPrimary hover:bg-surfaceElevated'
                 }`}
               >
                 <BarChart3 size={20} />
@@ -130,8 +178,8 @@ function AppLayout() {
               {/* Event - standalone */}
               <Link
                 to="/event"
-                className={`flex items-center gap-2 px-3 xl:px-4 py-2 rounded transition-colors text-sm xl:text-base ${
-                  location.pathname === '/event' ? 'bg-success/20 text-success' : 'bg-surfaceElevated hover:bg-interactive'
+                className={`flex items-center gap-2 px-3 xl:px-4 py-2 rounded-t transition-colors text-sm xl:text-base ${
+                  location.pathname === '/event' ? 'border-b-2 border-success text-success' : 'text-textSecondary hover:text-textPrimary hover:bg-surfaceElevated'
                 }`}
               >
                 <Calendar size={20} />
@@ -142,8 +190,8 @@ function AppLayout() {
               {isAdmin && (
                 <Link
                   to="/admin"
-                  className={`flex items-center gap-2 px-3 xl:px-4 py-2 rounded transition-colors text-sm xl:text-base ${
-                    location.pathname === '/admin' ? 'bg-success/20 text-success' : 'bg-surfaceElevated hover:bg-interactive'
+                  className={`flex items-center gap-2 px-3 xl:px-4 py-2 rounded-t transition-colors text-sm xl:text-base ${
+                    location.pathname === '/admin' ? 'border-b-2 border-success text-success' : 'text-textSecondary hover:text-textPrimary hover:bg-surfaceElevated'
                   }`}
                 >
                   <Shield size={20} />
@@ -151,20 +199,8 @@ function AppLayout() {
                 </Link>
               )}
 
-              {/* User + Sign out */}
-              <div className="flex items-center gap-2 pl-2 border-l border-border ml-1">
-                {user?.photoURL && (
-                  <img src={user.photoURL} alt="" className="h-7 w-7 rounded-full" />
-                )}
-                <span className="text-xs text-textSecondary max-w-[100px] truncate">{user?.email}</span>
-                <button
-                  onClick={signOut}
-                  className="p-2 rounded hover:bg-interactive text-textMuted hover:text-danger transition-colors"
-                  title="Sign out"
-                >
-                  <LogOut size={16} />
-                </button>
-              </div>
+              {/* User avatar dropdown */}
+              <UserDropdown />
             </nav>
 
             {/* Mobile Menu Button */}

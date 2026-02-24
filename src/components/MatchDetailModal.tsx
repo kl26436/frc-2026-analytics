@@ -1,14 +1,15 @@
 import { useEffect } from 'react';
 import { X, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
-import type { RealScoutEntry } from '../types/scoutingReal';
+import type { RealScoutEntry, RealTeamStatistics } from '../types/scoutingReal';
 import { estimateMatchFuel, estimateMatchPoints, parseClimbLevel, getAlliance, getStation } from '../types/scoutingReal';
 
 interface MatchDetailModalProps {
   match: RealScoutEntry;
+  teamStats?: RealTeamStatistics;
   onClose: () => void;
 }
 
-function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
+function MatchDetailModal({ match, teamStats, onClose }: MatchDetailModalProps) {
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -22,6 +23,7 @@ function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
   const climbLevel = parseClimbLevel(match.climb_level);
   const alliance = getAlliance(match.configured_team);
   const station = getStation(match.configured_team);
+  const n = teamStats?.matchesPlayed;
 
   const climbLabel = ['None', 'Level 1', 'Level 2', 'Level 3'][climbLevel] ?? 'None';
 
@@ -40,19 +42,21 @@ function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
   const hasIssues = match.lost_connection || match.no_robot_on_field || match.teleop_climb_failed ||
     match.eff_rep_bulldozed_fuel || match.poor_fuel_scoring_accuracy;
 
-  const BooleanBadge = ({ value, label }: { value: boolean; label: string }) => (
+  const BooleanBadge = ({ value, label, teamContext }: { value: boolean; label: string; teamContext?: string }) => (
     <div className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${
       value ? 'bg-success/20 text-success' : 'bg-surface text-textMuted'
     }`}>
       {value ? <CheckCircle size={12} /> : <XCircle size={12} />}
       {label}
+      {teamContext && <span className="text-textMuted ml-1">({teamContext})</span>}
     </div>
   );
 
-  const StatItem = ({ label, value, suffix = '' }: { label: string; value: string | number; suffix?: string }) => (
+  const StatItem = ({ label, value, suffix = '', teamContext }: { label: string; value: string | number; suffix?: string; teamContext?: string }) => (
     <div>
       <p className="text-textSecondary text-xs">{label}</p>
       <p className="font-semibold">{value}{suffix}</p>
+      {teamContext && <p className="text-xs text-textMuted">{teamContext}</p>}
     </div>
   );
 
@@ -120,8 +124,10 @@ function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
             <SectionHeader title="Pre-Match" />
             <div className="grid grid-cols-3 gap-4">
               <StatItem label="Start Zone" value={startZoneLabel} />
-              <StatItem label="Dedicated Passer" value={match.dedicated_passer ? 'Yes' : 'No'} />
-              <StatItem label="Second Review" value={match.second_review ? 'Yes' : 'No'} />
+              <StatItem label="Dedicated Passer" value={match.dedicated_passer ? 'Yes' : 'No'}
+                teamContext={teamStats ? `${teamStats.dedicatedPasserCount}/${n} matches` : undefined} />
+              <StatItem label="Second Review" value={match.second_review ? 'Yes' : 'No'}
+                teamContext={teamStats ? `${teamStats.secondReviewCount}/${n} matches` : undefined} />
             </div>
           </div>
 
@@ -131,8 +137,10 @@ function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-3">
               <StatItem label="Fuel Scored" value={match.auton_FUEL_SCORE} />
               <StatItem label="Fuel Passed" value={match.auton_FUEL_PASS} />
-              <StatItem label="Fuel Estimate" value={fuel.auto} />
-              <StatItem label="Auto Climbed" value={match.auton_AUTON_CLIMBED > 0 ? 'Yes' : 'No'} />
+              <StatItem label="Fuel Estimate" value={fuel.auto}
+                teamContext={teamStats ? `avg: ${teamStats.avgAutoFuelEstimate.toFixed(1)}` : undefined} />
+              <StatItem label="Auto Climbed" value={match.auton_AUTON_CLIMBED > 0 ? 'Yes' : 'No'}
+                teamContext={teamStats ? `${teamStats.autoClimbCount}/${n}` : undefined} />
             </div>
 
             {/* SCORE_PLUS breakdown */}
@@ -163,8 +171,10 @@ function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <BooleanBadge value={match.auton_AUTON_CLIMBED > 0} label="Auto Climb" />
-              <BooleanBadge value={!match.auton_did_nothing} label="Active Auto" />
+              <BooleanBadge value={match.auton_AUTON_CLIMBED > 0} label="Auto Climb"
+                teamContext={teamStats ? `${teamStats.autoClimbCount}/${n}` : undefined} />
+              <BooleanBadge value={!match.auton_did_nothing} label="Active Auto"
+                teamContext={teamStats ? `${teamStats.matchesPlayed - teamStats.autoDidNothingCount}/${teamStats.matchesPlayed}` : undefined} />
             </div>
           </div>
 
@@ -174,7 +184,8 @@ function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-3">
               <StatItem label="Fuel Scored" value={match.teleop_FUEL_SCORE} />
               <StatItem label="Fuel Passed" value={match.teleop_FUEL_PASS} />
-              <StatItem label="Fuel Estimate" value={fuel.teleop} />
+              <StatItem label="Fuel Estimate" value={fuel.teleop}
+                teamContext={teamStats ? `avg: ${teamStats.avgTeleopFuelEstimate.toFixed(1)}` : undefined} />
             </div>
 
             {/* SCORE_PLUS breakdown */}
@@ -205,7 +216,8 @@ function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <BooleanBadge value={match.dedicated_passer} label="Dedicated Passer" />
+              <BooleanBadge value={match.dedicated_passer} label="Dedicated Passer"
+                teamContext={teamStats ? `${teamStats.dedicatedPasserCount}/${n}` : undefined} />
             </div>
           </div>
 
@@ -213,9 +225,11 @@ function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
           <div>
             <SectionHeader title="Endgame" />
             <div className="grid grid-cols-3 gap-4 mb-3">
-              <StatItem label="Climb Level" value={climbLabel} />
+              <StatItem label="Climb Level" value={climbLabel}
+                teamContext={teamStats ? `L3: ${teamStats.level3ClimbCount}/${n}` : undefined} />
               <StatItem label="Climb Points" value={points.endgamePoints} />
-              <StatItem label="Climb Failed" value={match.teleop_climb_failed ? 'Yes' : 'No'} />
+              <StatItem label="Climb Failed" value={match.teleop_climb_failed ? 'Yes' : 'No'}
+                teamContext={teamStats ? `${teamStats.climbFailedCount}/${n}` : undefined} />
             </div>
           </div>
 
@@ -226,18 +240,22 @@ function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
               <div className="bg-surfaceElevated rounded-lg p-3 text-center">
                 <p className="text-xs text-textSecondary">Auto</p>
                 <p className="text-xl font-bold">{points.autoPoints}</p>
+                {teamStats && <p className="text-xs text-textMuted">avg: {teamStats.avgAutoPoints.toFixed(1)}</p>}
               </div>
               <div className="bg-surfaceElevated rounded-lg p-3 text-center">
                 <p className="text-xs text-textSecondary">Teleop</p>
                 <p className="text-xl font-bold">{points.teleopPoints}</p>
+                {teamStats && <p className="text-xs text-textMuted">avg: {teamStats.avgTeleopPoints.toFixed(1)}</p>}
               </div>
               <div className="bg-surfaceElevated rounded-lg p-3 text-center">
                 <p className="text-xs text-textSecondary">Endgame</p>
                 <p className="text-xl font-bold">{points.endgamePoints}</p>
+                {teamStats && <p className="text-xs text-textMuted">avg: {teamStats.avgEndgamePoints.toFixed(1)}</p>}
               </div>
               <div className="bg-success/10 border border-success/30 rounded-lg p-3 text-center">
                 <p className="text-xs text-success">Total</p>
                 <p className="text-xl font-bold text-success">{points.total}</p>
+                {teamStats && <p className="text-xs text-textMuted">avg: {teamStats.avgTotalPoints.toFixed(1)}</p>}
               </div>
             </div>
           </div>
@@ -246,10 +264,14 @@ function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
           <div>
             <SectionHeader title="Quality Flags" />
             <div className="flex flex-wrap gap-2 mb-3">
-              <BooleanBadge value={match.eff_rep_bulldozed_fuel} label="Bulldozed Fuel" />
-              <BooleanBadge value={match.poor_fuel_scoring_accuracy} label="Poor Accuracy" />
-              <BooleanBadge value={match.lost_connection} label="Lost Connection" />
-              <BooleanBadge value={match.no_robot_on_field} label="No Robot" />
+              <BooleanBadge value={match.eff_rep_bulldozed_fuel} label="Bulldozed Fuel"
+                teamContext={teamStats ? `${teamStats.bulldozedFuelCount}/${n}` : undefined} />
+              <BooleanBadge value={match.poor_fuel_scoring_accuracy} label="Poor Accuracy"
+                teamContext={teamStats ? `${teamStats.poorAccuracyCount}/${n}` : undefined} />
+              <BooleanBadge value={match.lost_connection} label="Lost Connection"
+                teamContext={teamStats ? `${teamStats.lostConnectionCount}/${n}` : undefined} />
+              <BooleanBadge value={match.no_robot_on_field} label="No Robot"
+                teamContext={teamStats ? `${teamStats.noRobotCount}/${n}` : undefined} />
             </div>
             {match.relative_driver_performance && (
               <StatItem label="Relative Driver Performance" value={match.relative_driver_performance} />

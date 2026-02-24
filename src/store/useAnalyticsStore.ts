@@ -75,8 +75,15 @@ export const useAnalyticsStore = create<AnalyticsState>()(
         // Clean up previous listeners
         get().unsubscribeFromRealData();
 
+        // Clear stale data immediately so old event data doesn't flash
         _subscribedEventKey = eventKey;
-        set({ realDataLoading: true, realDataError: null });
+        set({
+          realDataLoading: true,
+          realDataError: null,
+          realScoutEntries: [],
+          realTeamStatistics: [],
+          pgTbaMatches: [],
+        });
 
         // 1. Subscribe to scout entries: scoutData/{eventKey}/entries
         const entriesRef = collection(db, 'scoutData', eventKey, 'entries');
@@ -155,7 +162,22 @@ export const useAnalyticsStore = create<AnalyticsState>()(
       // ── Event Config ───────────────────────────────────────────────
 
       setEventCode: (code: string) => {
-        set({ eventCode: code });
+        const prev = get().eventCode;
+        if (prev && prev !== code) {
+          // Event changed — clear all stale data so old event doesn't bleed through
+          set({
+            eventCode: code,
+            tbaData: null,
+            tbaError: null,
+            realScoutEntries: [],
+            realTeamStatistics: [],
+            pgTbaMatches: [],
+            syncMeta: null,
+            selectedTeams: [],
+          });
+        } else {
+          set({ eventCode: code });
+        }
       },
 
       setHomeTeamNumber: (n: number) => {
@@ -194,7 +216,7 @@ export const useAnalyticsStore = create<AnalyticsState>()(
     }),
     {
       name: 'frc-analytics-storage',
-      version: 2,
+      version: 3,
       migrate: () => ({}),
       partialize: (state) => ({
         eventCode: state.eventCode,

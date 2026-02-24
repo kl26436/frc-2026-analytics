@@ -398,8 +398,8 @@ export default function AlliancePredictor() {
           <button
             key={m}
             onClick={() => { setMode(m); setSelectedMatchKey(null); setRedAllianceIdx(null); setBlueAllianceIdx(null); }}
-            className={`px-4 py-2 rounded font-medium transition-colors capitalize ${
-              mode === m ? 'bg-interactive text-textPrimary' : 'bg-surface text-textSecondary hover:bg-surfaceElevated'
+            className={`px-4 py-2 rounded-t font-medium transition-colors capitalize ${
+              mode === m ? 'bg-surface text-textPrimary border-b-2 border-success' : 'bg-surfaceElevated text-textSecondary hover:text-textPrimary hover:bg-interactive'
             }`}
           >
             {m === 'quals' ? 'Qualifying' : m === 'playoffs' ? 'Playoffs' : 'Custom'}
@@ -481,7 +481,7 @@ export default function AlliancePredictor() {
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-xs">
-                        <thead>
+                        <thead className="sticky top-0 z-10">
                           <tr className="bg-surfaceElevated">
                             <th className="px-3 py-2 text-left text-textSecondary">Match</th>
                             <th className="px-3 py-2 text-left text-textSecondary">Red Alliance</th>
@@ -500,7 +500,7 @@ export default function AlliancePredictor() {
                           </tr>
                         </thead>
                         <tbody>
-                          {qualPredictions.map(({ match, result, played, actualRed, actualBlue }) => {
+                          {qualPredictions.map(({ match, result, played, actualRed, actualBlue }, index) => {
                             const redNums = match.alliances.red.team_keys.map(teamKeyToNumber);
                             const blueNums = match.alliances.blue.team_keys.map(teamKeyToNumber);
                             const correctPrediction = played && (
@@ -514,7 +514,7 @@ export default function AlliancePredictor() {
                                 key={match.key}
                                 onClick={() => setSelectedMatchKey(match.key)}
                                 className={`border-t border-border cursor-pointer transition-colors hover:bg-surfaceElevated ${
-                                  has148 ? 'bg-warning/5' : ''
+                                  has148 ? 'bg-warning/10 border-l-[3px] border-l-warning' : index % 2 === 0 ? 'bg-surfaceAlt' : ''
                                 }`}
                               >
                                 <td className="px-3 py-2 text-textPrimary font-medium">

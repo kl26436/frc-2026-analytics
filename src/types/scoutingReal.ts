@@ -197,8 +197,66 @@ export interface RealTeamStatistics {
   teamName?: string;
   matchesPlayed: number;
 
-  // ── Fuel Scoring (the core metric) ──
-  /** Average estimated fuel per match (FUEL_SCORE + bonus buckets) */
+  // ══════════════════════════════════════════════════════════════════════
+  // RAW COUNTS (totals across all matches — what's actually in the DB)
+  // ══════════════════════════════════════════════════════════════════════
+
+  // ── Climb Counts ──
+  climbNoneCount: number;
+  level1ClimbCount: number;
+  level2ClimbCount: number;
+  level3ClimbCount: number;
+  climbFailedCount: number;
+
+  // ── Auto Counts ──
+  autoClimbCount: number;
+  autoDidNothingCount: number;
+
+  // ── Start Zone Counts (per zone, how many matches started there) ──
+  startZoneCounts: number[];
+
+  // ── Flag Counts ──
+  dedicatedPasserCount: number;
+  bulldozedFuelCount: number;
+  poorAccuracyCount: number;
+  lostConnectionCount: number;
+  noRobotCount: number;
+  secondReviewCount: number;
+
+  // ── Fuel Scoring Totals (sum of raw DB fields across all matches) ──
+  totalAutoFuelScore: number;
+  totalTeleopFuelScore: number;
+  totalAutoFuelPass: number;
+  totalTeleopFuelPass: number;
+
+  // ── Bonus Bucket Totals (sum of SCORE_PLUS counts) ──
+  totalAutoPlus1: number;
+  totalAutoPlus2: number;
+  totalAutoPlus3: number;
+  totalAutoPlus5: number;
+  totalAutoPlus10: number;
+  totalTeleopPlus1: number;
+  totalTeleopPlus2: number;
+  totalTeleopPlus3: number;
+  totalTeleopPlus5: number;
+  totalTeleopPlus10: number;
+
+  // ── Fuel Estimate Totals (sum of per-match SCORE_PLUS formula results) ──
+  totalAutoFuelEstimate: number;
+  totalTeleopFuelEstimate: number;
+  totalTotalFuelEstimate: number;
+
+  // ── Points Estimate Totals (sum of per-match estimated points) ──
+  totalAutoPoints: number;
+  totalTeleopPoints: number;
+  totalEndgamePoints: number;
+  totalTotalPoints: number;
+
+  // ══════════════════════════════════════════════════════════════════════
+  // DERIVED STATISTICS (calculated from raw counts)
+  // ══════════════════════════════════════════════════════════════════════
+
+  // ── Fuel Averages ──
   avgAutoFuelEstimate: number;
   avgTeleopFuelEstimate: number;
   avgTotalFuelEstimate: number;
@@ -206,33 +264,33 @@ export interface RealTeamStatistics {
   maxTeleopFuelEstimate: number;
   maxTotalFuelEstimate: number;
 
-  // ── Raw Counts (before bonus formula) ──
+  // ── Raw Fuel Averages ──
   avgAutoFuelScore: number;
   avgTeleopFuelScore: number;
   avgAutoFuelPass: number;
   avgTeleopFuelPass: number;
 
-  // ── Climb ──
+  // ── Climb Rates (%) ──
   climbNoneRate: number;
   level1ClimbRate: number;
   level2ClimbRate: number;
   level3ClimbRate: number;
   climbFailedRate: number;
 
-  // ── Auto ──
+  // ── Auto Rates (%) ──
   autoClimbRate: number;
   autoDidNothingRate: number;
   /** % of matches in each start zone [zone1, zone2, ..., zone6] */
   startZoneDistribution: number[];
 
-  // ── Quality Flags ──
+  // ── Flag Rates (%) ──
   dedicatedPasserRate: number;
   bulldozedFuelRate: number;
   poorAccuracyRate: number;
   lostConnectionRate: number;
   noRobotRate: number;
 
-  // ── Bonus Bucket Breakdown (avg count per match) ──
+  // ── Bonus Bucket Averages (avg count per match) ──
   avgAutoPlus1: number;
   avgAutoPlus2: number;
   avgAutoPlus3: number;
@@ -244,7 +302,7 @@ export interface RealTeamStatistics {
   avgTeleopPlus5: number;
   avgTeleopPlus10: number;
 
-  // ── Estimated Points (game scoring rules) ──
+  // ── Points Averages ──
   avgAutoPoints: number;
   avgTeleopPoints: number;
   avgEndgamePoints: number;

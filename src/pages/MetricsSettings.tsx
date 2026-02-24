@@ -13,51 +13,14 @@ import {
 import { useNavigate } from 'react-router-dom';
 import type { MetricColumn, MetricCategory, MetricAggregation } from '../types/metrics';
 import { CATEGORY_LABELS, DEFAULT_METRICS } from '../types/metrics';
+import { RAW_METRIC_OPTIONS } from '../utils/metricAggregation';
 
-// Available data fields from RealTeamStatistics for custom metric creation
-const AVAILABLE_FIELDS = [
-  // Overall
-  { field: 'avgTotalPoints', label: 'Total Points', category: 'overall' as MetricCategory },
-  { field: 'maxTotalPoints', label: 'Max Total Points', category: 'overall' as MetricCategory },
-  { field: 'avgAutoPoints', label: 'Auto Points', category: 'overall' as MetricCategory },
-  { field: 'avgTeleopPoints', label: 'Teleop Points', category: 'overall' as MetricCategory },
-  { field: 'avgEndgamePoints', label: 'Endgame Points', category: 'overall' as MetricCategory },
-  // Fuel
-  { field: 'avgTotalFuelEstimate', label: 'Total Fuel Estimate', category: 'fuel' as MetricCategory },
-  { field: 'avgAutoFuelEstimate', label: 'Auto Fuel Estimate', category: 'fuel' as MetricCategory },
-  { field: 'avgTeleopFuelEstimate', label: 'Teleop Fuel Estimate', category: 'fuel' as MetricCategory },
-  { field: 'maxTotalFuelEstimate', label: 'Max Total Fuel', category: 'fuel' as MetricCategory },
-  { field: 'avgAutoFuelScore', label: 'Auto Raw FUEL_SCORE', category: 'fuel' as MetricCategory },
-  { field: 'avgTeleopFuelScore', label: 'Teleop Raw FUEL_SCORE', category: 'fuel' as MetricCategory },
-  { field: 'avgTotalPass', label: 'Total Passes', category: 'fuel' as MetricCategory },
-  { field: 'passerRatio', label: 'Passer Ratio', category: 'fuel' as MetricCategory },
-  { field: 'avgAutoPlus1', label: 'Auto +1 Buckets', category: 'fuel' as MetricCategory },
-  { field: 'avgAutoPlus2', label: 'Auto +2 Buckets', category: 'fuel' as MetricCategory },
-  { field: 'avgAutoPlus3', label: 'Auto +3 Buckets', category: 'fuel' as MetricCategory },
-  { field: 'avgAutoPlus5', label: 'Auto +5 Buckets', category: 'fuel' as MetricCategory },
-  { field: 'avgAutoPlus10', label: 'Auto +10 Buckets', category: 'fuel' as MetricCategory },
-  { field: 'avgTeleopPlus1', label: 'Teleop +1 Buckets', category: 'fuel' as MetricCategory },
-  { field: 'avgTeleopPlus2', label: 'Teleop +2 Buckets', category: 'fuel' as MetricCategory },
-  { field: 'avgTeleopPlus3', label: 'Teleop +3 Buckets', category: 'fuel' as MetricCategory },
-  { field: 'avgTeleopPlus5', label: 'Teleop +5 Buckets', category: 'fuel' as MetricCategory },
-  { field: 'avgTeleopPlus10', label: 'Teleop +10 Buckets', category: 'fuel' as MetricCategory },
-  // Auto
-  { field: 'autoClimbRate', label: 'Auto Climb Rate', category: 'auto' as MetricCategory },
-  { field: 'autoDidNothingRate', label: 'Auto Did Nothing Rate', category: 'auto' as MetricCategory },
-  // Endgame
-  { field: 'level3ClimbRate', label: 'L3 Climb Rate', category: 'endgame' as MetricCategory },
-  { field: 'level2ClimbRate', label: 'L2 Climb Rate', category: 'endgame' as MetricCategory },
-  { field: 'level1ClimbRate', label: 'L1 Climb Rate', category: 'endgame' as MetricCategory },
-  { field: 'climbNoneRate', label: 'No Climb Rate', category: 'endgame' as MetricCategory },
-  { field: 'climbFailedRate', label: 'Climb Failed Rate', category: 'endgame' as MetricCategory },
-  // Quality
-  { field: 'dedicatedPasserRate', label: 'Dedicated Passer Rate', category: 'quality' as MetricCategory },
-  { field: 'bulldozedFuelRate', label: 'Bulldozed Fuel Rate', category: 'quality' as MetricCategory },
-  { field: 'poorAccuracyRate', label: 'Poor Accuracy Rate', category: 'quality' as MetricCategory },
-  // Reliability
-  { field: 'lostConnectionRate', label: 'Lost Connection Rate', category: 'reliability' as MetricCategory },
-  { field: 'noRobotRate', label: 'No Robot Rate', category: 'reliability' as MetricCategory },
-];
+// Category labels for raw metric options
+const RAW_METRIC_CATEGORY_LABELS: Record<string, string> = {
+  overall: 'Overall',
+  fuel: 'Fuel Scoring',
+  endgame: 'Endgame',
+};
 
 function MetricsSettings() {
   const navigate = useNavigate();
@@ -103,10 +66,10 @@ function MetricsSettings() {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showAddCustom, setShowAddCustom] = useState(false);
   const [newColumn, setNewColumn] = useState({
-    baseField: '',
+    rawMetricId: '',
     aggregation: 'avg' as MetricAggregation,
     label: '',
-    format: 'number' as 'number' | 'percentage' | 'time',
+    format: 'number' as 'number' | 'percentage' | 'time' | 'count',
     decimals: 1,
     category: 'overall' as MetricCategory,
   });
@@ -138,35 +101,28 @@ function MetricsSettings() {
 
   // Handle adding a new custom column
   const handleAddColumn = () => {
-    if (!newColumn.baseField || !newColumn.label) return;
+    if (!newColumn.rawMetricId || !newColumn.label) return;
 
-    const selectedField = AVAILABLE_FIELDS.find(f => f.field === newColumn.baseField);
-    const fieldName = newColumn.baseField.replace(/^avg/, '').replace(/Rate$/, '');
-    const id = `custom_${newColumn.aggregation}_${fieldName}_${Date.now()}`;
-
-    let actualField = newColumn.baseField;
-    if (newColumn.aggregation === 'max') {
-      actualField = newColumn.baseField.replace(/^avg/, 'max');
-    } else if (newColumn.aggregation === 'min') {
-      actualField = newColumn.baseField.replace(/^avg/, 'min');
-    }
+    const selectedOption = RAW_METRIC_OPTIONS.find(o => o.id === newColumn.rawMetricId);
+    const id = `custom_${newColumn.aggregation}_${newColumn.rawMetricId}_${Date.now()}`;
 
     const column: MetricColumn = {
       id,
       label: newColumn.label,
-      field: actualField,
+      field: 'computed', // unused — value comes from rawMetric
+      rawMetric: newColumn.rawMetricId,
       aggregation: newColumn.aggregation,
       format: newColumn.format,
       decimals: newColumn.decimals,
       enabled: true,
-      description: `Custom: ${newColumn.aggregation} of ${selectedField?.label || newColumn.baseField}`,
-      category: selectedField?.category || newColumn.category,
+      description: `Custom: ${newColumn.aggregation} of ${selectedOption?.label || newColumn.rawMetricId}`,
+      category: selectedOption?.category as MetricCategory || newColumn.category,
     };
 
     addColumn(column);
     setShowAddCustom(false);
     setNewColumn({
-      baseField: '',
+      rawMetricId: '',
       aggregation: 'avg',
       label: '',
       format: 'number',
@@ -175,19 +131,23 @@ function MetricsSettings() {
     });
   };
 
-  const updateNewColumnLabel = (baseField: string, aggregation: MetricAggregation) => {
-    const selectedField = AVAILABLE_FIELDS.find(f => f.field === baseField);
-    if (selectedField) {
-      const prefix = aggregation === 'avg' ? 'Avg' : aggregation === 'max' ? 'Max' : aggregation === 'min' ? 'Min' : '';
+  const AGG_LABELS: Record<MetricAggregation, string> = {
+    avg: 'Avg', max: 'Max', min: 'Min', median: 'Median', sum: 'Sum', rate: 'Rate',
+  };
+
+  const updateNewColumnLabel = (rawMetricId: string, aggregation: MetricAggregation) => {
+    const selectedOption = RAW_METRIC_OPTIONS.find(o => o.id === rawMetricId);
+    if (selectedOption) {
+      const prefix = AGG_LABELS[aggregation] || '';
       setNewColumn(prev => ({
         ...prev,
-        baseField,
+        rawMetricId,
         aggregation,
-        label: `${prefix} ${selectedField.label}`.trim(),
-        category: selectedField.category,
+        label: `${prefix} ${selectedOption.label}`.trim(),
+        category: selectedOption.category as MetricCategory,
       }));
     } else {
-      setNewColumn(prev => ({ ...prev, baseField, aggregation }));
+      setNewColumn(prev => ({ ...prev, rawMetricId, aggregation }));
     }
   };
 
@@ -314,12 +274,13 @@ function MetricsSettings() {
                               <label className="block text-xs text-textSecondary mb-1">Format</label>
                               <select
                                 value={editForm.format || 'number'}
-                                onChange={e => setEditForm({ ...editForm, format: e.target.value as 'number' | 'percentage' | 'time' })}
+                                onChange={e => setEditForm({ ...editForm, format: e.target.value as 'number' | 'percentage' | 'time' | 'count' })}
                                 className="w-full px-3 py-1.5 bg-background border border-border rounded-lg text-sm"
                               >
                                 <option value="number">Number</option>
                                 <option value="percentage">Percentage</option>
                                 <option value="time">Time (seconds)</option>
+                                <option value="count">Count (X/N)</option>
                               </select>
                             </div>
                             <div>
@@ -452,17 +413,17 @@ function MetricsSettings() {
                   <h4 className="font-bold text-sm mb-3">New Custom Metric</h4>
                   <div className="space-y-3">
                     <div>
-                      <label className="block text-xs text-textSecondary mb-1">Data Field *</label>
+                      <label className="block text-xs text-textSecondary mb-1">What to measure *</label>
                       <select
-                        value={newColumn.baseField}
+                        value={newColumn.rawMetricId}
                         onChange={e => updateNewColumnLabel(e.target.value, newColumn.aggregation)}
                         className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm"
                       >
                         <option value="">Select a field...</option>
-                        {(Object.keys(CATEGORY_LABELS) as MetricCategory[]).map(cat => (
-                          <optgroup key={cat} label={CATEGORY_LABELS[cat]}>
-                            {AVAILABLE_FIELDS.filter(f => f.category === cat).map(f => (
-                              <option key={f.field} value={f.field}>{f.label}</option>
+                        {Object.entries(RAW_METRIC_CATEGORY_LABELS).map(([cat, catLabel]) => (
+                          <optgroup key={cat} label={catLabel}>
+                            {RAW_METRIC_OPTIONS.filter(o => o.category === cat).map(o => (
+                              <option key={o.id} value={o.id}>{o.label}</option>
                             ))}
                           </optgroup>
                         ))}
@@ -470,16 +431,18 @@ function MetricsSettings() {
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-xs text-textSecondary mb-1">Type</label>
+                        <label className="block text-xs text-textSecondary mb-1">How to aggregate *</label>
                         <select
                           value={newColumn.aggregation}
-                          onChange={e => updateNewColumnLabel(newColumn.baseField, e.target.value as MetricAggregation)}
+                          onChange={e => updateNewColumnLabel(newColumn.rawMetricId, e.target.value as MetricAggregation)}
                           className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm"
                         >
                           <option value="avg">Average</option>
                           <option value="max">Maximum</option>
                           <option value="min">Minimum</option>
-                          <option value="rate">Rate (%)</option>
+                          <option value="median">Median</option>
+                          <option value="sum">Sum (total)</option>
+                          <option value="rate">Rate (% non-zero)</option>
                         </select>
                       </div>
                       <div>
@@ -488,7 +451,7 @@ function MetricsSettings() {
                           type="text"
                           value={newColumn.label}
                           onChange={e => setNewColumn({ ...newColumn, label: e.target.value })}
-                          placeholder="e.g., Max Points"
+                          placeholder="e.g., Median Teleop Fuel"
                           className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm"
                         />
                       </div>
@@ -498,12 +461,13 @@ function MetricsSettings() {
                         <label className="block text-xs text-textSecondary mb-1">Format</label>
                         <select
                           value={newColumn.format}
-                          onChange={e => setNewColumn({ ...newColumn, format: e.target.value as 'number' | 'percentage' | 'time' })}
+                          onChange={e => setNewColumn({ ...newColumn, format: e.target.value as 'number' | 'percentage' | 'time' | 'count' })}
                           className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm"
                         >
                           <option value="number">Number</option>
                           <option value="percentage">Percentage</option>
                           <option value="time">Time (seconds)</option>
+                          <option value="count">Count (X/N)</option>
                         </select>
                       </div>
                       <div>
@@ -527,7 +491,7 @@ function MetricsSettings() {
                       </button>
                       <button
                         onClick={handleAddColumn}
-                        disabled={!newColumn.baseField || !newColumn.label}
+                        disabled={!newColumn.rawMetricId || !newColumn.label}
                         className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-success text-background font-semibold rounded-lg hover:bg-success/90 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Plus size={14} />
