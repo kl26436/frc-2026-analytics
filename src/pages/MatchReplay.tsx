@@ -6,6 +6,9 @@ import { computeRobotFuelFromActions, getAlliance } from '../types/scouting';
 import type { ScoutAction } from '../types/scouting';
 import { formatDuration } from '../utils/formatting';
 
+// Read CSS design tokens for SVG attributes (which can't use var())
+const getCssHsl = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
 // ── Field image coordinate mapping (from 2026-rebuilt.json) ──
 // Image: 4196x2035 px, field-corners: top-left (245,118) to bottom-right (3942,1914)
 const FIELD_IMG_TL = { x: 245, y: 118 };
@@ -236,12 +239,12 @@ function MatchReplay() {
     else setCurrentTime(0);
   };
 
-  // ── Dot color helpers ──
+  // ── Dot color helpers (use CSS tokens for SVG fills) ──
   const dotColor = (item: TimelineAction, isCurrent: boolean) => {
     const opacity = isCurrent ? 1 : 0.4;
-    if (item.action.type === 'FUEL_SCORE') return `rgba(34, 197, 94, ${opacity})`; // green
-    if (item.action.type === 'FUEL_PASS') return `rgba(234, 179, 8, ${opacity})`; // yellow
-    return `rgba(96, 165, 250, ${opacity})`; // blue
+    if (item.action.type === 'FUEL_SCORE') return `hsl(${getCssHsl('--success')} / ${opacity})`;
+    if (item.action.type === 'FUEL_PASS') return `hsl(${getCssHsl('--warning')} / ${opacity})`;
+    return `hsl(${getCssHsl('--blue-alliance')} / ${opacity})`;
   };
 
   const allianceColor = (a: 'red' | 'blue') => a === 'red' ? 'text-redAlliance' : 'text-blueAlliance';
@@ -385,9 +388,9 @@ function MatchReplay() {
 
         {/* Legend */}
         <div className="flex items-center gap-4 mt-2 text-xs text-textMuted">
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-green-500 inline-block" /> Score</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-yellow-500 inline-block" /> Pass</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-blue-400 inline-block" /> Climb</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-success inline-block" /> Score</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-warning inline-block" /> Pass</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-blueAlliance inline-block" /> Climb</span>
         </div>
       </div>
 
@@ -412,7 +415,7 @@ function MatchReplay() {
                 >
                   <span className="font-mono text-textMuted w-12 text-right text-xs">{formatDuration(item.relativeTime)}</span>
                   <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
-                    item.phase === 'auto' ? 'bg-purple-500/20 text-purple-400' : 'bg-success/20 text-success'
+                    item.phase === 'auto' ? 'bg-warning/20 text-warning' : 'bg-success/20 text-success'
                   }`}>
                     {item.phase}
                   </span>
@@ -420,9 +423,9 @@ function MatchReplay() {
                     {item.teamNumber}
                   </span>
                   <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                    item.action.type === 'FUEL_SCORE' ? 'bg-green-500/20 text-green-400' :
-                    item.action.type === 'FUEL_PASS' ? 'bg-yellow-500/20 text-yellow-400' :
-                    'bg-blue-400/20 text-blue-400'
+                    item.action.type === 'FUEL_SCORE' ? 'bg-success/20 text-success' :
+                    item.action.type === 'FUEL_PASS' ? 'bg-warning/20 text-warning' :
+                    'bg-blueAlliance/20 text-blueAlliance'
                   }`}>
                     {item.label}
                   </span>
@@ -460,11 +463,11 @@ function MatchReplay() {
                   </div>
                   <div>
                     <p className="text-textMuted">Shots</p>
-                    <p className="text-lg font-bold text-green-400">{r.totalShots}</p>
+                    <p className="text-lg font-bold text-success">{r.totalShots}</p>
                   </div>
                   <div>
                     <p className="text-textMuted">Passes</p>
-                    <p className="text-lg font-bold text-yellow-400">{r.totalPasses}</p>
+                    <p className="text-lg font-bold text-warning">{r.totalPasses}</p>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-center text-[10px] mt-2 pt-2 border-t border-border/30">

@@ -113,7 +113,7 @@ function Login() {
         <button
           onClick={signInWithGoogle}
           disabled={loading}
-          className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-white text-gray-800 font-semibold rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-gray-300"
+          className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-white text-background font-semibold rounded-lg hover:bg-white/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-border"
         >
           {loading ? (
             <Loader2 size={20} className="animate-spin" />

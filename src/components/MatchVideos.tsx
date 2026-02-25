@@ -144,7 +144,7 @@ function MatchVideos({ teamNumber, eventKey: propEventKey }: MatchVideosProps) {
             <div
               key={match.key}
               className={`bg-surface border rounded-lg overflow-hidden ${
-                alliance === 'red' ? 'border-l-4 border-l-red-500' : 'border-l-4 border-l-blue-500'
+                alliance === 'red' ? 'border-l-4 border-l-redAlliance' : 'border-l-4 border-l-blueAlliance'
               }`}
             >
               <div className="p-4">
@@ -166,11 +166,11 @@ function MatchVideos({ teamNumber, eventKey: propEventKey }: MatchVideosProps) {
                     )}
                   </div>
                   <div className="flex items-center gap-2 text-sm">
-                    <span className="text-red-500 font-semibold">
+                    <span className="text-redAlliance font-semibold">
                       {match.alliances.red.score}
                     </span>
                     <span className="text-textMuted">-</span>
-                    <span className="text-blue-500 font-semibold">
+                    <span className="text-blueAlliance font-semibold">
                       {match.alliances.blue.score}
                     </span>
                   </div>

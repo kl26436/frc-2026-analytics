@@ -353,7 +353,7 @@ function MetricsSettings() {
 
       {/* Add Metric Picker Modal */}
       {showAddPicker && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={() => setShowAddPicker(false)}>
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setShowAddPicker(false)}>
           <div className="bg-surface rounded-lg border border-border w-full max-w-lg max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
               <h3 className="font-bold text-lg">Add Metric</h3>
@@ -516,7 +516,7 @@ function MetricsSettings() {
 
       {/* Reset Confirmation */}
       {showResetConfirm && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={() => setShowResetConfirm(false)}>
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setShowResetConfirm(false)}>
           <div className="bg-surface rounded-lg border border-border p-6 max-w-sm w-full" onClick={e => e.stopPropagation()}>
             <h3 className="font-bold text-lg mb-2">Reset to Defaults?</h3>
             <p className="text-textSecondary text-sm mb-6">

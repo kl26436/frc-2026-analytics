@@ -10,6 +10,21 @@ import type { TBAMatch } from '../types/tba';
 import { getTeamEventMatches, getMatchVideoUrl, teamNumberToKey } from '../utils/tbaApi';
 import MatchDetailModal from '../components/MatchDetailModal';
 
+// Chart colors — read from CSS design tokens (SVG attributes can't use var())
+const getCssHsl = (name: string) => `hsl(${getComputedStyle(document.documentElement).getPropertyValue(name).trim()})`;
+const chartColors = () => ({
+  grid: getCssHsl('--border'),
+  axis: getCssHsl('--text-muted'),
+  tick: getCssHsl('--text-secondary'),
+  success: getCssHsl('--success'),
+  warning: getCssHsl('--warning'),
+  blue: getCssHsl('--blue-alliance'),
+  tooltipBg: getCssHsl('--surface-elevated'),
+  tooltipBorder: getCssHsl('--border'),
+  tooltipText: getCssHsl('--text-primary'),
+  tooltipLabel: getCssHsl('--text-secondary'),
+});
+
 function TeamDetail() {
   const { teamNumber } = useParams<{ teamNumber: string }>();
   const navigate = useNavigate();
@@ -157,67 +172,70 @@ function TeamDetail() {
       </div>
 
       {/* Match Performance Trend Chart */}
-      {matchData.length >= 2 && (
-        <div className="bg-surface p-6 rounded-lg border border-border">
-          <h2 className="text-xl font-bold mb-4">Match Performance Trend</h2>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={matchData.map(({ entry, points }) => ({
-                match: `Q${entry.match_number}`,
-                total: points.total,
-                auto: points.autoPoints,
-                teleop: points.teleopPoints,
-              }))}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#333333" />
-                <XAxis
-                  dataKey="match"
-                  stroke="#737373"
-                  tick={{ fill: '#A3A3A3', fontSize: 12 }}
-                />
-                <YAxis
-                  stroke="#737373"
-                  tick={{ fill: '#A3A3A3', fontSize: 12 }}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#1E1E1E',
-                    border: '1px solid #333333',
-                    borderRadius: '8px',
-                    color: '#FFFFFF',
-                  }}
-                  labelStyle={{ color: '#A3A3A3' }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="total"
-                  stroke="#22C55E"
-                  strokeWidth={2}
-                  dot={{ fill: '#22C55E', r: 4 }}
-                  name="Total Points"
-                />
-                <Line
-                  type="monotone"
-                  dataKey="auto"
-                  stroke="#EAB308"
-                  strokeWidth={1.5}
-                  dot={{ fill: '#EAB308', r: 3 }}
-                  name="Auto"
-                  strokeDasharray="5 5"
-                />
-                <Line
-                  type="monotone"
-                  dataKey="teleop"
-                  stroke="#2563EB"
-                  strokeWidth={1.5}
-                  dot={{ fill: '#2563EB', r: 3 }}
-                  name="Teleop"
-                  strokeDasharray="5 5"
-                />
-              </LineChart>
-            </ResponsiveContainer>
+      {matchData.length >= 2 && (() => {
+        const cc = chartColors();
+        return (
+          <div className="bg-surface p-6 rounded-lg border border-border">
+            <h2 className="text-xl font-bold mb-4">Match Performance Trend</h2>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={matchData.map(({ entry, points }) => ({
+                  match: `Q${entry.match_number}`,
+                  total: points.total,
+                  auto: points.autoPoints,
+                  teleop: points.teleopPoints,
+                }))}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={cc.grid} />
+                  <XAxis
+                    dataKey="match"
+                    stroke={cc.axis}
+                    tick={{ fill: cc.tick, fontSize: 12 }}
+                  />
+                  <YAxis
+                    stroke={cc.axis}
+                    tick={{ fill: cc.tick, fontSize: 12 }}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: cc.tooltipBg,
+                      border: `1px solid ${cc.tooltipBorder}`,
+                      borderRadius: '8px',
+                      color: cc.tooltipText,
+                    }}
+                    labelStyle={{ color: cc.tooltipLabel }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="total"
+                    stroke={cc.success}
+                    strokeWidth={2}
+                    dot={{ fill: cc.success, r: 4 }}
+                    name="Total Points"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="auto"
+                    stroke={cc.warning}
+                    strokeWidth={1.5}
+                    dot={{ fill: cc.warning, r: 3 }}
+                    name="Auto"
+                    strokeDasharray="5 5"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="teleop"
+                    stroke={cc.blue}
+                    strokeWidth={1.5}
+                    dot={{ fill: cc.blue, r: 3 }}
+                    name="Teleop"
+                    strokeDasharray="5 5"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ═══════════════════════════════════════════════════════════════════ */}
       {/* Scouting Totals — raw database counts */}
