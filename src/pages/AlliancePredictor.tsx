@@ -147,12 +147,16 @@ function PredictionContent({
                       <span className="text-textPrimary">{rp.expectedWinRP.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-textSecondary">Climb Bonus Prob</span>
-                      <span className="text-textPrimary">{formatProb(rp.climbBonusProb)}</span>
+                      <span className="text-textSecondary">Energized RP</span>
+                      <span className="text-textPrimary">{formatProb(rp.energizedProb)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-textSecondary">Scoring Bonus Prob</span>
-                      <span className="text-textPrimary">{formatProb(rp.scoringBonusProb)}</span>
+                      <span className="text-textSecondary">Supercharged RP</span>
+                      <span className="text-textPrimary">{formatProb(rp.superchargedProb)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-textSecondary">Traversal RP</span>
+                      <span className="text-textPrimary">{formatProb(rp.traversalProb)}</span>
                     </div>
                     <div className="flex justify-between text-sm border-t border-border pt-1.5">
                       <span className="text-textPrimary font-medium">Expected Total RP</span>
@@ -179,9 +183,10 @@ function PredictionContent({
           </thead>
           <tbody>
             {([
-              { label: 'Auto', red: matchup.red.autoScore, blue: matchup.blue.autoScore },
-              { label: 'Teleop', red: matchup.red.teleopScore, blue: matchup.blue.teleopScore },
-              { label: 'Endgame', red: matchup.red.endgameScore, blue: matchup.blue.endgameScore },
+              { label: 'Auto Hub', red: matchup.red.autoHubScore, blue: matchup.blue.autoHubScore },
+              { label: 'Auto Tower', red: matchup.red.autoTowerScore, blue: matchup.blue.autoTowerScore },
+              { label: 'Teleop Hub', red: matchup.red.teleopHubScore, blue: matchup.blue.teleopHubScore },
+              { label: 'Endgame Tower', red: matchup.red.endgameTowerScore, blue: matchup.blue.endgameTowerScore },
             ] as const).map(row => {
               const diff = row.red - row.blue;
               const advColor = Math.abs(diff) < 0.5 ? 'text-textMuted' : diff > 0 ? 'text-redAlliance' : 'text-blueAlliance';
@@ -233,7 +238,7 @@ function PredictionContent({
                     <th className="px-3 py-2 text-left text-textSecondary">Team</th>
                     <th className="px-3 py-2 text-right text-textSecondary">Auto</th>
                     <th className="px-3 py-2 text-right text-textSecondary">Teleop</th>
-                    <th className="px-3 py-2 text-right text-textSecondary">End</th>
+                    <th className="px-3 py-2 text-right text-textSecondary">Tower</th>
                     <th className="px-3 py-2 text-right text-textSecondary">Total</th>
                     <th className="px-3 py-2 text-right text-textSecondary">Rel.</th>
                   </tr>
@@ -242,9 +247,9 @@ function PredictionContent({
                   {[...side.teams].sort((a, b) => b.totalPoints - a.totalPoints).map(t => (
                     <tr key={t.teamNumber} className="border-t border-border">
                       <td className="px-3 py-2 text-textPrimary font-medium">{t.teamNumber}</td>
-                      <td className="px-3 py-2 text-right text-textSecondary">{t.autoPoints.toFixed(1)}</td>
-                      <td className="px-3 py-2 text-right text-textSecondary">{t.teleopPoints.toFixed(1)}</td>
-                      <td className="px-3 py-2 text-right text-textSecondary">{t.endgamePoints.toFixed(1)}</td>
+                      <td className="px-3 py-2 text-right text-textSecondary">{(t.autoHubPoints + t.autoTowerPoints).toFixed(1)}</td>
+                      <td className="px-3 py-2 text-right text-textSecondary">{t.teleopHubPoints.toFixed(1)}</td>
+                      <td className="px-3 py-2 text-right text-textSecondary">{(t.autoTowerPoints + t.endgameTowerPoints).toFixed(1)}</td>
                       <td className="px-3 py-2 text-right text-textPrimary font-medium">{t.totalPoints.toFixed(1)}</td>
                       <td className={`px-3 py-2 text-right ${confidenceColor(t.reliability >= 0.9 ? 'high' : t.reliability >= 0.75 ? 'medium' : 'low')}`}>
                         {(t.reliability * 100).toFixed(0)}%
@@ -267,7 +272,7 @@ type Mode = 'quals' | 'playoffs' | 'custom';
 
 export default function AlliancePredictor() {
   const tbaData = useAnalyticsStore(s => s.tbaData);
-  const teamStatistics = useAnalyticsStore(s => s.teamStatistics);
+  const predictionInputs = useAnalyticsStore(s => s.predictionInputs);
   const homeTeamNumber = useAnalyticsStore(s => s.homeTeamNumber);
 
   const alliances = tbaData?.alliances ?? [];
@@ -325,17 +330,18 @@ export default function AlliancePredictor() {
 
   const matchup = useMemo<MatchupResult | null>(() => {
     if (!canPredict) return null;
-    return computeMatchup(redTeams, blueTeams, teamStatistics);
-  }, [canPredict, redTeams, blueTeams, teamStatistics]);
+    return computeMatchup(redTeams, blueTeams, predictionInputs);
+  }, [canPredict, redTeams, blueTeams, predictionInputs]);
 
   const quickGrid = useMemo(() => {
     if (mode !== 'playoffs' || allianceTeams.length === 0) return null;
+    // Fewer MC trials for the grid (only score diff / favored shown)
     return allianceTeams.map(redAlliance =>
       allianceTeams.map(blueAlliance =>
-        computeMatchup(redAlliance, blueAlliance, teamStatistics)
+        computeMatchup(redAlliance, blueAlliance, predictionInputs, 200)
       )
     );
-  }, [mode, allianceTeams, teamStatistics]);
+  }, [mode, allianceTeams, predictionInputs]);
 
   const filteredQualMatches = useMemo(() => {
     if (!filter148) return qualMatches;
@@ -350,11 +356,11 @@ export default function AlliancePredictor() {
     return filteredQualMatches.map(m => {
       const rTeams = m.alliances.red.team_keys.map(teamKeyToNumber);
       const bTeams = m.alliances.blue.team_keys.map(teamKeyToNumber);
-      const result = computeMatchup(rTeams, bTeams, teamStatistics);
+      const result = computeMatchup(rTeams, bTeams, predictionInputs);
       const played = m.alliances.red.score >= 0 && m.alliances.blue.score >= 0;
       return { match: m, result, played, actualRed: played ? m.alliances.red.score : null, actualBlue: played ? m.alliances.blue.score : null };
     });
-  }, [mode, filteredQualMatches, teamStatistics]);
+  }, [mode, filteredQualMatches, predictionInputs]);
 
   const updateCustomTeam = (alliance: 'red' | 'blue', index: number, value: string) => {
     if (alliance === 'red') {
@@ -417,7 +423,7 @@ export default function AlliancePredictor() {
             </div>
           )}
 
-          {teamStatistics.length === 0 && hasQualMatches && (
+          {predictionInputs.length === 0 && hasQualMatches && (
             <div className="flex items-center gap-2 text-warning text-sm bg-warning/10 border border-warning/30 rounded-lg px-4 py-3">
               <AlertTriangle size={16} />
               <span>No scouting data loaded. Predictions require team statistics to work.</span>
@@ -772,7 +778,7 @@ export default function AlliancePredictor() {
             </div>
           </div>
 
-          {teamStatistics.length === 0 && (
+          {predictionInputs.length === 0 && (
             <div className="flex items-center gap-2 text-warning text-sm bg-warning/10 border border-warning/30 rounded-lg px-4 py-3">
               <AlertTriangle size={16} />
               <span>No scouting data loaded. Predictions require team statistics to work.</span>

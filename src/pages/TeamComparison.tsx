@@ -24,6 +24,7 @@ function TeamComparison() {
   const toggleTeamSelection = useAnalyticsStore(state => state.toggleTeamSelection);
   const eventCode = useAnalyticsStore(state => state.eventCode);
   const tbaApiKey = useAnalyticsStore(state => state.tbaApiKey);
+  const teamFuelStats = useAnalyticsStore(state => state.teamFuelStats);
   const getEnabledColumns = useMetricsStore(state => state.getEnabledColumns);
 
   const [selectedVideoTeam, setSelectedVideoTeam] = useState<number | null>(null);
@@ -97,7 +98,7 @@ function TeamComparison() {
     const higherIsBetter = !LOWER_IS_BETTER_FIELDS.includes(column.field);
 
     const getValue = (team: typeof teamStatistics[0]): number => {
-      return getMetricValue(column, team, scoutEntries);
+      return getMetricValue(column, team, scoutEntries, teamFuelStats);
     };
 
     const values = selectedTeamStats.map(getValue);

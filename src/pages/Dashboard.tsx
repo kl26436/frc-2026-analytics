@@ -11,7 +11,7 @@ const RANKINGS_TO_SHOW = 5;
 
 function Dashboard() {
   const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
-
+  const predictionInputs = useAnalyticsStore(state => state.predictionInputs);
 
   const homeTeamNumber = useAnalyticsStore(state => state.homeTeamNumber);
   const tbaData = useAnalyticsStore(state => state.tbaData);
@@ -69,15 +69,15 @@ function Dashboard() {
 
   // ── Match predictions ──
   const matchPredictions = useMemo(() => {
-    if (!teamStatistics.length || !homeMatches.length) return new Map();
+    if (!predictionInputs.length || !homeMatches.length) return new Map();
     const map = new Map<string, ReturnType<typeof computeMatchup>>();
     for (const match of homeMatches) {
       const redNums = match.alliances.red.team_keys.map(teamKeyToNumber);
       const blueNums = match.alliances.blue.team_keys.map(teamKeyToNumber);
-      map.set(match.key, computeMatchup(redNums, blueNums, teamStatistics));
+      map.set(match.key, computeMatchup(redNums, blueNums, predictionInputs));
     }
     return map;
-  }, [homeMatches, teamStatistics]);
+  }, [homeMatches, predictionInputs]);
 
   const getMatchLabel = (match: typeof homeMatches[0]) => {
     const prefixes = { qm: 'Q', ef: 'E', qf: 'QF', sf: 'SF', f: 'F' };
@@ -233,7 +233,7 @@ function Dashboard() {
           {(() => {
             // Pick the match: upcoming or last completed
             const targetMatch = nextMatch || (completedMatches.length > 0 ? completedMatches[completedMatches.length - 1] : null);
-            if (!targetMatch || !teamStatistics.length) return null;
+            if (!targetMatch || !predictionInputs.length) return null;
 
             const isUpcoming = !!nextMatch;
             const isRed = targetMatch.alliances.red.team_keys.includes(`frc${HOME}`);
@@ -264,9 +264,9 @@ function Dashboard() {
             );
 
             const phases = [
-              { label: 'Auto', red: red.autoScore, blue: blue.autoScore },
-              { label: 'Teleop', red: red.teleopScore, blue: blue.teleopScore },
-              { label: 'Endgame', red: red.endgameScore, blue: blue.endgameScore },
+              { label: 'Auto', red: red.autoHubScore + red.autoTowerScore, blue: blue.autoHubScore + blue.autoTowerScore },
+              { label: 'Teleop', red: red.teleopHubScore, blue: blue.teleopHubScore },
+              { label: 'Endgame', red: red.endgameTowerScore, blue: blue.endgameTowerScore },
               { label: 'TOTAL', red: red.totalScore, blue: blue.totalScore },
             ];
 
@@ -403,8 +403,8 @@ function Dashboard() {
                               <div className="space-y-1.5 text-xs">
                                 {[
                                   { label: 'Win Probability', val: `${(side.rp.winProbability * 100).toFixed(0)}%` },
-                                  { label: 'Climb Bonus', val: `${(side.rp.climbBonusProb * 100).toFixed(0)}%` },
-                                  { label: 'Score Bonus', val: `${(side.rp.scoringBonusProb * 100).toFixed(0)}%` },
+                                  { label: 'Energized', val: `${(side.rp.energizedProb * 100).toFixed(0)}%` },
+                                  { label: 'Traversal', val: `${(side.rp.traversalProb * 100).toFixed(0)}%` },
                                 ].map(row => (
                                   <div key={row.label} className="flex justify-between">
                                     <span className="text-textMuted">{row.label}</span>
@@ -447,12 +447,12 @@ function Dashboard() {
                                       <td className="py-1 px-2">
                                         <Link to={`/teams/${t.teamNumber}`} className={`font-semibold hover:underline ${t.teamNumber === HOME ? 'text-warning' : ''}`}>{t.teamNumber}</Link>
                                       </td>
-                                      <td className="py-1 px-1 text-center">{t.autoPoints.toFixed(1)}</td>
-                                      <td className="py-1 px-1 text-center">{t.teleopPoints.toFixed(1)}</td>
-                                      <td className="py-1 px-1 text-center">{t.endgamePoints.toFixed(1)}</td>
+                                      <td className="py-1 px-1 text-center">{(t.autoHubPoints + t.autoTowerPoints).toFixed(1)}</td>
+                                      <td className="py-1 px-1 text-center">{t.teleopHubPoints.toFixed(1)}</td>
+                                      <td className="py-1 px-1 text-center">{(t.autoTowerPoints + t.endgameTowerPoints).toFixed(1)}</td>
                                       <td className="py-1 px-1 text-center font-bold">{t.totalPoints.toFixed(1)}</td>
-                                      <td className={`py-1 px-2 text-right font-medium ${t.reliability >= 90 ? 'text-success' : t.reliability >= 70 ? 'text-warning' : 'text-danger'}`}>
-                                        {t.reliability.toFixed(0)}%
+                                      <td className={`py-1 px-2 text-right font-medium ${t.reliability >= 0.9 ? 'text-success' : t.reliability >= 0.7 ? 'text-warning' : 'text-danger'}`}>
+                                        {(t.reliability * 100).toFixed(0)}%
                                       </td>
                                     </tr>
                                   ))}

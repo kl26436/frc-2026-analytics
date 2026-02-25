@@ -16,6 +16,7 @@ function TeamDetail() {
 
   const teamStatistics = useAnalyticsStore(s => s.teamStatistics);
   const scoutEntries = useAnalyticsStore(s => s.scoutEntries);
+  const teamTrends = useAnalyticsStore(s => s.teamTrends);
   const eventCode = useAnalyticsStore(s => s.eventCode);
   const tbaApiKey = useAnalyticsStore(s => s.tbaApiKey);
 
@@ -75,18 +76,11 @@ function TeamDetail() {
 
   const n = teamStats.matchesPlayed;
 
-  // Calculate trend from match points
-  const getTrend = () => {
-    if (matchData.length < 3) return 'stable';
-    const recent = matchData.slice(-3).map(m => m.points.total);
-    const earlier = matchData.slice(0, 3).map(m => m.points.total);
-    const recentAvg = recent.reduce((a, b) => a + b, 0) / recent.length;
-    const earlierAvg = earlier.reduce((a, b) => a + b, 0) / earlier.length;
-    if (recentAvg > earlierAvg * 1.1) return 'up';
-    if (recentAvg < earlierAvg * 0.9) return 'down';
-    return 'stable';
-  };
-  const trend = getTrend();
+  // Use shared trend analysis
+  const teamTrend = teamTrends.find(t => t.teamNumber === teamNum);
+  const trend = teamTrend?.trend === 'improving' ? 'up'
+    : teamTrend?.trend === 'declining' ? 'down'
+    : 'stable';
 
   // Climb level label
   const climbLabel = (level: number) => {

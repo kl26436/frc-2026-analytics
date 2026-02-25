@@ -34,6 +34,8 @@ function ComparisonModal({ team1, team2, onPickTeam, onClose }: ComparisonModalP
   const eventCode = useAnalyticsStore(state => state.eventCode);
   const scoutEntries = useAnalyticsStore(state => state.scoutEntries);
   const tbaApiKey = useAnalyticsStore(state => state.tbaApiKey);
+  const teamFuelStats = useAnalyticsStore(state => state.teamFuelStats);
+  const teamTrends = useAnalyticsStore(state => state.teamTrends);
 
   const [teamVideos, setTeamVideos] = useState<Record<number, TBAMatch[]>>({});
   const [expandedVideoTeam, setExpandedVideoTeam] = useState<number | null>(null);
@@ -86,7 +88,7 @@ function ComparisonModal({ team1, team2, onPickTeam, onClose }: ComparisonModalP
     const higherIsBetter = !LOWER_IS_BETTER_FIELDS.includes(column.field);
 
     const getValue = (team: TeamLike): number =>
-      getMetricValue(column, team as any, scoutEntries);
+      getMetricValue(column, team as any, scoutEntries, teamFuelStats);
 
     const value1 = getValue(team1);
     const value2 = getValue(team2);
@@ -118,6 +120,49 @@ function ComparisonModal({ team1, team2, onPickTeam, onClose }: ComparisonModalP
         <div className="text-sm text-textSecondary" title={column.description}>{column.label}</div>
         <div className={`text-sm text-center ${getColorClass(value1)}`}>{formatValue(value1, team1.matchesPlayed)}</div>
         <div className={`text-sm text-center ${getColorClass(value2)}`}>{formatValue(value2, team2.matchesPlayed)}</div>
+      </div>
+    );
+  };
+
+  // Recent Form helper — one row in the per-match comparison grid
+  const RecentFormRow = ({ label, avg1, matches1, avg2, matches2, higherIsBetter, format, avgFormat }: {
+    label: string;
+    avg1: number;
+    matches1: number[];
+    avg2: number;
+    matches2: number[];
+    higherIsBetter: boolean;
+    format: 'number' | 'climb';
+    avgFormat?: 'percentage';
+  }) => {
+    const getAvgColor = (v1: number, v2: number) => {
+      if (Math.abs(v1 - v2) < 0.01) return ['text-textPrimary', 'text-textPrimary'];
+      const better = higherIsBetter ? v1 > v2 : v1 < v2;
+      return better
+        ? ['text-success font-bold', 'text-danger']
+        : ['text-danger', 'text-success font-bold'];
+    };
+    const [color1, color2] = getAvgColor(avg1, avg2);
+    const formatVal = (v: number) => format === 'climb' ? (v === 1 ? '\u2713' : '\u2717') : v.toFixed(0);
+    const formatAvg = (v: number) => avgFormat === 'percentage' ? `${v.toFixed(0)}%` : v.toFixed(1);
+
+    return (
+      <div className="grid grid-cols-[60px_repeat(8,1fr)] gap-1 text-xs py-1.5 border-b border-border">
+        <div className="text-textSecondary font-medium">{label}</div>
+        <div className={`text-center ${color1}`}>{formatAvg(avg1)}</div>
+        {matches1.map((v, i) => (
+          <div key={`m1-${i}`} className="text-center text-textPrimary">{formatVal(v)}</div>
+        ))}
+        {Array.from({ length: 3 - matches1.length }).map((_, i) => (
+          <div key={`m1p-${i}`} className="text-center text-textMuted">-</div>
+        ))}
+        <div className={`text-center ${color2}`}>{formatAvg(avg2)}</div>
+        {matches2.map((v, i) => (
+          <div key={`m2-${i}`} className="text-center text-textPrimary">{formatVal(v)}</div>
+        ))}
+        {Array.from({ length: 3 - matches2.length }).map((_, i) => (
+          <div key={`m2p-${i}`} className="text-center text-textMuted">-</div>
+        ))}
       </div>
     );
   };
@@ -237,6 +282,80 @@ function ComparisonModal({ team1, team2, onPickTeam, onClose }: ComparisonModalP
           className="flex-1 overflow-y-auto p-4 min-h-0"
           style={{ WebkitOverflowScrolling: 'touch' }}
         >
+          {/* Recent Form Section */}
+          {(() => {
+            const trend1 = teamTrends.find(t => t.teamNumber === team1.teamNumber);
+            const trend2 = teamTrends.find(t => t.teamNumber === team2.teamNumber);
+            if (!trend1 || !trend2 || trend1.matchResults.length === 0 || trend2.matchResults.length === 0) return null;
+
+            const last3_1 = trend1.matchResults.slice(-3).reverse();
+            const last3_2 = trend2.matchResults.slice(-3).reverse();
+
+            return (
+              <div className="mb-4">
+                <div className="bg-surfaceElevated px-3 py-2 font-bold text-sm">
+                  Recent Form
+                </div>
+
+                {/* Team number header row */}
+                <div className="grid grid-cols-[60px_repeat(8,1fr)] gap-1 text-xs py-2 border-b border-border">
+                  <div></div>
+                  <div className="col-span-4 text-center font-bold text-textPrimary">{team1.teamNumber}</div>
+                  <div className="col-span-4 text-center font-bold text-textPrimary">{team2.teamNumber}</div>
+                </div>
+
+                {/* Column labels: Avg + match numbers */}
+                <div className="grid grid-cols-[60px_repeat(8,1fr)] gap-1 text-xs text-textMuted py-1 border-b border-border">
+                  <div></div>
+                  <div className="text-center font-semibold text-textSecondary">Avg</div>
+                  {last3_1.map(m => (
+                    <div key={`h1-${m.matchNumber}`} className="text-center">{m.matchLabel}</div>
+                  ))}
+                  {Array.from({ length: 3 - last3_1.length }).map((_, i) => (
+                    <div key={`h1p-${i}`}></div>
+                  ))}
+                  <div className="text-center font-semibold text-textSecondary">Avg</div>
+                  {last3_2.map(m => (
+                    <div key={`h2-${m.matchNumber}`} className="text-center">{m.matchLabel}</div>
+                  ))}
+                  {Array.from({ length: 3 - last3_2.length }).map((_, i) => (
+                    <div key={`h2p-${i}`}></div>
+                  ))}
+                </div>
+
+                {/* Data rows */}
+                <RecentFormRow
+                  label="Pts"
+                  avg1={trend1.overallAvg.total}
+                  matches1={last3_1.map(m => m.total)}
+                  avg2={trend2.overallAvg.total}
+                  matches2={last3_2.map(m => m.total)}
+                  higherIsBetter={true}
+                  format="number"
+                />
+                <RecentFormRow
+                  label="L3 Climb"
+                  avg1={trend1.overallAvg.l3ClimbRate}
+                  matches1={last3_1.map(m => m.climbLevel === 3 ? 1 : 0)}
+                  avg2={trend2.overallAvg.l3ClimbRate}
+                  matches2={last3_2.map(m => m.climbLevel === 3 ? 1 : 0)}
+                  higherIsBetter={true}
+                  format="climb"
+                  avgFormat="percentage"
+                />
+                <RecentFormRow
+                  label="Auto"
+                  avg1={trend1.overallAvg.auto}
+                  matches1={last3_1.map(m => m.autoPoints)}
+                  avg2={trend2.overallAvg.auto}
+                  matches2={last3_2.map(m => m.autoPoints)}
+                  higherIsBetter={true}
+                  format="number"
+                />
+              </div>
+            );
+          })()}
+
           {(Object.keys(metricsByCategory) as MetricCategory[]).map(category => {
             const columns = metricsByCategory[category];
             if (!columns || columns.length === 0) return null;

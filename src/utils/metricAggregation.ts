@@ -1,4 +1,5 @@
 import type { ScoutEntry, TeamStatistics } from '../types/scouting';
+import type { TeamFuelStats } from './fuelAttribution';
 import type { MetricColumn, MetricAggregation, MetricCategory } from '../types/metrics';
 import { estimateMatchFuel, estimateMatchPoints, parseClimbLevel } from '../types/scouting';
 
@@ -131,13 +132,25 @@ export function computeMetric(
   return aggregate(values, aggregation);
 }
 
-// ── Get metric value (handles both pre-computed and on-the-fly) ───────────
+// ── Get metric value (handles pre-computed, on-the-fly, and fuel attribution) ──
 
 export function getMetricValue(
   column: MetricColumn,
   team: TeamStatistics,
-  allEntries: ScoutEntry[]
+  allEntries: ScoutEntry[],
+  teamFuelStats?: TeamFuelStats[],
 ): number {
+  // Fuel attribution metric — read from TeamFuelStats
+  if (column.fuelField && teamFuelStats) {
+    const fuelStats = teamFuelStats.find(t => t.teamNumber === team.teamNumber);
+    if (!fuelStats) return 0;
+    const value = (fuelStats as unknown as Record<string, number>)[column.fuelField];
+    // scoringAccuracy is 0–1, display as percentage (×100)
+    if (column.fuelField === 'scoringAccuracy' && column.format === 'percentage') {
+      return (value || 0) * 100;
+    }
+    return value || 0;
+  }
   // Dynamic metric — compute from raw entries
   if (column.rawMetric) {
     return computeMetric(allEntries, team.teamNumber, column.rawMetric, column.aggregation);

@@ -555,6 +555,7 @@ function LivePickListView({
   allowedUsers,
 }: LivePickListViewProps) {
   const teamStatistics = useAnalyticsStore(s => s.teamStatistics);
+  const teamTrends = useAnalyticsStore(s => s.teamTrends);
   const [showSuggestionSummary, setShowSuggestionSummary] = useState(false);
   const [initializing, setInitializing] = useState(false);
   const [showLiveSettings, setShowLiveSettings] = useState(false);
@@ -1164,11 +1165,51 @@ function LivePickListView({
                             </div>
                           )}
                         </div>
-                        {stats && (
-                          <div className="text-xs text-textSecondary mb-2">
-                            {stats.avgTotalPoints.toFixed(1)} pts • L3: {stats.level3ClimbRate.toFixed(0)}%
-                          </div>
-                        )}
+                        {stats && (() => {
+                          const trend = teamTrends.find(t => t.teamNumber === team.teamNumber);
+                          return (
+                            <div className="text-xs mb-2">
+                              <table className="w-full">
+                                <thead>
+                                  <tr className="text-textMuted">
+                                    <th className="text-left font-normal pr-1"></th>
+                                    <th className="text-right font-normal px-1">Avg</th>
+                                    <th className="text-right font-normal pl-1">Last 3</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  <tr>
+                                    <td className="text-textSecondary pr-1">Pts</td>
+                                    <td className="text-right px-1">{stats.avgTotalPoints.toFixed(1)}</td>
+                                    <td className={`text-right pl-1 font-semibold ${
+                                      trend && trend.last3Avg.total > stats.avgTotalPoints * 1.05 ? 'text-success'
+                                      : trend && trend.last3Avg.total < stats.avgTotalPoints * 0.95 ? 'text-danger'
+                                      : 'text-textPrimary'
+                                    }`}>{trend ? trend.last3Avg.total.toFixed(1) : '-'}</td>
+                                  </tr>
+                                  <tr>
+                                    <td className="text-textSecondary pr-1">L3</td>
+                                    <td className="text-right px-1">{stats.level3ClimbRate.toFixed(0)}%</td>
+                                    <td className={`text-right pl-1 font-semibold ${
+                                      trend && trend.last3Avg.l3ClimbRate > stats.level3ClimbRate + 5 ? 'text-success'
+                                      : trend && trend.last3Avg.l3ClimbRate < stats.level3ClimbRate - 5 ? 'text-danger'
+                                      : 'text-textPrimary'
+                                    }`}>{trend ? `${trend.last3Avg.l3ClimbRate.toFixed(0)}%` : '-'}</td>
+                                  </tr>
+                                  <tr>
+                                    <td className="text-textSecondary pr-1">Auto</td>
+                                    <td className="text-right px-1">{stats.avgAutoPoints.toFixed(1)}</td>
+                                    <td className={`text-right pl-1 font-semibold ${
+                                      trend && trend.last3Avg.auto > stats.avgAutoPoints * 1.05 ? 'text-success'
+                                      : trend && trend.last3Avg.auto < stats.avgAutoPoints * 0.95 ? 'text-danger'
+                                      : 'text-textPrimary'
+                                    }`}>{trend ? trend.last3Avg.auto.toFixed(1) : '-'}</td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+                          );
+                        })()}
                         {canEdit ? (
                           <textarea
                             value={team.watchlistNotes || ''}
@@ -1354,6 +1395,9 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onT
   const teamStats = useAnalyticsStore(state =>
     state.teamStatistics.find(t => t.teamNumber === team.teamNumber)
   );
+  const teamTrend = useAnalyticsStore(state =>
+    state.teamTrends.find(t => t.teamNumber === team.teamNumber)
+  );
 
   const [isEditingNotes, setIsEditingNotes] = useState(false);
   const [notes, setNotes] = useState(isPickListTeam ? (team as PickListTeam).notes : '');
@@ -1415,6 +1459,13 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onT
             <span>L3: {teamStats?.level3ClimbRate?.toFixed(0) ?? '0'}%</span>
             <span>A: {teamStats?.avgAutoPoints?.toFixed(0) ?? '0'}</span>
           </div>
+          {teamTrend && teamTrend.trend !== 'stable' && (
+            <div className={`text-xs font-semibold ${
+              teamTrend.trend === 'improving' ? 'text-success' : 'text-danger'
+            }`}>
+              Last 3: {teamTrend.last3Avg.total.toFixed(0)} pts {teamTrend.trend === 'improving' ? '\u2191' : '\u2193'}
+            </div>
+          )}
 
           {/* Notes for teams in tiers */}
           {currentTier && isPickListTeam && isEditingNotes ? (
@@ -1706,6 +1757,7 @@ function PickList() {
 
   const eventCode = useAnalyticsStore(state => state.eventCode);
   const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
+  const teamTrends = useAnalyticsStore(state => state.teamTrends);
   const tbaData = useAnalyticsStore(state => state.tbaData);
 
   // Auth + live sync (always subscribed so badge count shows in personal mode too)
@@ -2497,11 +2549,51 @@ function PickList() {
                             </button>
                           </div>
                         </div>
-                        {stats && (
-                          <div className="text-xs text-textSecondary mb-2">
-                            {stats.avgTotalPoints.toFixed(1)} pts • L3: {stats.level3ClimbRate.toFixed(0)}%
-                          </div>
-                        )}
+                        {stats && (() => {
+                          const trend = teamTrends.find(t => t.teamNumber === team.teamNumber);
+                          return (
+                            <div className="text-xs mb-2">
+                              <table className="w-full">
+                                <thead>
+                                  <tr className="text-textMuted">
+                                    <th className="text-left font-normal pr-1"></th>
+                                    <th className="text-right font-normal px-1">Avg</th>
+                                    <th className="text-right font-normal pl-1">Last 3</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  <tr>
+                                    <td className="text-textSecondary pr-1">Pts</td>
+                                    <td className="text-right px-1">{stats.avgTotalPoints.toFixed(1)}</td>
+                                    <td className={`text-right pl-1 font-semibold ${
+                                      trend && trend.last3Avg.total > stats.avgTotalPoints * 1.05 ? 'text-success'
+                                      : trend && trend.last3Avg.total < stats.avgTotalPoints * 0.95 ? 'text-danger'
+                                      : 'text-textPrimary'
+                                    }`}>{trend ? trend.last3Avg.total.toFixed(1) : '-'}</td>
+                                  </tr>
+                                  <tr>
+                                    <td className="text-textSecondary pr-1">L3</td>
+                                    <td className="text-right px-1">{stats.level3ClimbRate.toFixed(0)}%</td>
+                                    <td className={`text-right pl-1 font-semibold ${
+                                      trend && trend.last3Avg.l3ClimbRate > stats.level3ClimbRate + 5 ? 'text-success'
+                                      : trend && trend.last3Avg.l3ClimbRate < stats.level3ClimbRate - 5 ? 'text-danger'
+                                      : 'text-textPrimary'
+                                    }`}>{trend ? `${trend.last3Avg.l3ClimbRate.toFixed(0)}%` : '-'}</td>
+                                  </tr>
+                                  <tr>
+                                    <td className="text-textSecondary pr-1">Auto</td>
+                                    <td className="text-right px-1">{stats.avgAutoPoints.toFixed(1)}</td>
+                                    <td className={`text-right pl-1 font-semibold ${
+                                      trend && trend.last3Avg.auto > stats.avgAutoPoints * 1.05 ? 'text-success'
+                                      : trend && trend.last3Avg.auto < stats.avgAutoPoints * 0.95 ? 'text-danger'
+                                      : 'text-textPrimary'
+                                    }`}>{trend ? trend.last3Avg.auto.toFixed(1) : '-'}</td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+                          );
+                        })()}
                         <textarea
                           value={team.watchlistNotes || ''}
                           onChange={(e) => updateWatchlistNotes(team.teamNumber, e.target.value)}

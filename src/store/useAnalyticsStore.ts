@@ -8,6 +8,10 @@ import type { TBAEventData } from '../types/tba';
 import { calculateAllTeamStatistics } from '../utils/statistics';
 import { computeMatchFuelAttribution, aggregateTeamFuel } from '../utils/fuelAttribution';
 import type { RobotMatchFuel, TeamFuelStats } from '../utils/fuelAttribution';
+import { buildPredictionInputs } from '../utils/predictions';
+import type { PredictionTeamInput } from '../utils/predictions';
+import { computeAllTeamTrends } from '../utils/trendAnalysis';
+import type { TeamTrend } from '../utils/trendAnalysis';
 import { getAllEventData } from '../utils/tbaApi';
 
 interface AnalyticsState {
@@ -18,6 +22,8 @@ interface AnalyticsState {
   scoutActions: RobotActions[];
   matchFuelAttribution: RobotMatchFuel[];
   teamFuelStats: TeamFuelStats[];
+  predictionInputs: PredictionTeamInput[];
+  teamTrends: TeamTrend[];
   syncMeta: SyncMeta | null;
   dataLoading: boolean;
   dataError: string | null;
@@ -39,6 +45,7 @@ interface AnalyticsState {
   unsubscribeFromData: () => void;
   calculateRealStats: () => void;
   calculateFuelAttribution: () => void;
+  calculatePredictionInputs: () => void;
   toggleTeamSelection: (teamNumber: number) => void;
   clearTeamSelection: () => void;
   setEventCode: (code: string) => void;
@@ -67,6 +74,8 @@ export const useAnalyticsStore = create<AnalyticsState>()(
       scoutActions: [],
       matchFuelAttribution: [],
       teamFuelStats: [],
+      predictionInputs: [],
+      teamTrends: [],
       syncMeta: null,
       dataLoading: false,
       dataError: null,
@@ -99,6 +108,8 @@ export const useAnalyticsStore = create<AnalyticsState>()(
           scoutActions: [],
           matchFuelAttribution: [],
           teamFuelStats: [],
+          predictionInputs: [],
+          teamTrends: [],
         });
 
         // 1. Subscribe to scout entries: scoutData/{eventKey}/entries
@@ -173,16 +184,22 @@ export const useAnalyticsStore = create<AnalyticsState>()(
       calculateRealStats: () => {
         const { scoutEntries } = get();
         const teamStatistics = calculateAllTeamStatistics(scoutEntries);
-        set({ teamStatistics });
+        const teamTrends = computeAllTeamTrends(scoutEntries);
+        set({ teamStatistics, teamTrends });
         get().calculateFuelAttribution();
       },
 
       calculateFuelAttribution: () => {
         const { scoutEntries, scoutActions, pgTbaMatches } = get();
-        if (scoutEntries.length === 0 || pgTbaMatches.length === 0) return;
+        if (scoutEntries.length === 0 || pgTbaMatches.length === 0) {
+          // No FMS data yet — still build prediction inputs from scout-only
+          get().calculatePredictionInputs();
+          return;
+        }
         const matchFuelAttribution = computeMatchFuelAttribution(scoutEntries, scoutActions, pgTbaMatches);
         const teamFuelStats = aggregateTeamFuel(matchFuelAttribution);
         set({ matchFuelAttribution, teamFuelStats });
+        get().calculatePredictionInputs();
         // TODO: remove debug logs after validation
         console.table(teamFuelStats.map(t => ({
           team: t.teamNumber,
@@ -196,6 +213,13 @@ export const useAnalyticsStore = create<AnalyticsState>()(
           actionData: `${t.actionDataMatches}/${t.matchesPlayed}`,
         })));
         console.log(`[FuelAttribution] ${matchFuelAttribution.length} match rows, ${teamFuelStats.length} teams`);
+      },
+
+      calculatePredictionInputs: () => {
+        const { teamStatistics, teamFuelStats } = get();
+        if (teamStatistics.length === 0) return;
+        const predictionInputs = buildPredictionInputs(teamStatistics, teamFuelStats);
+        set({ predictionInputs });
       },
 
       // ── Team Selection ─────────────────────────────────────────────
@@ -229,6 +253,8 @@ export const useAnalyticsStore = create<AnalyticsState>()(
             scoutActions: [],
             matchFuelAttribution: [],
             teamFuelStats: [],
+            predictionInputs: [],
+            teamTrends: [],
             syncMeta: null,
             selectedTeams: [],
           });
