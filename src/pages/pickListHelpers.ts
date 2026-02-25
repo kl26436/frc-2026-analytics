@@ -18,7 +18,7 @@ export function toggleLiveWatchlist(teams: PickListTeam[], teamNumber: number): 
   if (team.onWatchlist) {
     // Removing — clear rank/notes then re-number remaining
     const removed = teams.map(t => t.teamNumber === teamNumber
-      ? { ...t, onWatchlist: false, watchlistRank: undefined, watchlistNotes: undefined }
+      ? { ...t, onWatchlist: false, watchlistRank: null, watchlistNotes: null }
       : t,
     );
     const remaining = removed.filter(t => t.onWatchlist).sort((a, b) => (a.watchlistRank || 0) - (b.watchlistRank || 0));
@@ -51,7 +51,7 @@ export function reorderLiveWatchlist(teams: PickListTeam[], teamNumber: number, 
 }
 
 export function clearLiveWatchlist(teams: PickListTeam[]): PickListTeam[] {
-  return teams.map(t => ({ ...t, onWatchlist: false, watchlistRank: undefined, watchlistNotes: undefined }));
+  return teams.map(t => ({ ...t, onWatchlist: false, watchlistRank: null, watchlistNotes: null }));
 }
 
 export function finalizeLiveWatchlist(teams: PickListTeam[], insertAtRank: number): PickListTeam[] {
@@ -71,9 +71,9 @@ export function finalizeLiveWatchlist(teams: PickListTeam[], insertAtRank: numbe
         tier: 'tier2' as const,
         rank: newRank,
         onWatchlist: false,
-        watchlistRank: undefined,
+        watchlistRank: null,
         notes: team.watchlistNotes ? `${team.notes}\n[Watchlist] ${team.watchlistNotes}`.trim() : team.notes,
-        watchlistNotes: undefined,
+        watchlistNotes: null,
       };
     }
     if (team.tier === 'tier2') {

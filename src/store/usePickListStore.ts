@@ -339,7 +339,7 @@ export const usePickListStore = create<PickListState>()(
               ...pickList,
               teams: pickList.teams.map(t =>
                 t.teamNumber === teamNumber
-                  ? { ...t, onWatchlist: false, watchlistRank: undefined, watchlistNotes: undefined }
+                  ? { ...t, onWatchlist: false, watchlistRank: null, watchlistNotes: null }
                   : t
               ),
             },
@@ -444,10 +444,10 @@ export const usePickListStore = create<PickListState>()(
               tier: 'tier2' as const,
               rank: newRank,
               onWatchlist: false,
-              watchlistRank: undefined,
+              watchlistRank: null,
               // Keep watchlist notes as regular notes if they had any
               notes: team.watchlistNotes ? `${team.notes}\n[Watchlist] ${team.watchlistNotes}`.trim() : team.notes,
-              watchlistNotes: undefined,
+              watchlistNotes: null,
             };
           }
 
@@ -483,8 +483,8 @@ export const usePickListStore = create<PickListState>()(
             teams: pickList.teams.map(t => ({
               ...t,
               onWatchlist: false,
-              watchlistRank: undefined,
-              watchlistNotes: undefined,
+              watchlistRank: null,
+              watchlistNotes: null,
             })),
           },
         });

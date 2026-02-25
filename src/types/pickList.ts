@@ -10,8 +10,8 @@ export interface PickListTeam {
   tags: string[]; // e.g., ["great-auto", "defensive", "fast-cycles"]
   flagged: boolean; // Red flag for reliability issues
   onWatchlist: boolean; // Track during final matches
-  watchlistRank?: number; // Rank within watchlist (1 = best)
-  watchlistNotes?: string; // Notes from watching final matches
+  watchlistRank?: number | null; // Rank within watchlist (1 = best)
+  watchlistNotes?: string | null; // Notes from watching final matches
 }
 
 export interface PickListConfig {

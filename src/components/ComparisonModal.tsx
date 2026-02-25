@@ -2,8 +2,11 @@ import { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { X, ArrowUp, Sliders, Play } from 'lucide-react';
 import type { TBAMatch } from '../types/tba';
+import type { ScoutEntry } from '../types/scouting';
+import { estimateMatchPoints, estimateMatchFuel } from '../types/scouting';
 import type { MetricCategory, MetricColumn } from '../types/metrics';
 import { CATEGORY_LABELS } from '../types/metrics';
+import type { RobotMatchFuel } from '../utils/fuelAttribution';
 import { useMetricsStore } from '../store/useMetricsStore';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 
@@ -16,6 +19,35 @@ const LOWER_IS_BETTER_FIELDS = [
   'lostConnectionRate', 'noRobotRate', 'climbNoneRate', 'climbFailedRate',
   'bulldozedFuelRate', 'poorAccuracyRate', 'autoDidNothingRate',
 ];
+
+// Map pre-computed TeamStatistics field → per-entry extractor
+const SCOUT_EXTRACTORS: Record<string, (e: ScoutEntry) => number> = {
+  avgTotalPoints: (e) => estimateMatchPoints(e).total,
+  maxTotalPoints: (e) => estimateMatchPoints(e).total,
+  totalTotalPoints: (e) => estimateMatchPoints(e).total,
+  avgAutoPoints: (e) => estimateMatchPoints(e).autoPoints,
+  avgTeleopPoints: (e) => estimateMatchPoints(e).teleopPoints,
+  avgEndgamePoints: (e) => estimateMatchPoints(e).endgamePoints,
+  avgTotalFuelEstimate: (e) => estimateMatchFuel(e).total,
+  maxTotalFuelEstimate: (e) => estimateMatchFuel(e).total,
+  totalTotalFuelEstimate: (e) => estimateMatchFuel(e).total,
+  avgAutoFuelEstimate: (e) => estimateMatchFuel(e).auto,
+  avgTeleopFuelEstimate: (e) => estimateMatchFuel(e).teleop,
+  avgAutoFuelScore: (e) => e.auton_FUEL_SCORE,
+  avgTeleopFuelScore: (e) => e.teleop_FUEL_SCORE,
+  avgTotalPass: (e) => (e.auton_FUEL_PASS || 0) + (e.teleop_FUEL_PASS || 0),
+};
+
+// Map TeamFuelStats field → per-match RobotMatchFuel field
+const FUEL_EXTRACTORS: Record<string, (r: RobotMatchFuel) => number> = {
+  avgMoved: (r) => r.totalMoved,
+  avgPasses: (r) => r.passes,
+  avgShots: (r) => r.shots,
+  avgShotsScored: (r) => r.shotsScored,
+  avgAutoScored: (r) => r.autoScored,
+  avgTeleopScored: (r) => r.teleopScored,
+  scoringAccuracy: (r) => r.scoringAccuracy,
+};
 
 interface TeamLike {
   teamNumber: number;
@@ -36,7 +68,7 @@ function ComparisonModal({ team1, team2, onPickTeam, onClose }: ComparisonModalP
   const scoutEntries = useAnalyticsStore(state => state.scoutEntries);
   const tbaApiKey = useAnalyticsStore(state => state.tbaApiKey);
   const teamFuelStats = useAnalyticsStore(state => state.teamFuelStats);
-  const teamTrends = useAnalyticsStore(state => state.teamTrends);
+  const matchFuelAttribution = useAnalyticsStore(state => state.matchFuelAttribution);
 
   const [teamVideos, setTeamVideos] = useState<Record<number, TBAMatch[]>>({});
   const [expandedVideoTeam, setExpandedVideoTeam] = useState<number | null>(null);
@@ -73,6 +105,60 @@ function ComparisonModal({ team1, team2, onPickTeam, onClose }: ComparisonModalP
     fetchVideos();
   }, [team1, team2, eventCode, tbaApiKey]);
 
+  // Last 3 scout entries per team (most recent first)
+  const last3Entries = useMemo(() => {
+    const result: Record<number, ScoutEntry[]> = {};
+    for (const team of [team1, team2]) {
+      result[team.teamNumber] = scoutEntries
+        .filter(e => e.team_number === team.teamNumber)
+        .sort((a, b) => b.match_number - a.match_number)
+        .slice(0, 3);
+    }
+    return result;
+  }, [scoutEntries, team1.teamNumber, team2.teamNumber]);
+
+  // Last 3 fuel attribution rows per team (most recent first)
+  const last3FuelRows = useMemo(() => {
+    const result: Record<number, RobotMatchFuel[]> = {};
+    for (const team of [team1, team2]) {
+      result[team.teamNumber] = matchFuelAttribution
+        .filter(r => r.teamNumber === team.teamNumber)
+        .sort((a, b) => b.matchNumber - a.matchNumber)
+        .slice(0, 3);
+    }
+    return result;
+  }, [matchFuelAttribution, team1.teamNumber, team2.teamNumber]);
+
+  // Match labels for column headers (e.g. "Q15", "Q11", "Q6")
+  const matchLabels = useMemo(() => {
+    const result: Record<number, string[]> = {};
+    for (const team of [team1, team2]) {
+      const entries = last3Entries[team.teamNumber] || [];
+      result[team.teamNumber] = entries.map(e => `Q${e.match_number}`);
+    }
+    return result;
+  }, [last3Entries, team1.teamNumber, team2.teamNumber]);
+
+  // Get per-match values for a metric + team
+  function getMatchValues(column: MetricColumn, teamNumber: number): number[] | null {
+    // Rate/percentage/count metrics don't have meaningful per-match values
+    if (column.format === 'percentage' || column.format === 'count') return null;
+
+    // Fuel attribution metric
+    if (column.fuelField) {
+      const extractor = FUEL_EXTRACTORS[column.fuelField];
+      const rows = last3FuelRows[teamNumber] || [];
+      if (!extractor || rows.length === 0) return null;
+      return rows.map(extractor);
+    }
+
+    // Scout-based metric
+    const extractor = SCOUT_EXTRACTORS[column.field];
+    const entries = last3Entries[teamNumber] || [];
+    if (!extractor || entries.length === 0) return null;
+    return entries.map(extractor);
+  }
+
   // Group enabled metrics by category
   const enabledColumns = getEnabledColumns();
   const metricsByCategory = useMemo(() => {
@@ -84,7 +170,11 @@ function ComparisonModal({ team1, team2, onPickTeam, onClose }: ComparisonModalP
     return grouped;
   }, [enabledColumns]);
 
-  // Stat row for a single metric
+  // Check if ANY metric has per-match data (to decide whether to show match columns)
+  const hasMatchData = (last3Entries[team1.teamNumber]?.length ?? 0) > 0 ||
+    (last3Entries[team2.teamNumber]?.length ?? 0) > 0;
+
+  // Stat row for a single metric — now with per-match actuals
   const MetricStatRow = ({ column }: { column: MetricColumn }) => {
     const higherIsBetter = !LOWER_IS_BETTER_FIELDS.includes(column.field);
 
@@ -96,7 +186,7 @@ function ComparisonModal({ team1, team2, onPickTeam, onClose }: ComparisonModalP
     const maxVal = Math.max(value1, value2);
     const minVal = Math.min(value1, value2);
 
-    const getColorClass = (value: number) => {
+    const getAvgColor = (value: number) => {
       if (maxVal === minVal) return 'text-textPrimary';
       const isBest = higherIsBetter ? value === maxVal : value === minVal;
       const isWorst = higherIsBetter ? value === minVal : value === maxVal;
@@ -105,54 +195,55 @@ function ComparisonModal({ team1, team2, onPickTeam, onClose }: ComparisonModalP
       return 'text-textPrimary';
     };
 
-    return (
-      <div className="grid grid-cols-[1fr_80px_80px] sm:grid-cols-[1fr_100px_100px] gap-2 py-2 border-b border-border">
-        <div className="text-sm text-textSecondary" title={column.description}>{column.label}</div>
-        <div className={`text-sm text-center ${getColorClass(value1)}`}>{formatMetricValue(value1, column.format, column.decimals, team1.matchesPlayed)}</div>
-        <div className={`text-sm text-center ${getColorClass(value2)}`}>{formatMetricValue(value2, column.format, column.decimals, team2.matchesPlayed)}</div>
-      </div>
-    );
-  };
+    const matchVals1 = hasMatchData ? getMatchValues(column, team1.teamNumber) : null;
+    const matchVals2 = hasMatchData ? getMatchValues(column, team2.teamNumber) : null;
+    const showMatchCols = matchVals1 !== null || matchVals2 !== null;
+    const isFuelAccuracy = column.fuelField === 'scoringAccuracy';
 
-  // Recent Form helper — one row in the per-match comparison grid
-  const RecentFormRow = ({ label, avg1, matches1, avg2, matches2, higherIsBetter, format, avgFormat }: {
-    label: string;
-    avg1: number;
-    matches1: number[];
-    avg2: number;
-    matches2: number[];
-    higherIsBetter: boolean;
-    format: 'number' | 'climb';
-    avgFormat?: 'percentage';
-  }) => {
-    const getAvgColor = (v1: number, v2: number) => {
-      if (Math.abs(v1 - v2) < 0.01) return ['text-textPrimary', 'text-textPrimary'];
-      const better = higherIsBetter ? v1 > v2 : v1 < v2;
-      return better
-        ? ['text-success font-bold', 'text-danger']
-        : ['text-danger', 'text-success font-bold'];
+    const formatMatch = (v: number) => {
+      if (isFuelAccuracy) return `${(v * 100).toFixed(0)}%`;
+      return v.toFixed(column.decimals);
     };
-    const [color1, color2] = getAvgColor(avg1, avg2);
-    const formatVal = (v: number) => format === 'climb' ? (v === 1 ? '\u2713' : '\u2717') : v.toFixed(0);
-    const formatAvg = (v: number) => avgFormat === 'percentage' ? `${v.toFixed(0)}%` : v.toFixed(1);
 
     return (
-      <div className="grid grid-cols-[60px_repeat(8,1fr)] gap-1 text-xs py-1.5 border-b border-border">
-        <div className="text-textSecondary font-medium">{label}</div>
-        <div className={`text-center ${color1}`}>{formatAvg(avg1)}</div>
-        {matches1.map((v, i) => (
-          <div key={`m1-${i}`} className="text-center text-textPrimary">{formatVal(v)}</div>
-        ))}
-        {Array.from({ length: 3 - matches1.length }).map((_, i) => (
-          <div key={`m1p-${i}`} className="text-center text-textMuted">-</div>
-        ))}
-        <div className={`text-center ${color2}`}>{formatAvg(avg2)}</div>
-        {matches2.map((v, i) => (
-          <div key={`m2-${i}`} className="text-center text-textPrimary">{formatVal(v)}</div>
-        ))}
-        {Array.from({ length: 3 - matches2.length }).map((_, i) => (
-          <div key={`m2p-${i}`} className="text-center text-textMuted">-</div>
-        ))}
+      <div className="grid grid-cols-[1fr_60px_60px] sm:grid-cols-[1fr_60px_50px_50px_50px_60px_50px_50px_50px] gap-0 py-1.5 border-b border-border text-xs">
+        <div className="text-textSecondary truncate pr-1" title={column.description}>{column.label}</div>
+
+        {/* Team 1 avg */}
+        <div className={`text-center ${getAvgColor(value1)}`}>
+          {formatMetricValue(value1, column.format, column.decimals, team1.matchesPlayed)}
+        </div>
+
+        {/* Team 1 match values (hidden on mobile) */}
+        {showMatchCols ? (
+          <>
+            {[0, 1, 2].map(i => (
+              <div key={`t1-m${i}`} className="text-center text-textPrimary hidden sm:block">
+                {matchVals1 && matchVals1[i] !== undefined ? formatMatch(matchVals1[i]) : '-'}
+              </div>
+            ))}
+          </>
+        ) : (
+          <>{[0, 1, 2].map(i => <div key={`t1-m${i}`} className="hidden sm:block" />)}</>
+        )}
+
+        {/* Team 2 avg — with left border as divider */}
+        <div className={`text-center border-l-2 border-border ${getAvgColor(value2)}`}>
+          {formatMetricValue(value2, column.format, column.decimals, team2.matchesPlayed)}
+        </div>
+
+        {/* Team 2 match values (hidden on mobile) */}
+        {showMatchCols ? (
+          <>
+            {[0, 1, 2].map(i => (
+              <div key={`t2-m${i}`} className="text-center text-textPrimary hidden sm:block">
+                {matchVals2 && matchVals2[i] !== undefined ? formatMatch(matchVals2[i]) : '-'}
+              </div>
+            ))}
+          </>
+        ) : (
+          <>{[0, 1, 2].map(i => <div key={`t2-m${i}`} className="hidden sm:block" />)}</>
+        )}
       </div>
     );
   };
@@ -168,6 +259,9 @@ function ComparisonModal({ team1, team2, onPickTeam, onClose }: ComparisonModalP
       }
       return b.match_number - a.match_number;
     });
+
+  const labels1 = matchLabels[team1.teamNumber] || [];
+  const labels2 = matchLabels[team2.teamNumber] || [];
 
   return (
     <div
@@ -201,31 +295,59 @@ function ComparisonModal({ team1, team2, onPickTeam, onClose }: ComparisonModalP
           </button>
         </div>
 
-        {/* Team Headers */}
-        <div className="flex-shrink-0 grid grid-cols-[1fr_80px_80px] sm:grid-cols-[1fr_100px_100px] gap-2 p-4 border-b border-border bg-surface">
-          <div className="text-sm font-semibold text-textSecondary">Metric</div>
-          {[team1, team2].map(team => {
-            const vids = teamVideos[team.teamNumber] || [];
-            return (
-              <div key={team.teamNumber} className="text-center">
-                <div className="text-lg font-bold">{team.teamNumber}</div>
-                {team.teamName && (
-                  <div className="text-xs text-textSecondary truncate">{team.teamName}</div>
-                )}
-                {vids.length > 0 && (
-                  <button
-                    onClick={() => setExpandedVideoTeam(
-                      expandedVideoTeam === team.teamNumber ? null : team.teamNumber
-                    )}
-                    className="mt-1 flex items-center justify-center gap-1 text-xs text-danger hover:underline mx-auto"
-                  >
-                    <Play size={10} fill="currentColor" />
-                    {vids.length} video{vids.length !== 1 ? 's' : ''}
-                  </button>
-                )}
-              </div>
-            );
-          })}
+        {/* Team Headers + Match Labels */}
+        <div className="flex-shrink-0 bg-surface border-b border-border">
+          {/* Team numbers row */}
+          <div className="grid grid-cols-[1fr_60px_60px] sm:grid-cols-[1fr_60px_50px_50px_50px_60px_50px_50px_50px] gap-0 px-4 pt-3 pb-1">
+            <div className="text-sm font-semibold text-textSecondary">Metric</div>
+            <div className="text-center col-span-1 sm:col-span-4">
+              <div className="text-lg font-bold">{team1.teamNumber}</div>
+              {team1.teamName && <div className="text-[10px] text-textSecondary truncate">{team1.teamName}</div>}
+              {videos1.length > 0 && (
+                <button
+                  onClick={() => setExpandedVideoTeam(expandedVideoTeam === team1.teamNumber ? null : team1.teamNumber)}
+                  className="flex items-center justify-center gap-1 text-[10px] text-danger hover:underline mx-auto"
+                >
+                  <Play size={8} fill="currentColor" />
+                  {videos1.length} video{videos1.length !== 1 ? 's' : ''}
+                </button>
+              )}
+            </div>
+            <div className="text-center border-l-2 border-border col-span-1 sm:col-span-4">
+              <div className="text-lg font-bold">{team2.teamNumber}</div>
+              {team2.teamName && <div className="text-[10px] text-textSecondary truncate">{team2.teamName}</div>}
+              {videos2.length > 0 && (
+                <button
+                  onClick={() => setExpandedVideoTeam(expandedVideoTeam === team2.teamNumber ? null : team2.teamNumber)}
+                  className="flex items-center justify-center gap-1 text-[10px] text-danger hover:underline mx-auto"
+                >
+                  <Play size={8} fill="currentColor" />
+                  {videos2.length} video{videos2.length !== 1 ? 's' : ''}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Column labels row (Avg + match numbers) */}
+          {hasMatchData && (
+            <div className="grid grid-cols-[1fr_60px_60px] sm:grid-cols-[1fr_60px_50px_50px_50px_60px_50px_50px_50px] gap-0 px-4 pb-2 text-[10px] text-textMuted">
+              <div></div>
+              <div className="text-center font-semibold text-textSecondary">Avg</div>
+              {labels1.map((l, i) => (
+                <div key={`h1-${i}`} className="text-center hidden sm:block">{l}</div>
+              ))}
+              {Array.from({ length: 3 - labels1.length }).map((_, i) => (
+                <div key={`h1p-${i}`} className="hidden sm:block" />
+              ))}
+              <div className="text-center font-semibold text-textSecondary border-l-2 border-border">Avg</div>
+              {labels2.map((l, i) => (
+                <div key={`h2-${i}`} className="text-center hidden sm:block">{l}</div>
+              ))}
+              {Array.from({ length: 3 - labels2.length }).map((_, i) => (
+                <div key={`h2p-${i}`} className="hidden sm:block" />
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Video Expansion */}
@@ -269,89 +391,15 @@ function ComparisonModal({ team1, team2, onPickTeam, onClose }: ComparisonModalP
 
         {/* Scrollable Metrics */}
         <div
-          className="flex-1 overflow-y-auto p-4 min-h-0"
+          className="flex-1 overflow-y-auto px-4 py-2 min-h-0"
           style={{ WebkitOverflowScrolling: 'touch' }}
         >
-          {/* Recent Form Section */}
-          {(() => {
-            const trend1 = teamTrends.find(t => t.teamNumber === team1.teamNumber);
-            const trend2 = teamTrends.find(t => t.teamNumber === team2.teamNumber);
-            if (!trend1 || !trend2 || trend1.matchResults.length === 0 || trend2.matchResults.length === 0) return null;
-
-            const last3_1 = trend1.matchResults.slice(-3).reverse();
-            const last3_2 = trend2.matchResults.slice(-3).reverse();
-
-            return (
-              <div className="mb-4">
-                <div className="bg-surfaceElevated px-3 py-2 font-bold text-sm">
-                  Recent Form
-                </div>
-
-                {/* Team number header row */}
-                <div className="grid grid-cols-[60px_repeat(8,1fr)] gap-1 text-xs py-2 border-b border-border">
-                  <div></div>
-                  <div className="col-span-4 text-center font-bold text-textPrimary">{team1.teamNumber}</div>
-                  <div className="col-span-4 text-center font-bold text-textPrimary">{team2.teamNumber}</div>
-                </div>
-
-                {/* Column labels: Avg + match numbers */}
-                <div className="grid grid-cols-[60px_repeat(8,1fr)] gap-1 text-xs text-textMuted py-1 border-b border-border">
-                  <div></div>
-                  <div className="text-center font-semibold text-textSecondary">Avg</div>
-                  {last3_1.map(m => (
-                    <div key={`h1-${m.matchNumber}`} className="text-center">{m.matchLabel}</div>
-                  ))}
-                  {Array.from({ length: 3 - last3_1.length }).map((_, i) => (
-                    <div key={`h1p-${i}`}></div>
-                  ))}
-                  <div className="text-center font-semibold text-textSecondary">Avg</div>
-                  {last3_2.map(m => (
-                    <div key={`h2-${m.matchNumber}`} className="text-center">{m.matchLabel}</div>
-                  ))}
-                  {Array.from({ length: 3 - last3_2.length }).map((_, i) => (
-                    <div key={`h2p-${i}`}></div>
-                  ))}
-                </div>
-
-                {/* Data rows */}
-                <RecentFormRow
-                  label="Pts"
-                  avg1={trend1.overallAvg.total}
-                  matches1={last3_1.map(m => m.total)}
-                  avg2={trend2.overallAvg.total}
-                  matches2={last3_2.map(m => m.total)}
-                  higherIsBetter={true}
-                  format="number"
-                />
-                <RecentFormRow
-                  label="L3 Climb"
-                  avg1={trend1.overallAvg.l3ClimbRate}
-                  matches1={last3_1.map(m => m.climbLevel === 3 ? 1 : 0)}
-                  avg2={trend2.overallAvg.l3ClimbRate}
-                  matches2={last3_2.map(m => m.climbLevel === 3 ? 1 : 0)}
-                  higherIsBetter={true}
-                  format="climb"
-                  avgFormat="percentage"
-                />
-                <RecentFormRow
-                  label="Auto"
-                  avg1={trend1.overallAvg.auto}
-                  matches1={last3_1.map(m => m.autoPoints)}
-                  avg2={trend2.overallAvg.auto}
-                  matches2={last3_2.map(m => m.autoPoints)}
-                  higherIsBetter={true}
-                  format="number"
-                />
-              </div>
-            );
-          })()}
-
           {(Object.keys(metricsByCategory) as MetricCategory[]).map(category => {
             const columns = metricsByCategory[category];
             if (!columns || columns.length === 0) return null;
             return (
               <div key={category}>
-                <div className="bg-surfaceElevated px-3 py-2 font-bold text-sm mt-4 first:mt-0">
+                <div className="bg-surfaceElevated px-3 py-1.5 font-bold text-xs mt-3 first:mt-0">
                   {CATEGORY_LABELS[category]}
                 </div>
                 {columns.map(col => (

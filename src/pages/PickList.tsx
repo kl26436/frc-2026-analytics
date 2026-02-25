@@ -22,6 +22,7 @@ import {
 import {
   SortableContext,
   verticalListSortingStrategy,
+  rectSortingStrategy,
   useSortable,
 } from '@dnd-kit/sortable';
 import { useDroppable } from '@dnd-kit/core';
@@ -62,6 +63,7 @@ import {
   UserCheck,
   Loader,
   X,
+  TrendingUp,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { PickListTeam, PickListConfig, FilterConfig } from '../types/pickList';
@@ -430,6 +432,7 @@ function LivePickListView({
   const [dragItems, setDragItems] = useState<PickListTeam[] | null>(null);
   const [showWatchlist, setShowWatchlist] = useState(true);
   const [insertAtLiveRank, setInsertAtLiveRank] = useState(1);
+  const [showTrendGlow, setShowTrendGlow] = useState(false);
 
   useEffect(() => {
     if (liveList?.config) {
@@ -897,6 +900,14 @@ function LivePickListView({
           {!canEdit && liveHasActiveFilters && (
             <span className="text-xs text-textMuted italic">Filters shared by editor</span>
           )}
+          <button
+            onClick={() => setShowTrendGlow(!showTrendGlow)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-colors ml-auto ${showTrendGlow ? 'bg-success text-background' : 'bg-surfaceElevated hover:bg-interactive'}`}
+            title="Highlight teams trending up or down based on last 3 matches"
+          >
+            <TrendingUp size={14} />
+            Trends
+          </button>
         </div>
         {showFilterSettings && canEdit && (
           <div className="bg-surfaceElevated rounded-lg border border-border p-4 space-y-3">
@@ -986,108 +997,105 @@ function LivePickListView({
 
             {showWatchlist && (
               <div className="p-4 space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
-                  {watchlistTeams.map((team, index) => {
-                    const stats = teamStatistics.find(s => s.teamNumber === team.teamNumber);
-                    return (
-                      <div key={team.teamNumber} className="bg-surface border border-border rounded-lg p-3">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xl font-bold text-warning">#{index + 1}</span>
-                            <span className="text-lg font-bold">{team.teamNumber}</span>
-                          </div>
-                          {canEdit && (
-                            <div className="flex items-center gap-1">
-                              {index > 0 && (
+                <DndContext
+                  sensors={liveSensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={(event: DragEndEvent) => {
+                    const { active, over } = event;
+                    if (!over || active.id === over.id || !liveList) return;
+                    const activeNum = Number(String(active.id).replace('wl-', ''));
+                    const overNum = Number(String(over.id).replace('wl-', ''));
+                    const overTeam = watchlistTeams.find(t => t.teamNumber === overNum);
+                    if (!overTeam) return;
+                    pushTeams(reorderLiveWatchlist(liveList.teams, activeNum, overTeam.watchlistRank || 1));
+                  }}
+                >
+                  <SortableContext items={watchlistTeams.map(t => `wl-${t.teamNumber}`)} strategy={rectSortingStrategy}>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+                      {watchlistTeams.map((team, index) => {
+                        const stats = teamStatistics.find(s => s.teamNumber === team.teamNumber);
+                        const trend = teamTrends.find(t => t.teamNumber === team.teamNumber);
+                        return (
+                          <SortableWatchlistCard key={team.teamNumber} id={`wl-${team.teamNumber}`} disabled={!canEdit}>
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                {canEdit && <GripVertical size={14} className="text-textMuted cursor-grab flex-shrink-0" />}
+                                <span className="text-xl font-bold text-warning">#{index + 1}</span>
+                                <Link to={`/teams/${team.teamNumber}`} className="text-lg font-bold hover:text-success transition-colors">
+                                  {team.teamNumber}
+                                </Link>
+                              </div>
+                              {canEdit && (
                                 <button
-                                  onClick={() => pushTeams(reorderLiveWatchlist(liveList.teams, team.teamNumber, index))}
-                                  className="p-1 hover:bg-interactive rounded"
-                                  title="Move up"
+                                  onClick={() => pushTeams(toggleLiveWatchlist(liveList.teams, team.teamNumber))}
+                                  className="p-1 hover:bg-danger/20 text-danger rounded"
+                                  title="Remove from watchlist"
                                 >
-                                  <ArrowUp size={16} />
+                                  <Trash2 size={16} />
                                 </button>
                               )}
-                              {index < watchlistTeams.length - 1 && (
-                                <button
-                                  onClick={() => pushTeams(reorderLiveWatchlist(liveList.teams, team.teamNumber, index + 2))}
-                                  className="p-1 hover:bg-interactive rounded"
-                                  title="Move down"
-                                >
-                                  <ArrowDown size={16} />
-                                </button>
-                              )}
-                              <button
-                                onClick={() => pushTeams(toggleLiveWatchlist(liveList.teams, team.teamNumber))}
-                                className="p-1 hover:bg-danger/20 text-danger rounded"
-                                title="Remove from watchlist"
-                              >
-                                <Trash2 size={16} />
-                              </button>
                             </div>
-                          )}
-                        </div>
-                        {stats && (() => {
-                          const trend = teamTrends.find(t => t.teamNumber === team.teamNumber);
-                          return (
-                            <div className="text-xs mb-2">
-                              <table className="w-full">
-                                <thead>
-                                  <tr className="text-textMuted">
-                                    <th className="text-left font-normal pr-1"></th>
-                                    <th className="text-right font-normal px-1">Avg</th>
-                                    <th className="text-right font-normal pl-1">Last 3</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  <tr>
-                                    <td className="text-textSecondary pr-1">Pts</td>
-                                    <td className="text-right px-1">{stats.avgTotalPoints.toFixed(1)}</td>
-                                    <td className={`text-right pl-1 font-semibold ${
-                                      trend && trend.last3Avg.total > stats.avgTotalPoints * 1.05 ? 'text-success'
-                                      : trend && trend.last3Avg.total < stats.avgTotalPoints * 0.95 ? 'text-danger'
-                                      : 'text-textPrimary'
-                                    }`}>{trend ? trend.last3Avg.total.toFixed(1) : '-'}</td>
-                                  </tr>
-                                  <tr>
-                                    <td className="text-textSecondary pr-1">L3</td>
-                                    <td className="text-right px-1">{stats.level3ClimbRate.toFixed(0)}%</td>
-                                    <td className={`text-right pl-1 font-semibold ${
-                                      trend && trend.last3Avg.l3ClimbRate > stats.level3ClimbRate + 5 ? 'text-success'
-                                      : trend && trend.last3Avg.l3ClimbRate < stats.level3ClimbRate - 5 ? 'text-danger'
-                                      : 'text-textPrimary'
-                                    }`}>{trend ? `${trend.last3Avg.l3ClimbRate.toFixed(0)}%` : '-'}</td>
-                                  </tr>
-                                  <tr>
-                                    <td className="text-textSecondary pr-1">Auto</td>
-                                    <td className="text-right px-1">{stats.avgAutoPoints.toFixed(1)}</td>
-                                    <td className={`text-right pl-1 font-semibold ${
-                                      trend && trend.last3Avg.auto > stats.avgAutoPoints * 1.05 ? 'text-success'
-                                      : trend && trend.last3Avg.auto < stats.avgAutoPoints * 0.95 ? 'text-danger'
-                                      : 'text-textPrimary'
-                                    }`}>{trend ? trend.last3Avg.auto.toFixed(1) : '-'}</td>
-                                  </tr>
-                                </tbody>
-                              </table>
-                            </div>
-                          );
-                        })()}
-                        {canEdit ? (
-                          <textarea
-                            value={team.watchlistNotes || ''}
-                            onChange={(e) => pushTeams(updateLiveWatchlistNotes(liveList.teams, team.teamNumber, e.target.value))}
-                            placeholder="Notes from final matches..."
-                            className="w-full px-2 py-1 text-sm bg-background border border-border rounded resize-none"
-                            rows={2}
-                          />
-                        ) : (
-                          team.watchlistNotes
-                            ? <p className="text-xs text-textSecondary">{team.watchlistNotes}</p>
-                            : null
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+                            {stats && (
+                              <div className="text-xs mb-2">
+                                <table className="w-full">
+                                  <thead>
+                                    <tr className="text-textMuted">
+                                      <th className="text-left font-normal pr-1"></th>
+                                      <th className="text-right font-normal px-1">Avg</th>
+                                      <th className="text-right font-normal pl-1">Last 3</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    <tr>
+                                      <td className="text-textSecondary pr-1">Pts</td>
+                                      <td className="text-right px-1">{stats.avgTotalPoints.toFixed(1)}</td>
+                                      <td className={`text-right pl-1 font-semibold ${
+                                        trend && trend.last3Avg.total > stats.avgTotalPoints * 1.05 ? 'text-success'
+                                        : trend && trend.last3Avg.total < stats.avgTotalPoints * 0.95 ? 'text-danger'
+                                        : 'text-textPrimary'
+                                      }`}>{trend ? trend.last3Avg.total.toFixed(1) : '-'}</td>
+                                    </tr>
+                                    <tr>
+                                      <td className="text-textSecondary pr-1">L3</td>
+                                      <td className="text-right px-1">{stats.level3ClimbRate.toFixed(0)}%</td>
+                                      <td className={`text-right pl-1 font-semibold ${
+                                        trend && trend.last3Avg.l3ClimbRate > stats.level3ClimbRate + 5 ? 'text-success'
+                                        : trend && trend.last3Avg.l3ClimbRate < stats.level3ClimbRate - 5 ? 'text-danger'
+                                        : 'text-textPrimary'
+                                      }`}>{trend ? `${trend.last3Avg.l3ClimbRate.toFixed(0)}%` : '-'}</td>
+                                    </tr>
+                                    <tr>
+                                      <td className="text-textSecondary pr-1">Auto</td>
+                                      <td className="text-right px-1">{stats.avgAutoPoints.toFixed(1)}</td>
+                                      <td className={`text-right pl-1 font-semibold ${
+                                        trend && trend.last3Avg.auto > stats.avgAutoPoints * 1.05 ? 'text-success'
+                                        : trend && trend.last3Avg.auto < stats.avgAutoPoints * 0.95 ? 'text-danger'
+                                        : 'text-textPrimary'
+                                      }`}>{trend ? trend.last3Avg.auto.toFixed(1) : '-'}</td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                            {canEdit ? (
+                              <textarea
+                                value={team.watchlistNotes || ''}
+                                onChange={(e) => pushTeams(updateLiveWatchlistNotes(liveList.teams, team.teamNumber, e.target.value))}
+                                placeholder="Notes from final matches..."
+                                className="w-full px-2 py-1 text-sm bg-background border border-border rounded resize-none"
+                                rows={2}
+                              />
+                            ) : (
+                              team.watchlistNotes
+                                ? <p className="text-xs text-textSecondary">{team.watchlistNotes}</p>
+                                : null
+                            )}
+                          </SortableWatchlistCard>
+                        );
+                      })}
+                    </div>
+                  </SortableContext>
+                </DndContext>
 
                 {canEdit && (
                   <div className="flex flex-wrap items-center gap-4 pt-4 border-t border-warning/30">
@@ -1151,6 +1159,7 @@ function LivePickListView({
             teamPassesFilters={liveTeamPassesFilters}
             hasActiveFilters={liveHasActiveFilters}
             renderTeamExtra={renderTeamExtra}
+            showTrendGlow={showTrendGlow}
           />
           <DroppableColumn
             id="live-tier2-column"
@@ -1168,6 +1177,7 @@ function LivePickListView({
             teamPassesFilters={liveTeamPassesFilters}
             hasActiveFilters={liveHasActiveFilters}
             renderTeamExtra={renderTeamExtra}
+            showTrendGlow={showTrendGlow}
           />
           <DroppableColumn
             id="live-tier3-column"
@@ -1185,6 +1195,7 @@ function LivePickListView({
             teamPassesFilters={liveTeamPassesFilters}
             hasActiveFilters={liveHasActiveFilters}
             renderTeamExtra={renderTeamExtra}
+            showTrendGlow={showTrendGlow}
           />
           {tier4Teams.length > 0 && (
             <DroppableColumn
@@ -1203,6 +1214,7 @@ function LivePickListView({
               teamPassesFilters={liveTeamPassesFilters}
               hasActiveFilters={liveHasActiveFilters}
               renderTeamExtra={renderTeamExtra}
+              showTrendGlow={showTrendGlow}
             />
           )}
         </div>
@@ -1222,8 +1234,23 @@ function LivePickListView({
 }
 
 
+// Sortable watchlist card wrapper
+function SortableWatchlistCard({ id, disabled, children }: { id: string; disabled: boolean; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="bg-surface border border-border rounded-lg p-3">
+      {children}
+    </div>
+  );
+}
+
 // Sortable team card component
-function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onToggleFlag, onToggleWatchlist, isSelectedForCompare, onToggleCompare, passesFilters, hasActiveFilters, disableInteraction }: {
+function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onToggleFlag, onToggleWatchlist, isSelectedForCompare, onToggleCompare, passesFilters, hasActiveFilters, disableInteraction, showTrendGlow }: {
   team: PickListTeam | { teamNumber: number; teamName?: string; avgTotalPoints: number; level3ClimbRate: number; avgAutoPoints: number };
   currentTier?: 'tier1' | 'tier2' | 'tier3' | 'tier4';
   tierNames?: { tier1: string; tier2: string; tier3: string; tier4: string };
@@ -1236,6 +1263,7 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onT
   passesFilters?: boolean;
   hasActiveFilters?: boolean;
   disableInteraction?: boolean;
+  showTrendGlow?: boolean;
 }) {
   const {
     attributes,
@@ -1284,7 +1312,10 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onT
           : hasActiveFilters && passesFilters !== false
           ? 'bg-success/10 border-success'
           : 'bg-surface border-border'
-      } ${passesFilters === false ? 'opacity-20' : ''}`}
+      } ${passesFilters === false ? 'opacity-20' : ''} ${
+        showTrendGlow && teamTrend?.trend === 'improving' ? 'shadow-[0_0_8px_rgba(34,197,94,0.4)] border-success/50' :
+        showTrendGlow && teamTrend?.trend === 'declining' ? 'shadow-[0_0_8px_rgba(239,68,68,0.4)] border-danger/50' : ''
+      }`}
       onClick={() => onToggleCompare?.()}
     >
       <div className="flex items-start gap-2">
@@ -1525,7 +1556,7 @@ function DroppableColumn({
   onUpdateNotes, onToggleFlag, onToggleWatchlist,
   disableInteraction,
   compareTeams, onToggleCompare, teamPassesFilters, hasActiveFilters,
-  renderTeamExtra,
+  renderTeamExtra, showTrendGlow,
 }: {
   id: string;
   title: string;
@@ -1543,6 +1574,7 @@ function DroppableColumn({
   teamPassesFilters?: (teamNumber: number) => boolean;
   hasActiveFilters?: boolean;
   renderTeamExtra?: (teamNumber: number) => React.ReactNode;
+  showTrendGlow?: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id });
   const storeUpdateNotes = usePickListStore(state => state.updateNotes);
@@ -1578,6 +1610,7 @@ function DroppableColumn({
                 passesFilters={teamPassesFilters ? teamPassesFilters(team.teamNumber) : true}
                 hasActiveFilters={hasActiveFilters}
                 disableInteraction={disableInteraction}
+                showTrendGlow={showTrendGlow}
               />
               {renderTeamExtra?.(team.teamNumber)}
             </div>
@@ -2380,7 +2413,9 @@ function PickList() {
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center gap-2">
                             <span className="text-xl font-bold text-warning">#{index + 1}</span>
-                            <span className="text-lg font-bold">{team.teamNumber}</span>
+                            <Link to={`/teams/${team.teamNumber}`} className="text-lg font-bold hover:text-success transition-colors">
+                              {team.teamNumber}
+                            </Link>
                           </div>
                           <div className="flex items-center gap-1">
                             {index > 0 && (
