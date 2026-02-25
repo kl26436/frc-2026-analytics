@@ -9,6 +9,7 @@ import type { MetricColumn, MetricCategory } from '../types/metrics';
 import { CATEGORY_LABELS } from '../types/metrics';
 import { getTeamEventMatches, getMatchVideoUrl, teamNumberToKey } from '../utils/tbaApi';
 import { getMetricValue } from '../utils/metricAggregation';
+import { formatMetricValue } from '../utils/formatting';
 
 // Fields where lower is better (for coloring)
 const LOWER_IS_BETTER_FIELDS = [
@@ -105,20 +106,6 @@ function TeamComparison() {
     const maxValue = Math.max(...values);
     const minValue = Math.min(...values);
 
-    const formatValue = (value: number, matchesPlayed?: number) => {
-      if (column.format === 'count') {
-        return `${Math.round(value)}/${matchesPlayed ?? '?'}`;
-      }
-      switch (column.format) {
-        case 'percentage':
-          return `${value.toFixed(column.decimals)}%`;
-        case 'time':
-          return `${value.toFixed(column.decimals)}s`;
-        default:
-          return value.toFixed(column.decimals);
-      }
-    };
-
     const getColorClass = (value: number) => {
       if (maxValue === minValue) return 'text-textPrimary';
 
@@ -146,7 +133,7 @@ function TeamComparison() {
               key={team.teamNumber}
               className={`px-4 py-3 text-center ${getColorClass(value)}`}
             >
-              {formatValue(value, team.matchesPlayed)}
+              {formatMetricValue(value, column.format, column.decimals, team.matchesPlayed)}
             </td>
           );
         })}

@@ -9,6 +9,7 @@ import { useAnalyticsStore } from '../store/useAnalyticsStore';
 
 import { getTeamEventMatches, getMatchVideoUrl, teamNumberToKey } from '../utils/tbaApi';
 import { getMetricValue } from '../utils/metricAggregation';
+import { formatMetricValue } from '../utils/formatting';
 
 // Fields where lower is better (for coloring)
 const LOWER_IS_BETTER_FIELDS = [
@@ -95,17 +96,6 @@ function ComparisonModal({ team1, team2, onPickTeam, onClose }: ComparisonModalP
     const maxVal = Math.max(value1, value2);
     const minVal = Math.min(value1, value2);
 
-    const formatValue = (value: number, matchesPlayed?: number) => {
-      if (column.format === 'count') {
-        return `${Math.round(value)}/${matchesPlayed ?? '?'}`;
-      }
-      switch (column.format) {
-        case 'percentage': return `${value.toFixed(column.decimals)}%`;
-        case 'time': return `${value.toFixed(column.decimals)}s`;
-        default: return value.toFixed(column.decimals);
-      }
-    };
-
     const getColorClass = (value: number) => {
       if (maxVal === minVal) return 'text-textPrimary';
       const isBest = higherIsBetter ? value === maxVal : value === minVal;
@@ -118,8 +108,8 @@ function ComparisonModal({ team1, team2, onPickTeam, onClose }: ComparisonModalP
     return (
       <div className="grid grid-cols-[1fr_80px_80px] sm:grid-cols-[1fr_100px_100px] gap-2 py-2 border-b border-border">
         <div className="text-sm text-textSecondary" title={column.description}>{column.label}</div>
-        <div className={`text-sm text-center ${getColorClass(value1)}`}>{formatValue(value1, team1.matchesPlayed)}</div>
-        <div className={`text-sm text-center ${getColorClass(value2)}`}>{formatValue(value2, team2.matchesPlayed)}</div>
+        <div className={`text-sm text-center ${getColorClass(value1)}`}>{formatMetricValue(value1, column.format, column.decimals, team1.matchesPlayed)}</div>
+        <div className={`text-sm text-center ${getColorClass(value2)}`}>{formatMetricValue(value2, column.format, column.decimals, team2.matchesPlayed)}</div>
       </div>
     );
   };

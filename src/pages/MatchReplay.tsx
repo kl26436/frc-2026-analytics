@@ -4,6 +4,7 @@ import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { Play, Pause, SkipBack, SkipForward, ChevronLeft } from 'lucide-react';
 import { computeRobotFuelFromActions, getAlliance } from '../types/scouting';
 import type { ScoutAction } from '../types/scouting';
+import { formatDuration } from '../utils/formatting';
 
 // ── Field image coordinate mapping (from 2026-rebuilt.json) ──
 // Image: 4196x2035 px, field-corners: top-left (245,118) to bottom-right (3942,1914)
@@ -223,11 +224,6 @@ function MatchReplay() {
     return idx;
   }, [timeline, currentTime]);
 
-  const formatTime = (s: number) => {
-    const m = Math.floor(s / 60);
-    const sec = Math.floor(s % 60);
-    return `${m}:${String(sec).padStart(2, '0')}`;
-  };
 
   const stepForward = () => {
     const next = timeline.find(t => t.isFuelEvent && t.relativeTime > currentTime);
@@ -370,7 +366,7 @@ function MatchReplay() {
           />
 
           <span className="text-sm font-mono text-textSecondary w-16 text-right">
-            {formatTime(currentTime)}
+            {formatDuration(currentTime)}
           </span>
 
           {/* Speed controls */}
@@ -414,7 +410,7 @@ function MatchReplay() {
                     isActive ? 'bg-surfaceElevated' : 'hover:bg-surfaceElevated'
                   }`}
                 >
-                  <span className="font-mono text-textMuted w-12 text-right text-xs">{formatTime(item.relativeTime)}</span>
+                  <span className="font-mono text-textMuted w-12 text-right text-xs">{formatDuration(item.relativeTime)}</span>
                   <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
                     item.phase === 'auto' ? 'bg-purple-500/20 text-purple-400' : 'bg-success/20 text-success'
                   }`}>

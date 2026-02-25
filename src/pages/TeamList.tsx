@@ -5,6 +5,7 @@ import { useMetricsStore } from '../store/useMetricsStore';
 import { ArrowUp, ArrowDown, Search, Sliders, LayoutGrid, Table2, X } from 'lucide-react';
 import { teamKeyToNumber } from '../utils/tbaApi';
 import { getMetricValue } from '../utils/metricAggregation';
+import { formatMetricValue } from '../utils/formatting';
 import ComparisonModal from '../components/ComparisonModal';
 
 type SortDirection = 'asc' | 'desc';
@@ -172,17 +173,6 @@ function TeamList() {
     );
   };
 
-  const formatMetricValue = (value: number, format: 'number' | 'percentage' | 'time' | 'count', decimals: number, matchesPlayed?: number) => {
-    if (format === 'count') {
-      return `${Math.round(value)}/${matchesPlayed ?? '?'}`;
-    }
-    const formatted = value.toFixed(decimals);
-    switch (format) {
-      case 'percentage': return `${formatted}%`;
-      case 'time': return `${formatted}s`;
-      default: return formatted;
-    }
-  };
 
   const compareTeam1 = teamStatistics.find(t => t.teamNumber === compareTeams[0]);
   const compareTeam2 = teamStatistics.find(t => t.teamNumber === compareTeams[1]);

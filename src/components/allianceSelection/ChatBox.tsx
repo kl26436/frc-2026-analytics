@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Send, MessageSquare, ChevronDown, ChevronUp } from 'lucide-react';
 import type { ChatMessage } from '../../types/allianceSelection';
+import { formatTimestamp } from '../../utils/formatting';
 
 interface ChatBoxProps {
   messages: ChatMessage[];
@@ -36,10 +37,6 @@ function ChatBox({ messages, onSend, myUid }: ChatBoxProps) {
     }
   };
 
-  const formatTime = (timestamp: string) => {
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  };
 
   return (
     <div className="bg-surface rounded-lg border border-border overflow-hidden">
@@ -80,7 +77,7 @@ function ChatBox({ messages, onSend, myUid }: ChatBoxProps) {
                     )}
                     <p className="text-sm break-words">{msg.text}</p>
                   </div>
-                  <span className="text-[10px] text-textMuted mt-0.5 px-1">{formatTime(msg.timestamp)}</span>
+                  <span className="text-[10px] text-textMuted mt-0.5 px-1">{formatTimestamp(msg.timestamp)}</span>
                 </div>
               );
             })}

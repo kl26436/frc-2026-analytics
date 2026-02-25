@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { teamKeyToNumber } from '../utils/tbaApi';
 import type { TBAMatch } from '../types/tba';
+import { formatTimestamp } from '../utils/formatting';
 
 const AUTO_REFRESH_INTERVAL = 10 * 60 * 1000; // 10 minutes
 
@@ -39,10 +40,6 @@ function EventSetup() {
     }
   }, [autoRefreshEnabled, eventCode, fetchTBAData, tbaData]);
 
-  const formatLastUpdated = (timestamp: string | null) => {
-    if (!timestamp) return 'Never';
-    return new Date(timestamp).toLocaleTimeString();
-  };
 
   const toggleMatch = (key: string) => {
     setExpandedMatch(prev => prev === key ? null : key);
@@ -174,7 +171,7 @@ function EventSetup() {
             <p className="text-xs text-textSecondary">Last Updated</p>
             <p className="text-lg font-bold flex items-center gap-1">
               <Clock size={14} />
-              {formatLastUpdated(tbaData?.lastUpdated || null)}
+              {formatTimestamp(tbaData?.lastUpdated || null)}
             </p>
           </div>
         </div>

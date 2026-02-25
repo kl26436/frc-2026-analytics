@@ -200,19 +200,6 @@ export const useAnalyticsStore = create<AnalyticsState>()(
         const teamFuelStats = aggregateTeamFuel(matchFuelAttribution);
         set({ matchFuelAttribution, teamFuelStats });
         get().calculatePredictionInputs();
-        // TODO: remove debug logs after validation
-        console.table(teamFuelStats.map(t => ({
-          team: t.teamNumber,
-          matches: t.matchesPlayed,
-          avgScored: Math.round(t.avgShotsScored * 10) / 10,
-          avgShots: Math.round(t.avgShots * 10) / 10,
-          avgPasses: Math.round(t.avgPasses * 10) / 10,
-          avgMoved: Math.round(t.avgMoved * 10) / 10,
-          accuracy: `${Math.round(t.scoringAccuracy * 100)}%`,
-          passerMatches: t.dedicatedPasserMatches || '',
-          actionData: `${t.actionDataMatches}/${t.matchesPlayed}`,
-        })));
-        console.log(`[FuelAttribution] ${matchFuelAttribution.length} match rows, ${teamFuelStats.length} teams`);
       },
 
       calculatePredictionInputs: () => {

@@ -4,6 +4,7 @@ import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { teamKeyToNumber } from '../utils/tbaApi';
 import { computeMatchup, type MatchupResult } from '../utils/predictions';
 import type { TBAMatch } from '../types/tba';
+import { formatProb } from '../utils/formatting';
 
 // ─── Helpers (outside component so PredictionContent can use them) ────────────
 
@@ -40,7 +41,6 @@ function PredictionContent({
   actualRedScore,
   actualBlueScore,
 }: PredictionContentProps) {
-  const formatProb = (p: number) => `${(p * 100).toFixed(0)}%`;
 
   return (
     <div className="space-y-4">
