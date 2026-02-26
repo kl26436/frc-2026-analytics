@@ -6,7 +6,7 @@ import { DEFAULT_METRICS } from '../types/metrics';
 interface MetricsState {
   config: MetricsConfig;
 
-  // Actions
+  // Column actions
   toggleColumn: (columnId: string) => void;
   updateColumn: (columnId: string, updates: Partial<MetricColumn>) => void;
   addColumn: (column: MetricColumn) => void;
@@ -24,7 +24,6 @@ export const useMetricsStore = create<MetricsState>()(
         lastUpdated: new Date().toISOString(),
       },
 
-      // Toggle column enabled/disabled
       toggleColumn: (columnId) => {
         const { config } = get();
         set({
@@ -38,7 +37,6 @@ export const useMetricsStore = create<MetricsState>()(
         });
       },
 
-      // Update column properties
       updateColumn: (columnId, updates) => {
         const { config } = get();
         set({
@@ -52,7 +50,6 @@ export const useMetricsStore = create<MetricsState>()(
         });
       },
 
-      // Add a new column
       addColumn: (column) => {
         const { config } = get();
         set({
@@ -64,7 +61,6 @@ export const useMetricsStore = create<MetricsState>()(
         });
       },
 
-      // Delete a column
       deleteColumn: (columnId) => {
         const { config } = get();
         set({
@@ -76,7 +72,6 @@ export const useMetricsStore = create<MetricsState>()(
         });
       },
 
-      // Reorder columns
       reorderColumns: (fromIndex, toIndex) => {
         const { config } = get();
         const newColumns = [...config.columns];
@@ -92,7 +87,6 @@ export const useMetricsStore = create<MetricsState>()(
         });
       },
 
-      // Reset to default configuration
       resetToDefaults: () => {
         set({
           config: {
@@ -102,7 +96,6 @@ export const useMetricsStore = create<MetricsState>()(
         });
       },
 
-      // Get only enabled columns
       getEnabledColumns: () => {
         const { config } = get();
         return config.columns.filter(col => col.enabled);
@@ -110,13 +103,21 @@ export const useMetricsStore = create<MetricsState>()(
     }),
     {
       name: 'frc-metrics-storage',
-      version: 5,
-      migrate: () => ({
-        config: {
-          columns: DEFAULT_METRICS,
-          lastUpdated: new Date().toISOString(),
-        },
-      }),
+      version: 8,
+      migrate: (persistedState: unknown, version: number) => {
+        if (version >= 8) {
+          const state = persistedState as { config: MetricsConfig };
+          return { config: state.config };
+        }
+        // v8: Force reset to pick up new default column order,
+        // climb level formatting, and updated enabled/disabled defaults
+        return {
+          config: {
+            columns: DEFAULT_METRICS,
+            lastUpdated: new Date().toISOString(),
+          },
+        };
+      },
     }
   )
 );

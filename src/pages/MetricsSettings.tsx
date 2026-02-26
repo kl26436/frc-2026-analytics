@@ -64,14 +64,13 @@ function MetricsSettings() {
   const [showAddPicker, setShowAddPicker] = useState(false);
   const [addFilterCategory, setAddFilterCategory] = useState<MetricCategory | 'all'>('all');
   const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const [showAddCustom, setShowAddCustom] = useState(false);
   const [newColumn, setNewColumn] = useState({
     rawMetricId: '',
-    aggregation: 'avg' as MetricAggregation,
-    label: '',
+    aggregations: [] as MetricAggregation[],
     format: 'number' as 'number' | 'percentage' | 'time' | 'count',
     decimals: 1,
     category: 'overall' as MetricCategory,
+    percentileValue: 75,
   });
 
   // Only show enabled metrics in the main list
@@ -99,56 +98,111 @@ function MetricsSettings() {
     toggleColumn(columnId);
   };
 
-  // Handle adding a new custom column
-  const handleAddColumn = () => {
-    if (!newColumn.rawMetricId || !newColumn.label) return;
+  const AGG_LABELS: Record<MetricAggregation, string> = {
+    avg: 'Avg', max: 'Max', min: 'Min', median: 'Median', sum: 'Sum', rate: 'Rate', percentile: 'P',
+  };
+
+  // Bulk-add: creates one column per selected aggregation
+  const handleBulkAdd = () => {
+    if (!newColumn.rawMetricId || newColumn.aggregations.length === 0) return;
 
     const selectedOption = RAW_METRIC_OPTIONS.find(o => o.id === newColumn.rawMetricId);
-    const id = `custom_${newColumn.aggregation}_${newColumn.rawMetricId}_${Date.now()}`;
+    const metricShort = selectedOption?.shortLabel || selectedOption?.label || newColumn.rawMetricId;
 
-    const column: MetricColumn = {
-      id,
-      label: newColumn.label,
-      field: 'computed', // unused — value comes from rawMetric
-      rawMetric: newColumn.rawMetricId,
-      aggregation: newColumn.aggregation,
-      format: newColumn.format,
-      decimals: newColumn.decimals,
-      enabled: true,
-      description: `Custom: ${newColumn.aggregation} of ${selectedOption?.label || newColumn.rawMetricId}`,
-      category: selectedOption?.category as MetricCategory || newColumn.category,
-    };
+    for (const agg of newColumn.aggregations) {
+      const prefix = AGG_LABELS[agg];
+      const suffix = agg === 'percentile' ? `${newColumn.percentileValue}` : '';
+      const label = `${prefix}${suffix} ${metricShort}`;
+      const id = `custom_${agg}_${newColumn.rawMetricId}_${Date.now()}_${agg}`;
 
-    addColumn(column);
-    setShowAddCustom(false);
+      const column: MetricColumn = {
+        id,
+        label,
+        field: 'computed',
+        rawMetric: newColumn.rawMetricId,
+        aggregation: agg,
+        format: newColumn.format,
+        decimals: newColumn.decimals,
+        enabled: true,
+        description: `Custom: ${agg}${suffix ? ' ' + suffix : ''} of ${metricShort}`,
+        category: selectedOption?.category as MetricCategory || newColumn.category,
+        ...(agg === 'percentile' ? { percentileValue: newColumn.percentileValue } : {}),
+      };
+
+      addColumn(column);
+    }
+
     setNewColumn({
       rawMetricId: '',
-      aggregation: 'avg',
-      label: '',
+      aggregations: [],
       format: 'number',
       decimals: 1,
       category: 'overall',
+      percentileValue: 75,
     });
   };
 
-  const AGG_LABELS: Record<MetricAggregation, string> = {
-    avg: 'Avg', max: 'Max', min: 'Min', median: 'Median', sum: 'Sum', rate: 'Rate',
+  const toggleAggregation = (agg: MetricAggregation) => {
+    setNewColumn(prev => ({
+      ...prev,
+      aggregations: prev.aggregations.includes(agg)
+        ? prev.aggregations.filter(a => a !== agg)
+        : [...prev.aggregations, agg],
+    }));
   };
 
-  const updateNewColumnLabel = (rawMetricId: string, aggregation: MetricAggregation) => {
-    const selectedOption = RAW_METRIC_OPTIONS.find(o => o.id === rawMetricId);
-    if (selectedOption) {
-      const prefix = AGG_LABELS[aggregation] || '';
-      setNewColumn(prev => ({
-        ...prev,
-        rawMetricId,
-        aggregation,
-        label: `${prefix} ${selectedOption.label}`.trim(),
-        category: selectedOption.category as MetricCategory,
-      }));
-    } else {
-      setNewColumn(prev => ({ ...prev, rawMetricId, aggregation }));
-    }
+  // Quick templates
+  interface MetricTemplate {
+    id: string;
+    name: string;
+    description: string;
+    columns: Omit<MetricColumn, 'id'>[];
+  }
+
+  const METRIC_TEMPLATES: MetricTemplate[] = [
+    {
+      id: 'fuel-deep-dive',
+      name: 'Fuel Deep Dive',
+      description: 'Avg, Max, Median, P75 for fuel scoring metrics',
+      columns: [
+        { label: 'Avg Fuel', field: 'computed', rawMetric: 'totalFuelEstimate', aggregation: 'avg', format: 'number', decimals: 1, enabled: true, category: 'fuel' },
+        { label: 'Max Fuel', field: 'computed', rawMetric: 'totalFuelEstimate', aggregation: 'max', format: 'number', decimals: 0, enabled: true, category: 'fuel' },
+        { label: 'Median Fuel', field: 'computed', rawMetric: 'totalFuelEstimate', aggregation: 'median', format: 'number', decimals: 1, enabled: true, category: 'fuel' },
+        { label: 'P75 Fuel', field: 'computed', rawMetric: 'totalFuelEstimate', aggregation: 'percentile', percentileValue: 75, format: 'number', decimals: 1, enabled: true, category: 'fuel' },
+        { label: 'Avg Passes', field: 'computed', rawMetric: 'totalPass', aggregation: 'avg', format: 'number', decimals: 1, enabled: true, category: 'fuel' },
+        { label: 'Max Passes', field: 'computed', rawMetric: 'totalPass', aggregation: 'max', format: 'number', decimals: 0, enabled: true, category: 'fuel' },
+      ],
+    },
+    {
+      id: 'climb-analysis',
+      name: 'Climb Analysis',
+      description: 'Max climb level, avg climb, all climb rates',
+      columns: [
+        { label: 'Max Climb', field: 'computed', rawMetric: 'climbLevel', aggregation: 'max', format: 'number', decimals: 0, enabled: true, category: 'endgame' },
+        { label: 'Avg Climb', field: 'computed', rawMetric: 'climbLevel', aggregation: 'avg', format: 'number', decimals: 1, enabled: true, category: 'endgame' },
+        { label: 'Climb Rate', field: 'computed', rawMetric: 'climbLevel', aggregation: 'rate', format: 'percentage', decimals: 0, enabled: true, category: 'endgame' },
+      ],
+    },
+    {
+      id: 'alliance-selection',
+      name: 'Alliance Selection',
+      description: 'Key metrics for partner evaluation',
+      columns: [
+        { label: 'Avg Points', field: 'computed', rawMetric: 'totalPoints', aggregation: 'avg', format: 'number', decimals: 1, enabled: true, category: 'overall' },
+        { label: 'P75 Points', field: 'computed', rawMetric: 'totalPoints', aggregation: 'percentile', percentileValue: 75, format: 'number', decimals: 1, enabled: true, category: 'overall' },
+        { label: 'Max Climb', field: 'computed', rawMetric: 'climbLevel', aggregation: 'max', format: 'number', decimals: 0, enabled: true, category: 'endgame' },
+        { label: 'Avg Fuel', field: 'computed', rawMetric: 'totalFuelEstimate', aggregation: 'avg', format: 'number', decimals: 1, enabled: true, category: 'fuel' },
+      ],
+    },
+  ];
+
+  const applyTemplate = (template: MetricTemplate) => {
+    const now = Date.now();
+    template.columns.forEach((col, idx) => {
+      const id = `template_${template.id}_${col.rawMetric || col.field}_${col.aggregation}_${now}_${idx}`;
+      addColumn({ ...col, id } as MetricColumn);
+    });
+    setShowAddPicker(false);
   };
 
   const handleEditColumn = (column: MetricColumn) => {
@@ -386,128 +440,165 @@ function MetricsSettings() {
             </div>
 
             {/* Available metrics to add */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-1.5 min-h-0">
-              {filteredDisabledColumns.length === 0 && !showAddCustom ? (
-                <p className="text-center text-textMuted py-4 text-sm">
-                  All metrics in this category are already active.
-                </p>
-              ) : (
-                filteredDisabledColumns.map(col => (
-                  <button
-                    key={col.id}
-                    onClick={() => handleEnableColumn(col.id)}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded bg-card hover:bg-interactive transition-colors text-left"
-                  >
-                    <Plus size={16} className="text-success flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <span className="text-sm font-semibold">{col.label}</span>
-                      <span className="text-xs text-textMuted ml-2">{CATEGORY_LABELS[col.category || 'overall']}</span>
-                    </div>
-                  </button>
-                ))
-              )}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
+              {/* Custom column builder (bulk-add) — always visible at top */}
+              <div className="p-4 rounded-lg border-2 border-success bg-success/5">
+                <h4 className="font-bold text-sm mb-3">Custom Metric</h4>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs text-textSecondary mb-1">What to measure *</label>
+                    <select
+                      value={newColumn.rawMetricId}
+                      onChange={e => setNewColumn(prev => ({ ...prev, rawMetricId: e.target.value }))}
+                      className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm"
+                    >
+                      <option value="">Select a field...</option>
+                      {Object.entries(RAW_METRIC_CATEGORY_LABELS).map(([cat, catLabel]) => (
+                        <optgroup key={cat} label={catLabel}>
+                          {RAW_METRIC_OPTIONS.filter(o => o.category === cat).map(o => (
+                            <option key={o.id} value={o.id}>{o.label}</option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </select>
+                  </div>
 
-              {/* Custom column builder */}
-              {showAddCustom ? (
-                <div className="mt-3 p-4 rounded-lg border-2 border-success bg-success/5">
-                  <h4 className="font-bold text-sm mb-3">New Custom Metric</h4>
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-xs text-textSecondary mb-1">What to measure *</label>
-                      <select
-                        value={newColumn.rawMetricId}
-                        onChange={e => updateNewColumnLabel(e.target.value, newColumn.aggregation)}
-                        className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm"
-                      >
-                        <option value="">Select a field...</option>
-                        {Object.entries(RAW_METRIC_CATEGORY_LABELS).map(([cat, catLabel]) => (
-                          <optgroup key={cat} label={catLabel}>
-                            {RAW_METRIC_OPTIONS.filter(o => o.category === cat).map(o => (
-                              <option key={o.id} value={o.id}>{o.label}</option>
-                            ))}
-                          </optgroup>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs text-textSecondary mb-1">How to aggregate *</label>
-                        <select
-                          value={newColumn.aggregation}
-                          onChange={e => updateNewColumnLabel(newColumn.rawMetricId, e.target.value as MetricAggregation)}
-                          className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm"
-                        >
-                          <option value="avg">Average</option>
-                          <option value="max">Maximum</option>
-                          <option value="min">Minimum</option>
-                          <option value="median">Median</option>
-                          <option value="sum">Sum (total)</option>
-                          <option value="rate">Rate (% non-zero)</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs text-textSecondary mb-1">Label *</label>
-                        <input
-                          type="text"
-                          value={newColumn.label}
-                          onChange={e => setNewColumn({ ...newColumn, label: e.target.value })}
-                          placeholder="e.g., Median Teleop Fuel"
-                          className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm"
-                        />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs text-textSecondary mb-1">Format</label>
-                        <select
-                          value={newColumn.format}
-                          onChange={e => setNewColumn({ ...newColumn, format: e.target.value as 'number' | 'percentage' | 'time' | 'count' })}
-                          className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm"
-                        >
-                          <option value="number">Number</option>
-                          <option value="percentage">Percentage</option>
-                          <option value="time">Time (seconds)</option>
-                          <option value="count">Count (X/N)</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs text-textSecondary mb-1">Decimals</label>
-                        <input
-                          type="number"
-                          min="0"
-                          max="3"
-                          value={newColumn.decimals}
-                          onChange={e => setNewColumn({ ...newColumn, decimals: parseInt(e.target.value) })}
-                          className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm"
-                        />
-                      </div>
-                    </div>
-                    <div className="flex gap-2 justify-end">
-                      <button
-                        onClick={() => setShowAddCustom(false)}
-                        className="px-3 py-1.5 text-sm bg-surface hover:bg-interactive rounded-lg border border-border"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={handleAddColumn}
-                        disabled={!newColumn.rawMetricId || !newColumn.label}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-success text-background font-semibold rounded-lg hover:bg-success/90 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <Plus size={14} />
-                        Add
-                      </button>
+                  <div>
+                    <label className="block text-xs text-textSecondary mb-1">Aggregation(s) *</label>
+                    <div className="flex flex-wrap gap-2">
+                      {(['avg', 'max', 'min', 'median', 'sum', 'rate', 'percentile'] as MetricAggregation[]).map(agg => (
+                        <label key={agg} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={newColumn.aggregations.includes(agg)}
+                            onChange={() => toggleAggregation(agg)}
+                            className="rounded"
+                          />
+                          {agg === 'percentile' ? 'Percentile' : AGG_LABELS[agg]}
+                        </label>
+                      ))}
                     </div>
                   </div>
+
+                  {/* Percentile value picker */}
+                  {newColumn.aggregations.includes('percentile') && (
+                    <div>
+                      <label className="block text-xs text-textSecondary mb-1">Percentile Value</label>
+                      <div className="flex gap-2 items-center">
+                        {[25, 75, 90].map(p => (
+                          <button
+                            key={p}
+                            onClick={() => setNewColumn(prev => ({ ...prev, percentileValue: p }))}
+                            className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors ${
+                              newColumn.percentileValue === p ? 'bg-success text-background' : 'bg-card hover:bg-interactive text-textSecondary border border-border'
+                            }`}
+                          >
+                            P{p}
+                          </button>
+                        ))}
+                        <input
+                          type="number"
+                          min={1}
+                          max={99}
+                          value={newColumn.percentileValue}
+                          onChange={e => setNewColumn(prev => ({ ...prev, percentileValue: parseInt(e.target.value) || 75 }))}
+                          className="w-16 px-2 py-1 bg-background border border-border rounded text-xs text-center"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-textSecondary mb-1">Format</label>
+                      <select
+                        value={newColumn.format}
+                        onChange={e => setNewColumn(prev => ({ ...prev, format: e.target.value as 'number' | 'percentage' | 'time' | 'count' }))}
+                        className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm"
+                      >
+                        <option value="number">Number</option>
+                        <option value="percentage">Percentage</option>
+                        <option value="time">Time (seconds)</option>
+                        <option value="count">Count (X/N)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-textSecondary mb-1">Decimals</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="3"
+                        value={newColumn.decimals}
+                        onChange={e => setNewColumn(prev => ({ ...prev, decimals: parseInt(e.target.value) }))}
+                        className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Preview of columns to be created */}
+                  {newColumn.rawMetricId && newColumn.aggregations.length > 0 && (
+                    <div className="text-xs text-textSecondary bg-background rounded p-2">
+                      Will create {newColumn.aggregations.length} column{newColumn.aggregations.length !== 1 ? 's' : ''}:
+                      <span className="text-textPrimary ml-1">
+                        {newColumn.aggregations.map(agg => {
+                          const prefix = AGG_LABELS[agg];
+                          const suffix = agg === 'percentile' ? `${newColumn.percentileValue}` : '';
+                          const short = RAW_METRIC_OPTIONS.find(o => o.id === newColumn.rawMetricId)?.shortLabel || newColumn.rawMetricId;
+                          return `${prefix}${suffix} ${short}`;
+                        }).join(', ')}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="flex justify-end">
+                    <button
+                      onClick={handleBulkAdd}
+                      disabled={!newColumn.rawMetricId || newColumn.aggregations.length === 0}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-success text-background font-semibold rounded-lg hover:bg-success/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Plus size={14} />
+                      Add {newColumn.aggregations.length > 1 ? `${newColumn.aggregations.length} Columns` : 'Column'}
+                    </button>
+                  </div>
                 </div>
-              ) : (
-                <button
-                  onClick={() => setShowAddCustom(true)}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded border border-dashed border-border hover:border-success hover:bg-success/5 transition-colors text-left mt-2"
-                >
-                  <Plus size={16} className="text-textMuted" />
-                  <span className="text-sm text-textSecondary">Create custom metric...</span>
-                </button>
+              </div>
+
+              {/* Quick Templates */}
+              <div className="space-y-1.5">
+                <h4 className="text-xs font-bold uppercase tracking-wide text-textSecondary">Quick Templates</h4>
+                {METRIC_TEMPLATES.map(template => (
+                  <button
+                    key={template.id}
+                    onClick={() => applyTemplate(template)}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded bg-card hover:bg-interactive transition-colors text-left"
+                  >
+                    <Plus size={16} className="text-blueAlliance flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-semibold">{template.name}</span>
+                      <span className="block text-xs text-textMuted">{template.description}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              {/* Disabled default metrics */}
+              {filteredDisabledColumns.length > 0 && (
+                <div className="space-y-1.5">
+                  <h4 className="text-xs font-bold uppercase tracking-wide text-textSecondary">Re-enable Default Metrics</h4>
+                  {filteredDisabledColumns.map(col => (
+                    <button
+                      key={col.id}
+                      onClick={() => handleEnableColumn(col.id)}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded bg-card hover:bg-interactive transition-colors text-left"
+                    >
+                      <Plus size={16} className="text-success flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-semibold">{col.label}</span>
+                        <span className="text-xs text-textMuted ml-2">{CATEGORY_LABELS[col.category || 'overall']}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
               )}
             </div>
           </div>

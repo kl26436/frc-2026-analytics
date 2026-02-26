@@ -137,7 +137,7 @@ function PitScouting() {
     };
 
     return (
-      <div className="space-y-6">
+      <div className="space-y-4 md:space-y-6">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold">Pit Scouting</h1>
           <p className="text-textSecondary mt-1">REBUILT 2026 • {eventCode}</p>
@@ -172,7 +172,7 @@ function PitScouting() {
   // Team selection
   if (!selectedTeam) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-4 md:space-y-6">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold">Pit Scouting</h1>
           <p className="text-textSecondary mt-1">
@@ -373,7 +373,7 @@ function PitScouting() {
           ))}
         </div>
 
-        <div className="grid grid-cols-2 gap-4 mt-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mt-4">
           <div>
             <label className="text-sm text-textSecondary block mb-1">Capacity (# FUEL)</label>
             <input
@@ -450,7 +450,7 @@ function PitScouting() {
           ))}
         </div>
 
-        <div className="grid grid-cols-2 gap-4 mt-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mt-4">
           <div>
             <label className="text-sm text-textSecondary block mb-1">Climb Time (sec)</label>
             <input
@@ -565,7 +565,7 @@ function PitScouting() {
       {/* Vibe Check */}
       <div className="bg-surface p-4 rounded-lg border border-border">
         <h2 className="font-bold mb-3">Vibe Check *</h2>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
           {([
             { value: 'good', label: '✓', color: 'success' },
             { value: 'bad', label: '✗', color: 'danger' },

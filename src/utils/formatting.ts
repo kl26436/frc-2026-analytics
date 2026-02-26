@@ -12,6 +12,11 @@ export function formatMetricValue(
   if (format === 'count') {
     return `${Math.round(value)}/${matchesPlayed ?? '?'}`;
   }
+  if (format === 'climbLevel') {
+    const level = Math.round(value);
+    const labels: Record<number, string> = { 0: 'None', 1: 'L1', 2: 'L2', 3: 'L3' };
+    return labels[level] ?? `L${level}`;
+  }
   const formatted = value.toFixed(decimals);
   switch (format) {
     case 'percentage': return `${formatted}%`;

@@ -108,9 +108,8 @@ function AllianceSelectionBoard({
   const unrankedCount = session.teams.filter(t => t.originalTier === 'unranked').length;
 
   // Comparison modal data
-  const compareTeam1 = teamStatistics.find(t => t.teamNumber === selectedTeamsForCompare[0]);
-  const compareTeam2 = teamStatistics.find(t => t.teamNumber === selectedTeamsForCompare[1]);
-  const canShowModal = showComparisonModal && compareTeam1 && compareTeam2;
+  const compareTeamStats = teamStatistics.filter(t => selectedTeamsForCompare.includes(t.teamNumber));
+  const canShowModal = showComparisonModal && compareTeamStats.length >= 2;
 
   const participantCount = Object.keys(session.participants).length;
   const pendingEntries = Object.entries(session.participants).filter(([, p]) => p.role === 'pending');
@@ -258,8 +257,7 @@ function AllianceSelectionBoard({
       {/* Comparison Modal */}
       {canShowModal && (
         <ComparisonModal
-          team1={compareTeam1!}
-          team2={compareTeam2!}
+          teams={compareTeamStats}
           onClose={() => {
             setShowComparisonModal(false);
             clearCompareSelection();

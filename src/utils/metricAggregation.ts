@@ -49,43 +49,44 @@ const RAW_METRICS: Record<string, Extractor> = {
 
 export interface RawMetricOption {
   id: string;
-  label: string;
+  label: string;        // Full label for the dropdown picker
+  shortLabel: string;   // Short label for auto-generated column names (e.g. "Avg {shortLabel}")
   category: MetricCategory;
 }
 
 export const RAW_METRIC_OPTIONS: RawMetricOption[] = [
   // Points
-  { id: 'totalPoints', label: 'Total Points', category: 'overall' },
-  { id: 'autoPoints', label: 'Auto Points', category: 'overall' },
-  { id: 'teleopPoints', label: 'Teleop Points', category: 'overall' },
-  { id: 'endgamePoints', label: 'Endgame Points', category: 'overall' },
+  { id: 'totalPoints', label: 'Total Points', shortLabel: 'Points', category: 'overall' },
+  { id: 'autoPoints', label: 'Auto Points', shortLabel: 'Auto Pts', category: 'overall' },
+  { id: 'teleopPoints', label: 'Teleop Points', shortLabel: 'Teleop Pts', category: 'overall' },
+  { id: 'endgamePoints', label: 'Endgame Points', shortLabel: 'Endgame Pts', category: 'overall' },
   // Fuel
-  { id: 'totalFuelEstimate', label: 'Total Fuel Estimate', category: 'fuel' },
-  { id: 'autoFuelEstimate', label: 'Auto Fuel Estimate', category: 'fuel' },
-  { id: 'teleopFuelEstimate', label: 'Teleop Fuel Estimate', category: 'fuel' },
-  { id: 'autoFuelScore', label: 'Auto Raw FUEL_SCORE', category: 'fuel' },
-  { id: 'teleopFuelScore', label: 'Teleop Raw FUEL_SCORE', category: 'fuel' },
-  { id: 'totalPass', label: 'Total Passes', category: 'fuel' },
-  { id: 'autoFuelPass', label: 'Auto Passes', category: 'fuel' },
-  { id: 'teleopFuelPass', label: 'Teleop Passes', category: 'fuel' },
+  { id: 'totalFuelEstimate', label: 'Total Fuel Estimate', shortLabel: 'Fuel', category: 'fuel' },
+  { id: 'autoFuelEstimate', label: 'Auto Fuel Estimate', shortLabel: 'Auto Fuel', category: 'fuel' },
+  { id: 'teleopFuelEstimate', label: 'Teleop Fuel Estimate', shortLabel: 'Teleop Fuel', category: 'fuel' },
+  { id: 'autoFuelScore', label: 'Auto Raw FUEL_SCORE', shortLabel: 'Auto FUEL_SCORE', category: 'fuel' },
+  { id: 'teleopFuelScore', label: 'Teleop Raw FUEL_SCORE', shortLabel: 'Teleop FUEL_SCORE', category: 'fuel' },
+  { id: 'totalPass', label: 'Total Passes', shortLabel: 'Passes', category: 'fuel' },
+  { id: 'autoFuelPass', label: 'Auto Passes', shortLabel: 'Auto Passes', category: 'fuel' },
+  { id: 'teleopFuelPass', label: 'Teleop Passes', shortLabel: 'Teleop Passes', category: 'fuel' },
   // Bonus buckets
-  { id: 'autoPlus1', label: 'Auto +1 Buckets', category: 'fuel' },
-  { id: 'autoPlus2', label: 'Auto +2 Buckets', category: 'fuel' },
-  { id: 'autoPlus3', label: 'Auto +3 Buckets', category: 'fuel' },
-  { id: 'autoPlus5', label: 'Auto +5 Buckets', category: 'fuel' },
-  { id: 'autoPlus10', label: 'Auto +10 Buckets', category: 'fuel' },
-  { id: 'teleopPlus1', label: 'Teleop +1 Buckets', category: 'fuel' },
-  { id: 'teleopPlus2', label: 'Teleop +2 Buckets', category: 'fuel' },
-  { id: 'teleopPlus3', label: 'Teleop +3 Buckets', category: 'fuel' },
-  { id: 'teleopPlus5', label: 'Teleop +5 Buckets', category: 'fuel' },
-  { id: 'teleopPlus10', label: 'Teleop +10 Buckets', category: 'fuel' },
+  { id: 'autoPlus1', label: 'Auto +1 Buckets', shortLabel: 'Auto +1', category: 'fuel' },
+  { id: 'autoPlus2', label: 'Auto +2 Buckets', shortLabel: 'Auto +2', category: 'fuel' },
+  { id: 'autoPlus3', label: 'Auto +3 Buckets', shortLabel: 'Auto +3', category: 'fuel' },
+  { id: 'autoPlus5', label: 'Auto +5 Buckets', shortLabel: 'Auto +5', category: 'fuel' },
+  { id: 'autoPlus10', label: 'Auto +10 Buckets', shortLabel: 'Auto +10', category: 'fuel' },
+  { id: 'teleopPlus1', label: 'Teleop +1 Buckets', shortLabel: 'Teleop +1', category: 'fuel' },
+  { id: 'teleopPlus2', label: 'Teleop +2 Buckets', shortLabel: 'Teleop +2', category: 'fuel' },
+  { id: 'teleopPlus3', label: 'Teleop +3 Buckets', shortLabel: 'Teleop +3', category: 'fuel' },
+  { id: 'teleopPlus5', label: 'Teleop +5 Buckets', shortLabel: 'Teleop +5', category: 'fuel' },
+  { id: 'teleopPlus10', label: 'Teleop +10 Buckets', shortLabel: 'Teleop +10', category: 'fuel' },
   // Endgame
-  { id: 'climbLevel', label: 'Climb Level (0-3)', category: 'endgame' },
+  { id: 'climbLevel', label: 'Climb Level (0-3)', shortLabel: 'Climb', category: 'endgame' },
 ];
 
 // ── Aggregation Functions ─────────────────────────────────────────────────
 
-export function aggregate(values: number[], method: MetricAggregation): number {
+export function aggregate(values: number[], method: MetricAggregation, percentileValue?: number): number {
   if (values.length === 0) return 0;
 
   switch (method) {
@@ -109,6 +110,15 @@ export function aggregate(values: number[], method: MetricAggregation): number {
       return values.length > 0
         ? (values.filter(v => v > 0).length / values.length) * 100
         : 0;
+    case 'percentile': {
+      const p = (percentileValue ?? 75) / 100;
+      const sorted = [...values].sort((a, b) => a - b);
+      const index = p * (sorted.length - 1);
+      const lower = Math.floor(index);
+      const upper = Math.ceil(index);
+      if (lower === upper) return sorted[lower];
+      return sorted[lower] + (sorted[upper] - sorted[lower]) * (index - lower);
+    }
     default:
       return values.reduce((s, v) => s + v, 0) / values.length;
   }
@@ -120,7 +130,8 @@ export function computeMetric(
   allEntries: ScoutEntry[],
   teamNumber: number,
   rawMetricId: string,
-  aggregation: MetricAggregation
+  aggregation: MetricAggregation,
+  percentileValue?: number,
 ): number {
   const extractor = RAW_METRICS[rawMetricId];
   if (!extractor) return 0;
@@ -129,7 +140,7 @@ export function computeMetric(
   if (teamEntries.length === 0) return 0;
 
   const values = teamEntries.map(extractor);
-  return aggregate(values, aggregation);
+  return aggregate(values, aggregation, percentileValue);
 }
 
 // ── Get metric value (handles pre-computed, on-the-fly, and fuel attribution) ──
@@ -153,7 +164,7 @@ export function getMetricValue(
   }
   // Dynamic metric — compute from raw entries
   if (column.rawMetric) {
-    return computeMetric(allEntries, team.teamNumber, column.rawMetric, column.aggregation);
+    return computeMetric(allEntries, team.teamNumber, column.rawMetric, column.aggregation, column.percentileValue);
   }
   // Pre-computed metric — read from stats object
   return (team as unknown as Record<string, number>)[column.field] || 0;

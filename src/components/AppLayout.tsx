@@ -31,8 +31,8 @@ function NavDropdown({ label, icon: Icon, items, isActive }: NavDropdownProps) {
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setOpen(!open)}
-        className={`flex items-center gap-2 px-3 xl:px-4 py-2 rounded-t transition-colors text-sm xl:text-base ${
-          isActive ? 'border-b-2 border-success text-success' : 'text-textSecondary hover:text-textPrimary hover:bg-surfaceElevated'
+        className={`flex items-center gap-2 px-3 xl:px-4 py-2 rounded-lg transition-colors text-sm xl:text-base ${
+          isActive ? 'bg-surfaceElevated text-textPrimary font-semibold' : 'text-textSecondary hover:text-textPrimary hover:bg-surfaceElevated'
         }`}
       >
         <Icon size={20} />
@@ -153,8 +153,8 @@ function AppLayout() {
               {/* Dashboard - standalone */}
               <Link
                 to="/"
-                className={`flex items-center gap-2 px-3 xl:px-4 py-2 rounded-t transition-colors text-sm xl:text-base ${
-                  location.pathname === '/' ? 'border-b-2 border-success text-success' : 'text-textSecondary hover:text-textPrimary hover:bg-surfaceElevated'
+                className={`flex items-center gap-2 px-3 xl:px-4 py-2 rounded-lg transition-colors text-sm xl:text-base ${
+                  location.pathname === '/' ? 'bg-surfaceElevated text-textPrimary font-semibold' : 'text-textSecondary hover:text-textPrimary hover:bg-surfaceElevated'
                 }`}
               >
                 <BarChart3 size={20} />
@@ -180,8 +180,8 @@ function AppLayout() {
               {/* Event - standalone */}
               <Link
                 to="/event"
-                className={`flex items-center gap-2 px-3 xl:px-4 py-2 rounded-t transition-colors text-sm xl:text-base ${
-                  location.pathname === '/event' ? 'border-b-2 border-success text-success' : 'text-textSecondary hover:text-textPrimary hover:bg-surfaceElevated'
+                className={`flex items-center gap-2 px-3 xl:px-4 py-2 rounded-lg transition-colors text-sm xl:text-base ${
+                  location.pathname === '/event' ? 'bg-surfaceElevated text-textPrimary font-semibold' : 'text-textSecondary hover:text-textPrimary hover:bg-surfaceElevated'
                 }`}
               >
                 <Calendar size={20} />
@@ -192,8 +192,8 @@ function AppLayout() {
               {isAdmin && (
                 <Link
                   to="/admin"
-                  className={`flex items-center gap-2 px-3 xl:px-4 py-2 rounded-t transition-colors text-sm xl:text-base ${
-                    location.pathname === '/admin' ? 'border-b-2 border-success text-success' : 'text-textSecondary hover:text-textPrimary hover:bg-surfaceElevated'
+                  className={`flex items-center gap-2 px-3 xl:px-4 py-2 rounded-lg transition-colors text-sm xl:text-base ${
+                    location.pathname === '/admin' ? 'bg-surfaceElevated text-textPrimary font-semibold' : 'text-textSecondary hover:text-textPrimary hover:bg-surfaceElevated'
                   }`}
                 >
                   <Shield size={20} />

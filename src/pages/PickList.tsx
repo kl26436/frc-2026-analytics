@@ -2038,8 +2038,7 @@ function PickList() {
       {/* Live mode comparison modal */}
       {mode === 'live' && showComparisonModal && compareTeams.length === 2 && (
         <ComparisonModal
-          team1={teamStatistics.find(t => t.teamNumber === compareTeams[0])!}
-          team2={teamStatistics.find(t => t.teamNumber === compareTeams[1])!}
+          teams={teamStatistics.filter(t => compareTeams.includes(t.teamNumber))}
           onPickTeam={handlePickWinner}
           onClose={() => {
             setShowComparisonModal(false);
@@ -2637,8 +2636,7 @@ function PickList() {
       {/* Comparison Modal */}
       {showComparisonModal && compareTeams.length === 2 && (
         <ComparisonModal
-          team1={teamStatistics.find(t => t.teamNumber === compareTeams[0])!}
-          team2={teamStatistics.find(t => t.teamNumber === compareTeams[1])!}
+          teams={teamStatistics.filter(t => compareTeams.includes(t.teamNumber))}
           onPickTeam={handlePickWinner}
           onClose={() => {
             setShowComparisonModal(false);

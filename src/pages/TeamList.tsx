@@ -1,8 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { useMetricsStore } from '../store/useMetricsStore';
-import { ArrowUp, ArrowDown, Search, Sliders, LayoutGrid, Table2, X } from 'lucide-react';
+import { ArrowUp, ArrowDown, Search, Sliders, LayoutGrid, Table2, X, Users } from 'lucide-react';
 import { teamKeyToNumber } from '../utils/tbaApi';
 import { getMetricValue } from '../utils/metricAggregation';
 import { formatMetricValue } from '../utils/formatting';
@@ -17,7 +17,7 @@ function TeamList() {
   const scoutEntries = useAnalyticsStore(state => state.scoutEntries);
   const tbaData = useAnalyticsStore(state => state.tbaData);
   const teamFuelStats = useAnalyticsStore(state => state.teamFuelStats);
-  const getEnabledColumns = useMetricsStore(state => state.getEnabledColumns);
+  const columns = useMetricsStore(state => state.config.columns);
 
   const teamRankMap = useMemo(() => {
     const map = new Map<number, number>();
@@ -29,7 +29,7 @@ function TeamList() {
     return map;
   }, [tbaData]);
 
-  const enabledColumns = getEnabledColumns();
+  const enabledColumns = useMemo(() => columns.filter(col => col.enabled), [columns]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [sortCriteria, setSortCriteria] = useState<SortCriteria[]>([
@@ -37,24 +37,76 @@ function TeamList() {
   ]);
   const [viewMode, setViewMode] = useState<ViewMode>('table');
 
-  // Click-to-compare state (up to 4 teams)
+  // Click-to-compare state (up to 4 on desktop, 3 on mobile)
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+  const maxCompare = isMobile ? 3 : 4;
   const [compareTeams, setCompareTeams] = useState<number[]>([]);
   const [showComparisonModal, setShowComparisonModal] = useState(false);
+  const [compareMode, setCompareMode] = useState(false);
 
   const navigate = useNavigate();
+
+  // Long-press support for mobile compare selection
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressTriggered = useRef(false);
+
+  const handleTouchStart = useCallback((teamNumber: number) => {
+    longPressTriggered.current = false;
+    longPressTimer.current = setTimeout(() => {
+      longPressTriggered.current = true;
+      // Auto-enter compare mode on long-press
+      if (!compareMode) setCompareMode(true);
+      toggleCompare(teamNumber);
+    }, 500);
+  }, [compareMode]);
+
+  const handleTouchEnd = useCallback(() => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  }, []);
+
+  const handleTouchMove = useCallback(() => {
+    // Cancel long-press if finger moves (scrolling)
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  }, []);
+
+  // Pre-compute all metric values once — avoids repeated getMetricValue() calls
+  // during sort (O(n log n) comparisons) and render (O(n × columns)).
+  const metricCache = useMemo(() => {
+    const cache = new Map<number, Map<string, number>>();
+    for (const team of teamStatistics) {
+      const teamMap = new Map<string, number>();
+      for (const col of enabledColumns) {
+        teamMap.set(col.field, getMetricValue(col, team, scoutEntries, teamFuelStats));
+      }
+      cache.set(team.teamNumber, teamMap);
+    }
+    return cache;
+  }, [teamStatistics, enabledColumns, scoutEntries, teamFuelStats]);
 
   const toggleCompare = (teamNumber: number) => {
     setCompareTeams(prev => {
       if (prev.includes(teamNumber)) {
         return prev.filter(t => t !== teamNumber);
       }
-      if (prev.length >= 4) return prev;
+      if (prev.length >= maxCompare) return prev;
       return [...prev, teamNumber];
     });
   };
 
   const handleRowClick = (e: React.MouseEvent, teamNumber: number) => {
-    if (e.ctrlKey || e.metaKey) {
+    // If long-press just fired, don't also navigate
+    if (longPressTriggered.current) {
+      e.preventDefault();
+      longPressTriggered.current = false;
+      return;
+    }
+    if (compareMode || compareTeams.length > 0 || e.ctrlKey || e.metaKey) {
       e.preventDefault();
       toggleCompare(teamNumber);
     } else {
@@ -83,14 +135,11 @@ function TeamList() {
           aValue = teamRankMap.get(a.teamNumber) ?? 999;
           bValue = teamRankMap.get(b.teamNumber) ?? 999;
         } else {
-          const col = enabledColumns.find(c => c.field === criteria.field || c.id === criteria.field);
-          if (col?.rawMetric || col?.fuelField) {
-            aValue = getMetricValue(col, a, scoutEntries, teamFuelStats);
-            bValue = getMetricValue(col, b, scoutEntries, teamFuelStats);
-          } else {
-            aValue = (a as unknown as Record<string, number>)[criteria.field];
-            bValue = (b as unknown as Record<string, number>)[criteria.field];
-          }
+          // Use pre-computed cache first, fall back to direct property access
+          aValue = metricCache.get(a.teamNumber)?.get(criteria.field)
+            ?? (a as unknown as Record<string, number>)[criteria.field];
+          bValue = metricCache.get(b.teamNumber)?.get(criteria.field)
+            ?? (b as unknown as Record<string, number>)[criteria.field];
         }
 
         if (aValue === undefined) aValue = 0;
@@ -108,7 +157,7 @@ function TeamList() {
     });
 
     return teams;
-  }, [teamStatistics, searchQuery, sortCriteria, teamRankMap, enabledColumns, scoutEntries, teamFuelStats]);
+  }, [teamStatistics, searchQuery, sortCriteria, teamRankMap, metricCache]);
 
   const handleSort = (field: string, shiftKey: boolean) => {
     setSortCriteria(prev => {
@@ -184,21 +233,26 @@ function TeamList() {
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <h1 className="text-2xl md:text-3xl font-bold">Team List</h1>
         <div className="flex flex-wrap items-center gap-2 md:gap-4">
-          {/* Compare indicator */}
-          {compareTeams.length > 0 ? (
+          {/* Compare Mode Toggle */}
+          <button
+            onClick={() => {
+              setCompareMode(prev => !prev);
+              if (compareMode) setCompareTeams([]);
+            }}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg transition-colors text-sm border ${
+              compareMode
+                ? 'bg-blueAlliance text-white border-blueAlliance'
+                : 'bg-surface text-textSecondary border-border hover:bg-interactive'
+            }`}
+            title={compareMode ? 'Exit compare mode' : 'Enter compare mode — tap teams to select (or long-press any team)'}
+          >
+            <Users size={16} />
+            <span className="hidden sm:inline">{compareMode ? 'Comparing...' : 'Compare'}</span>
+          </button>
+
+          {compareTeams.length > 0 && (
             <span className="text-blueAlliance text-sm font-medium">
-              {compareTeams.length}/4 selected
-              <button
-                onClick={() => setCompareTeams([])}
-                className="ml-2 text-textMuted hover:text-danger transition-colors"
-                title="Clear selection"
-              >
-                <X size={14} className="inline" />
-              </button>
-            </span>
-          ) : (
-            <span className="text-textSecondary text-sm">
-              Ctrl+click to compare
+              {compareTeams.length}/{maxCompare}
             </span>
           )}
 
@@ -248,6 +302,14 @@ function TeamList() {
           className="w-full pl-10 pr-4 py-3 bg-surface border border-border rounded-lg text-textPrimary placeholder-textMuted focus:outline-none focus:ring-2 focus:ring-accent"
         />
       </div>
+
+      {/* Compare Hint */}
+      {compareTeams.length === 0 && !compareMode && (
+        <p className="text-textMuted text-xs">
+          <span className="hidden md:inline">Ctrl+click teams to compare</span>
+          <span className="md:hidden">Long-press a team to compare</span>
+        </p>
+      )}
 
       {/* Active Sort Indicators */}
       {sortCriteria.length > 0 && (
@@ -313,6 +375,9 @@ function TeamList() {
                   <tr
                     key={team.teamNumber}
                     onClick={(e) => handleRowClick(e, team.teamNumber)}
+                    onTouchStart={() => handleTouchStart(team.teamNumber)}
+                    onTouchEnd={handleTouchEnd}
+                    onTouchMove={handleTouchMove}
                     className={`transition-colors cursor-pointer ${
                       isSelected
                         ? 'bg-blueAlliance/10 border-l-2 border-l-blueAlliance'
@@ -325,7 +390,12 @@ function TeamList() {
                         className="block hover:text-blueAlliance transition-colors"
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (e.ctrlKey || e.metaKey) {
+                          if (longPressTriggered.current) {
+                            e.preventDefault();
+                            longPressTriggered.current = false;
+                            return;
+                          }
+                          if (compareMode || compareTeams.length > 0 || e.ctrlKey || e.metaKey) {
                             e.preventDefault();
                             toggleCompare(team.teamNumber);
                           }
@@ -348,7 +418,7 @@ function TeamList() {
                       {team.matchesPlayed}
                     </td>
                     {enabledColumns.map(column => {
-                      const value = getMetricValue(column, team, scoutEntries, teamFuelStats);
+                      const value = metricCache.get(team.teamNumber)?.get(column.field) ?? 0;
                       return (
                         <td key={column.id} className="px-4 py-4 text-right">
                           {formatMetricValue(value, column.format, column.decimals, team.matchesPlayed)}
@@ -369,7 +439,10 @@ function TeamList() {
             return (
               <div
                 key={team.teamNumber}
-                onClick={() => toggleCompare(team.teamNumber)}
+                onClick={(e) => handleRowClick(e, team.teamNumber)}
+                onTouchStart={() => handleTouchStart(team.teamNumber)}
+                onTouchEnd={handleTouchEnd}
+                onTouchMove={handleTouchMove}
                 className={`bg-surface rounded-lg border p-4 space-y-3 cursor-pointer transition-all ${
                   isSelected
                     ? 'border-blueAlliance ring-2 ring-blueAlliance bg-blueAlliance/10'
@@ -381,7 +454,18 @@ function TeamList() {
                   <Link
                     to={`/teams/${team.teamNumber}`}
                     className="flex-1"
-                    onClick={e => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (longPressTriggered.current) {
+                        e.preventDefault();
+                        longPressTriggered.current = false;
+                        return;
+                      }
+                      if (compareMode || compareTeams.length > 0 || e.ctrlKey || e.metaKey) {
+                        e.preventDefault();
+                        toggleCompare(team.teamNumber);
+                      }
+                    }}
                   >
                     <div className="flex items-center gap-2">
                       <h3 className="text-xl font-bold hover:text-blueAlliance transition-colors">
@@ -409,7 +493,7 @@ function TeamList() {
                     <p className="font-semibold">{team.matchesPlayed}</p>
                   </div>
                   {enabledColumns.slice(0, 3).map(column => {
-                    const value = getMetricValue(column, team, scoutEntries, teamFuelStats);
+                    const value = metricCache.get(team.teamNumber)?.get(column.field) ?? 0;
                     return (
                       <div key={column.id} className="bg-surfaceElevated rounded p-2">
                         <p className="text-textSecondary text-xs truncate">{column.label}</p>
@@ -427,26 +511,57 @@ function TeamList() {
       )}
 
       {/* Results count */}
-      <div className="text-center text-textSecondary">
+      <div className="text-center text-textSecondary pb-16">
         Showing {filteredAndSortedTeams.length} of {teamStatistics.length} teams
       </div>
 
+      {/* Floating Compare Action Bar */}
+      {compareTeams.length >= 1 && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 bg-surface border border-border rounded-lg shadow-lg px-4 py-3 flex items-center gap-3">
+          <span className="text-sm font-medium text-textSecondary">
+            {compareTeams.length} team{compareTeams.length !== 1 ? 's' : ''}
+          </span>
+          <div className="flex items-center gap-1">
+            {compareTeams.map(t => (
+              <span key={t} className="flex items-center gap-1 px-2 py-0.5 bg-blueAlliance/20 text-blueAlliance text-xs rounded font-bold">
+                {t}
+                <button
+                  onClick={() => toggleCompare(t)}
+                  className="hover:text-danger transition-colors"
+                >
+                  <X size={10} />
+                </button>
+              </span>
+            ))}
+          </div>
+          {compareTeams.length >= 2 && (
+              <button
+                onClick={() => setShowComparisonModal(true)}
+                className="px-3 py-1.5 bg-success text-background font-semibold rounded text-sm hover:bg-success/90 transition-colors"
+              >
+                Compare
+              </button>
+          )}
+          <button
+            onClick={() => setCompareTeams([])}
+            className="p-1.5 text-textMuted hover:text-danger rounded transition-colors"
+            title="Clear all"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
       {/* Comparison Modal */}
-      {showComparisonModal && compareTeams.length >= 2 && (() => {
-        const t1 = teamStatistics.find(t => t.teamNumber === compareTeams[0]);
-        const t2 = teamStatistics.find(t => t.teamNumber === compareTeams[1]);
-        if (!t1 || !t2) return null;
-        return (
-          <ComparisonModal
-            team1={t1}
-            team2={t2}
-            onClose={() => {
-              setShowComparisonModal(false);
-              setCompareTeams([]);
-            }}
-          />
-        );
-      })()}
+      {showComparisonModal && compareTeams.length >= 2 && (
+        <ComparisonModal
+          teams={teamStatistics.filter(t => compareTeams.includes(t.teamNumber))}
+          onClose={() => {
+            setShowComparisonModal(false);
+            setCompareTeams([]);
+          }}
+        />
+      )}
     </div>
   );
 }

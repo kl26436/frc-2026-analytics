@@ -1,16 +1,16 @@
 import { useEffect, useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
-import { Trophy, Target, TrendingUp, RefreshCw, ChevronDown, ChevronUp, Hash, WifiOff, Eye, Flag, Clock, MessageSquare } from 'lucide-react';
+import { Trophy, Target, TrendingUp, RefreshCw, ChevronDown, ChevronUp, Hash, WifiOff, Eye, Flag, Clock, MessageSquare, Flame } from 'lucide-react';
 import { teamKeyToNumber } from '../utils/tbaApi';
 import { computeMatchup } from '../utils/predictions';
 
 const OUR_TEAM = 148;
-const MATCHES_TO_SHOW = 3;
 const RANKINGS_TO_SHOW = 5;
 
 function Dashboard() {
   const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
+  const teamTrends = useAnalyticsStore(state => state.teamTrends);
   const predictionInputs = useAnalyticsStore(state => state.predictionInputs);
 
   const homeTeamNumber = useAnalyticsStore(state => state.homeTeamNumber);
@@ -64,6 +64,14 @@ function Dashboard() {
   const topScorers = [...teamStatistics].filter(t => t.avgTotalPoints > 0).sort((a, b) => b.avgTotalPoints - a.avgTotalPoints).slice(0, 5);
   const topClimbers = [...teamStatistics].filter(t => t.avgEndgamePoints > 0).sort((a, b) => b.avgEndgamePoints - a.avgEndgamePoints).slice(0, 5);
   const topAuto = [...teamStatistics].filter(t => t.avgAutoPoints > 0).sort((a, b) => b.avgAutoPoints - a.avgAutoPoints).slice(0, 5);
+  // Teams on hot streaks — improving with 6+ matches, sorted by biggest positive delta
+  const hotStreaks = useMemo(() =>
+    teamTrends
+      .filter(t => t.matchResults.length >= 6 && t.delta > 5)
+      .sort((a, b) => b.delta - a.delta)
+      .slice(0, 5),
+    [teamTrends]
+  );
 
   const [showAllMatches, setShowAllMatches] = useState(false);
 
@@ -84,9 +92,61 @@ function Dashboard() {
     return `${prefixes[match.comp_level]}${match.match_number}`;
   };
 
-  const recentCompleted = completedMatches.slice(-MATCHES_TO_SHOW);
-  const nextUpcoming = upcomingMatches.slice(0, MATCHES_TO_SHOW);
-  const displayMatches = showAllMatches ? homeMatches : [...recentCompleted, ...nextUpcoming];
+  const rankClass = (i: number) =>
+    i === 0 ? 'text-sm font-extrabold text-warning'
+    : i <= 2 ? 'text-xs font-bold text-textSecondary'
+    : 'text-xs text-textMuted';
+
+  const nickname = (teamNum: number) =>
+    tbaData?.teams?.find(t => t.team_number === teamNum)?.nickname
+    || teamStatistics.find(t => t.teamNumber === teamNum)?.teamName;
+
+  // ── Next (or last) match for every team at the event ──
+  const teamMatchLabel = useMemo(() => {
+    const map = new Map<number, { label: string; upcoming: boolean }>();
+    if (!tbaData?.matches) return map;
+    const pfx: Record<string, string> = { qm: 'Q', ef: 'E', qf: 'QF', sf: 'SF', f: 'F' };
+    const allMatches = [...tbaData.matches].sort((a, b) => {
+      const lo: Record<string, number> = { qm: 0, ef: 1, qf: 2, sf: 3, f: 4 };
+      if (lo[a.comp_level] !== lo[b.comp_level]) return lo[a.comp_level] - lo[b.comp_level];
+      return a.match_number - b.match_number;
+    });
+    // First pass: next upcoming match per team
+    for (const m of allMatches) {
+      if (m.alliances.red.score >= 0) continue;
+      const label = `${pfx[m.comp_level]}${m.match_number}`;
+      for (const k of [...m.alliances.red.team_keys, ...m.alliances.blue.team_keys]) {
+        const num = teamKeyToNumber(k);
+        if (!map.has(num)) map.set(num, { label, upcoming: true });
+      }
+    }
+    // Second pass: last completed match for teams with no upcoming
+    for (let i = allMatches.length - 1; i >= 0; i--) {
+      const m = allMatches[i];
+      if (m.alliances.red.score < 0) continue;
+      const label = `${pfx[m.comp_level]}${m.match_number}`;
+      for (const k of [...m.alliances.red.team_keys, ...m.alliances.blue.team_keys]) {
+        const num = teamKeyToNumber(k);
+        if (!map.has(num)) map.set(num, { label, upcoming: false });
+      }
+    }
+    return map;
+  }, [tbaData]);
+
+  const SCHEDULE_PREVIEW = 5;
+  const schedulePreview = useMemo(() => {
+    // Show last 2 completed + next 3 upcoming, or fill from whichever side has more
+    const recent = completedMatches.slice(-2);
+    const upcoming = upcomingMatches.slice(0, SCHEDULE_PREVIEW - recent.length);
+    const preview = [...recent, ...upcoming];
+    // If still short, backfill more completed
+    if (preview.length < SCHEDULE_PREVIEW && completedMatches.length > 2) {
+      const extra = completedMatches.slice(-(SCHEDULE_PREVIEW - upcoming.length), -2);
+      return [...extra, ...recent, ...upcoming];
+    }
+    return preview;
+  }, [completedMatches, upcomingMatches]);
+  const displayMatches = showAllMatches ? homeMatches : schedulePreview;
   const hasMoreMatches = homeMatches.length > displayMatches.length;
 
   // ── Event Rankings (top N, always includes home team) ──
@@ -121,7 +181,7 @@ function Dashboard() {
         onClick={() => navigate('/predict')}
       >
         <td className="py-2.5 px-4 font-bold">{getMatchLabel(match)}</td>
-        <td className="py-2.5 px-3 text-center font-mono">
+        <td className={`py-2.5 px-3 text-center font-mono ${isCompleted ? (won ? 'bg-success/5' : lost ? 'bg-danger/5' : '') : ''}`}>
           {isCompleted ? (
             <span>
               <span className={`${isRed ? 'text-redAlliance' : ''} ${match.alliances.red.score > match.alliances.blue.score ? 'font-bold' : ''}`}>{match.alliances.red.score}</span>
@@ -155,19 +215,19 @@ function Dashboard() {
   );
 
   // ── Shared card styles ──
-  const card = 'bg-surface rounded-xl border border-border p-6 shadow-card';
-  const cardHeader = 'text-base font-bold flex items-center gap-2 mb-4';
+  const card = 'bg-surface rounded-xl border border-border p-4 md:p-6 shadow-card';
+  const cardHeader = 'text-sm md:text-base font-bold flex items-center gap-2 mb-3 md:mb-4';
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       {/* ═══ Home Team Hero ═══ */}
       {tbaData && (
-        <div className="bg-gradient-to-r from-warning/15 to-transparent rounded-xl border border-warning/20 p-6 shadow-card">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="text-5xl font-black text-warning">{HOME}</div>
+        <div className="bg-gradient-to-r from-warning/15 to-transparent rounded-xl border border-warning/20 p-4 md:p-6 shadow-card">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-4">
+            <div className="flex items-center gap-3 md:gap-4">
+              <div className="text-4xl md:text-5xl font-black text-warning">{HOME}</div>
               <div className="flex-1">
-                <h2 className="text-xl font-bold">Robowranglers</h2>
+                <h2 className="text-lg md:text-xl font-bold">Robowranglers</h2>
                 <p className="text-sm text-textSecondary">{tbaData.event?.name || 'Loading...'}</p>
               </div>
               <button
@@ -178,23 +238,23 @@ function Dashboard() {
                 <RefreshCw size={12} className={tbaLoading ? 'animate-spin' : ''} />
               </button>
             </div>
-            <div className="flex items-center gap-6">
+            <div className="flex items-center gap-3 md:gap-4 divide-x divide-border">
               {[
                 { label: 'Rank', value: homeRanking ? `#${homeRanking.rank}` : '--', sub: homeRanking ? `of ${tbaData.rankings?.rankings.length}` : undefined },
                 { label: 'Record', value: null, sub: `${completedMatches.length} played` },
-                { label: 'Next', value: nextMatch ? getMatchLabel(nextMatch) : '--', sub: nextMatch ? `vs ${(nextMatch.alliances.red.team_keys.includes(`frc${HOME}`) ? nextMatch.alliances.blue.team_keys : nextMatch.alliances.red.team_keys).map(k => teamKeyToNumber(k)).join(', ')}` : undefined },
+                ...(nextMatch ? [{ label: 'Next', value: getMatchLabel(nextMatch), sub: `vs ${(nextMatch.alliances.red.team_keys.includes(`frc${HOME}`) ? nextMatch.alliances.blue.team_keys : nextMatch.alliances.red.team_keys).map(k => teamKeyToNumber(k)).join(', ')}` }] : []),
               ].map(item => (
-                <div key={item.label} className="text-center min-w-[70px]">
-                  <p className="text-[10px] text-textSecondary uppercase tracking-widest">{item.label}</p>
+                <div key={item.label} className="text-center min-w-[50px] md:min-w-[70px] pl-3 md:pl-4 first:pl-0">
+                  <p className="text-xs md:text-[10px] text-textSecondary uppercase tracking-widest">{item.label}</p>
                   {item.label === 'Record' ? (
-                    <p className="text-2xl font-bold">
+                    <p className="text-xl md:text-2xl font-bold">
                       <span className="text-success">{homeRecord.wins}</span>
                       <span className="text-textMuted">-</span>
                       <span className="text-danger">{homeRecord.losses}</span>
                       {homeRecord.ties > 0 && <><span className="text-textMuted">-</span><span>{homeRecord.ties}</span></>}
                     </p>
                   ) : (
-                    <p className="text-2xl font-bold">{item.value}</p>
+                    <p className="text-xl md:text-2xl font-bold">{item.value}</p>
                   )}
                   {item.sub && <p className="text-[10px] text-textSecondary">{item.sub}</p>}
                 </div>
@@ -212,22 +272,18 @@ function Dashboard() {
         </div>
       )}
 
-      {/* ═══ Two-column layout: Main + Sidebar ═══ */}
-      <div className="grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-6">
-        {/* ── Left column: main content ── */}
-        <div className="space-y-6 min-w-0">
-          {/* Pre-event placeholder — no matches at all yet */}
-          {tbaData && homeMatches.length === 0 && (
-            <div className={card}>
-              <div className="flex items-center gap-3 text-textSecondary">
-                <Clock size={20} />
-                <div>
-                  <p className="font-semibold text-textPrimary">Waiting for matches</p>
-                  <p className="text-sm">Match schedule and scouting summaries will appear here once the event begins.</p>
-                </div>
-              </div>
+      {/* Pre-event placeholder — no matches at all yet */}
+      {tbaData && homeMatches.length === 0 && (
+        <div className={card}>
+          <div className="flex items-center gap-3 text-textSecondary">
+            <Clock size={20} />
+            <div>
+              <p className="font-semibold text-textPrimary">Waiting for matches</p>
+              <p className="text-sm">Match schedule and scouting summaries will appear here once the event begins.</p>
             </div>
-          )}
+          </div>
+        </div>
+      )}
 
           {/* ── Shared Match Preview/Recap ── */}
           {(() => {
@@ -280,19 +336,19 @@ function Dashboard() {
                 </h2>
 
                 {/* ── Big predicted scores ── */}
-                <div className="bg-surfaceElevated rounded-lg p-5">
+                <div className="bg-surfaceElevated rounded-lg p-4 md:p-5">
                   <div className="flex items-center justify-between">
                     <div className="text-center flex-1">
-                      <p className="text-xs text-redAlliance font-semibold mb-1">Red ({getMatchLabel(targetMatch)})</p>
-                      <p className="text-4xl font-black text-redAlliance">{red.totalScore.toFixed(1)}</p>
+                      <p className="text-xs text-redAlliance font-semibold mb-1">Red</p>
+                      <p className="text-3xl md:text-4xl font-black text-redAlliance">{red.totalScore.toFixed(1)}</p>
                       <span className={`inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-semibold ${
                         red.confidence === 'high' ? 'bg-success/20 text-success' : red.confidence === 'medium' ? 'bg-warning/20 text-warning' : 'bg-danger/20 text-danger'
                       }`}>{red.confidence} confidence</span>
                     </div>
                     <span className="text-textMuted text-lg font-semibold px-4">vs</span>
                     <div className="text-center flex-1">
-                      <p className="text-xs text-blueAlliance font-semibold mb-1">Blue ({getMatchLabel(targetMatch)})</p>
-                      <p className="text-4xl font-black text-blueAlliance">{blue.totalScore.toFixed(1)}</p>
+                      <p className="text-xs text-blueAlliance font-semibold mb-1">Blue</p>
+                      <p className="text-3xl md:text-4xl font-black text-blueAlliance">{blue.totalScore.toFixed(1)}</p>
                       <span className={`inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-semibold ${
                         blue.confidence === 'high' ? 'bg-success/20 text-success' : blue.confidence === 'medium' ? 'bg-warning/20 text-warning' : 'bg-danger/20 text-danger'
                       }`}>{blue.confidence} confidence</span>
@@ -305,7 +361,7 @@ function Dashboard() {
 
                 {/* ── Actual result (recap only) ── */}
                 {isCompleted && !isUpcoming && (
-                  <div className={`mt-4 rounded-lg p-4 text-center ${won ? 'bg-success/10 border border-success/20' : lost ? 'bg-danger/10 border border-danger/20' : 'bg-warning/10 border border-warning/20'}`}>
+                  <div className={`mt-4 bg-surfaceElevated rounded-lg p-4 text-center border-l-4 ${won ? 'border-success' : lost ? 'border-danger' : 'border-warning'}`}>
                     <p className="text-[10px] text-textSecondary uppercase tracking-widest mb-1">Actual Result</p>
                     <p className="text-3xl font-black">
                       <span className="text-redAlliance">{redActual}</span>
@@ -322,25 +378,28 @@ function Dashboard() {
                 <div className="mt-4 overflow-hidden rounded-lg border border-border">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="bg-surfaceElevated text-xs text-textMuted">
-                        <th className="text-left py-2 px-3 font-medium">Phase</th>
-                        <th className="text-center py-2 px-3 font-medium text-redAlliance">Red</th>
-                        <th className="text-center py-2 px-3 font-medium text-blueAlliance">Blue</th>
-                        <th className="text-right py-2 px-3 font-medium">Advantage</th>
+                      <tr className="bg-surfaceElevated text-xs uppercase tracking-wider">
+                        <th className="text-left py-2.5 px-3 font-semibold text-textSecondary">Phase</th>
+                        <th className="text-center py-2.5 px-3 font-semibold text-redAlliance">Red</th>
+                        <th className="text-center py-2.5 px-3 font-semibold text-blueAlliance">Blue</th>
+                        <th className="text-right py-2.5 px-3 font-semibold text-textSecondary">Advantage</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {phases.map(p => {
+                      {phases.map((p, index) => {
                         const diff = p.red - p.blue;
                         const advLabel = Math.abs(diff) < 0.5 ? 'Even' : `${diff > 0 ? 'Red' : 'Blue'} +${Math.abs(diff).toFixed(1)}`;
                         const advColor = Math.abs(diff) < 0.5 ? 'text-textMuted' : diff > 0 ? 'text-redAlliance' : 'text-blueAlliance';
                         const isTotal = p.label === 'TOTAL';
                         return (
-                          <tr key={p.label} className={`border-t border-border/50 ${isTotal ? 'bg-surfaceElevated font-bold' : ''}`}>
+                          <tr key={p.label} className={`border-t border-border/50 ${isTotal ? 'bg-surfaceElevated font-bold' : index % 2 === 1 ? 'bg-surfaceAlt/50' : ''}`}>
                             <td className="py-2 px-3 font-medium">{p.label}</td>
                             <td className="py-2 px-3 text-center text-redAlliance">{p.red.toFixed(1)}</td>
                             <td className="py-2 px-3 text-center text-blueAlliance">{p.blue.toFixed(1)}</td>
-                            <td className={`py-2 px-3 text-right ${advColor}`}>{advLabel}</td>
+                            <td className={`py-2 px-3 text-right font-semibold ${advColor}`}>
+                              {Math.abs(diff) >= 0.5 && <span className="text-[10px] mr-0.5">{diff > 0 ? '\u25B2' : '\u25BC'}</span>}
+                              {advLabel}
+                            </td>
                           </tr>
                         );
                       })}
@@ -393,7 +452,7 @@ function Dashboard() {
                       </summary>
                       <div className="mt-3 space-y-4">
                         {/* ── RP Predictions ── */}
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
                           {[
                             { label: 'Red', color: 'text-redAlliance', rp: redRP },
                             { label: 'Blue', color: 'text-blueAlliance', rp: blueRP },
@@ -421,7 +480,7 @@ function Dashboard() {
                         </div>
 
                         {/* ── Team breakdowns ── */}
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
                           {[
                             { label: 'Red' as const, color: 'redAlliance', headerBg: 'bg-redAlliance/10', teams: red.teams },
                             { label: 'Blue' as const, color: 'blueAlliance', headerBg: 'bg-blueAlliance/10', teams: blue.teams },
@@ -506,125 +565,140 @@ function Dashboard() {
             );
           })()}
 
-          {/* Matches Table */}
-          {tbaData && homeMatches.length > 0 && (
-            <div className={card}>
-              <h2 className={`${cardHeader} mb-4`}>
-                <Clock className="text-warning" size={18} />
-                Recent Matches
-              </h2>
-              <div className="overflow-x-auto -mx-6">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border text-xs text-textMuted">
-                      <th className="text-left py-2 px-4 font-medium">Match</th>
-                      <th className="text-center py-2 px-3 font-medium">Score</th>
-                      <th className="text-center py-2 px-3 font-medium">Result</th>
-                      <th className="text-center py-2 px-4 font-medium">xRP</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {displayMatches.map((match, index) => (
-                      <MatchRow key={match.key} match={match} index={index} />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {(hasMoreMatches || showAllMatches) && (
-                <button
-                  onClick={() => setShowAllMatches(!showAllMatches)}
-                  className="w-full mt-4 flex items-center justify-center gap-2 py-2 text-xs text-textSecondary hover:text-textPrimary hover:bg-surfaceElevated rounded-lg transition-colors"
-                >
-                  {showAllMatches ? (
-                    <><ChevronUp size={14} /> Show Less</>
-                  ) : (
-                    <><ChevronDown size={14} /> All {homeMatches.length} Matches</>
-                  )}
-                </button>
+      {/* ═══ Match Schedule ═══ */}
+      {tbaData && homeMatches.length > 0 && (
+        <div className={card}>
+          <h2 className={`${cardHeader} mb-4`}>
+            <Clock className="text-warning" size={18} />
+            Match Schedule
+            <span className="text-xs text-textMuted font-normal ml-1">{completedMatches.length} of {homeMatches.length} played</span>
+          </h2>
+          <div className="overflow-x-auto -mx-4 md:-mx-6">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-xs text-textMuted">
+                  <th className="text-left py-2 px-4 font-medium">Match</th>
+                  <th className="text-center py-2 px-3 font-medium">Score</th>
+                  <th className="text-center py-2 px-3 font-medium">Result</th>
+                  <th className="text-center py-2 px-4 font-medium">xRP</th>
+                </tr>
+              </thead>
+              <tbody>
+                {displayMatches.map((match, index) => (
+                  <MatchRow key={match.key} match={match} index={index} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {(hasMoreMatches || showAllMatches) && (
+            <button
+              onClick={() => setShowAllMatches(!showAllMatches)}
+              className="w-full mt-4 flex items-center justify-center gap-2 py-2 text-xs text-textSecondary hover:text-textPrimary hover:bg-surfaceElevated rounded-lg transition-colors"
+            >
+              {showAllMatches ? (
+                <><ChevronUp size={14} /> Collapse</>
+              ) : (
+                <><ChevronDown size={14} /> Full Schedule ({homeMatches.length} matches)</>
               )}
-            </div>
+            </button>
           )}
         </div>
+      )}
 
-        {/* ── Right column: sidebar ── */}
-        <div className="space-y-6 xl:sticky xl:top-24 xl:self-start">
-          {/* Rankings */}
-          {eventRankings.length > 0 && (
-            <div className={card}>
-              <h2 className={cardHeader}>
-                <Hash className="text-warning" size={18} />
-                Rankings
-                <span className="text-xs text-textMuted font-normal ml-1">Top {RANKINGS_TO_SHOW} of {totalRankedTeams}</span>
-              </h2>
-              <div className="space-y-1">
-                {eventRankings.map(r => {
-                  const teamNum = teamKeyToNumber(r.team_key);
-                  const isHome = teamNum === HOME;
-                  const rp = r.sort_orders?.length > 0 ? r.sort_orders[0].toFixed(1) : '--';
-                  return (
-                    <Link
-                      key={r.team_key}
-                      to={`/teams/${teamNum}`}
-                      className={`flex items-center justify-between px-3 py-1.5 rounded-lg text-sm transition-colors ${
-                        isHome ? 'bg-warning/10' : 'hover:bg-surfaceElevated'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className={`w-6 text-right font-bold text-xs ${isHome ? 'text-warning' : 'text-textMuted'}`}>#{r.rank}</span>
-                        <span className={`font-semibold ${isHome ? 'text-warning' : ''}`}>{teamNum}</span>
+      {/* ═══ 6-Card Grid: Rankings, Reliability, Leaderboards ═══ */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+        {/* Rankings */}
+        {eventRankings.length > 0 && (
+          <div className={card}>
+            <h2 className={cardHeader}>
+              <Hash className="text-warning" size={18} />
+              Rankings
+              <span className="text-xs text-textMuted font-normal ml-1">Top {RANKINGS_TO_SHOW} of {totalRankedTeams}</span>
+            </h2>
+            <div className="space-y-1">
+              {eventRankings.map(r => {
+                const teamNum = teamKeyToNumber(r.team_key);
+                const isHome = teamNum === HOME;
+                const teamNickname = tbaData?.teams?.find(t => t.team_number === teamNum)?.nickname;
+                const rp = r.sort_orders?.length > 0 ? r.sort_orders[0].toFixed(1) : '--';
+                const ml = teamMatchLabel.get(teamNum);
+                return (
+                  <Link
+                    key={r.team_key}
+                    to={`/teams/${teamNum}`}
+                    title={teamNickname || undefined}
+                    className={`flex items-center justify-between px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                      isHome ? 'bg-warning/10' : 'hover:bg-surfaceElevated'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className={`w-6 text-right font-bold text-xs ${isHome ? 'text-warning' : 'text-textMuted'}`}>#{r.rank}</span>
+                      <div>
+                        <span className={`font-semibold text-sm ${isHome ? 'text-warning' : ''}`}>{teamNum}</span>
+                        {teamNickname && <p className="text-xs text-textSecondary leading-tight">{teamNickname}</p>}
                       </div>
-                      <div className="flex items-center gap-3 text-xs">
-                        <span>
-                          <span className="text-success">{r.record.wins}</span>
-                          <span className="text-textMuted">-</span>
-                          <span className="text-danger">{r.record.losses}</span>
-                          {r.record.ties > 0 && <><span className="text-textMuted">-</span><span>{r.record.ties}</span></>}
-                        </span>
-                        <span className="text-warning font-semibold">{rp} RP</span>
-                      </div>
-                    </Link>
-                  );
-                })}
-              </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs">
+                      <span>
+                        <span className="text-success">{r.record.wins}</span>
+                        <span className="text-textMuted">-</span>
+                        <span className="text-danger">{r.record.losses}</span>
+                      </span>
+                      <span className="text-warning font-semibold">{rp} RP</span>
+                      {ml && <span className={`text-right text-xs font-medium whitespace-nowrap ${ml.upcoming ? 'text-textSecondary' : 'text-textMuted'}`}>{ml.upcoming ? `Next: ${ml.label}` : ml.label}</span>}
+                    </div>
+                  </Link>
+                );
+              })}
             </div>
-          )}
+          </div>
+        )}
 
-          {/* Reliability Concerns */}
-          {unreliableTeams.length > 0 && (
-            <div className={`${card} !border-danger/20`}>
-              <h2 className={cardHeader}>
-                <WifiOff className="text-danger" size={18} />
-                Reliability Concerns
-                <span className="text-xs text-textMuted font-normal ml-1">{unreliableTeams.length} team{unreliableTeams.length !== 1 ? 's' : ''}</span>
-              </h2>
-              <div className="space-y-1">
-                {unreliableTeams.map(team => (
+        {/* Reliability Concerns */}
+        {unreliableTeams.length > 0 && (
+          <div className={`${card} !border-danger/20`}>
+            <h2 className={cardHeader}>
+              <WifiOff className="text-danger" size={18} />
+              Reliability Concerns
+              <span className="text-xs text-textMuted font-normal ml-1">{unreliableTeams.length}</span>
+            </h2>
+            <div className="flex items-center gap-4 mb-3 text-xs text-textMuted">
+              <span className="flex items-center gap-1"><WifiOff size={10} className="text-danger" /> Disconnect</span>
+              <span>No-show = absent</span>
+            </div>
+            <div className="space-y-1">
+              {unreliableTeams.map(team => {
+                const nickname = tbaData?.teams?.find(t => t.team_number === team.teamNumber)?.nickname;
+                const isHome = team.teamNumber === HOME;
+                const ml = teamMatchLabel.get(team.teamNumber);
+                return (
                   <Link
                     key={team.teamNumber}
                     to={`/teams/${team.teamNumber}`}
-                    className="flex items-center justify-between px-3 py-1.5 rounded-lg text-sm hover:bg-surfaceElevated transition-colors"
+                    className={`flex items-center justify-between px-3 py-1.5 rounded-lg text-sm transition-colors ${isHome ? 'bg-warning/10' : 'hover:bg-surfaceElevated'}`}
                   >
-                    <span className="font-semibold">{team.teamNumber}</span>
+                    <div>
+                      <span className={`font-semibold text-sm ${isHome ? 'text-warning' : ''}`}>{team.teamNumber}</span>
+                      {nickname && <p className="text-xs text-textSecondary leading-tight">{nickname}</p>}
+                    </div>
                     <div className="flex items-center gap-3 text-xs">
                       {team.lostConnectionRate > 15 && (
-                        <span className="flex items-center gap-1 text-danger">
+                        <span className="flex items-center gap-1 text-danger" title="Lost connection rate">
                           <WifiOff size={11} /> {team.lostConnectionRate.toFixed(0)}%
                         </span>
                       )}
                       {team.noRobotRate > 10 && (
-                        <span className="text-warning">{team.noRobotRate.toFixed(0)}% no-show</span>
+                        <span className="text-warning" title="No robot on field">{team.noRobotRate.toFixed(0)}% no-show</span>
                       )}
+                      {ml && <span className={`text-right text-xs font-medium whitespace-nowrap ${ml.upcoming ? 'text-textSecondary' : 'text-textMuted'}`}>{ml.upcoming ? `Next: ${ml.label}` : ml.label}</span>}
                     </div>
                   </Link>
-                ))}
-              </div>
+                );
+              })}
             </div>
-          )}
-        </div>
-      </div>
+          </div>
+        )}
 
-      {/* ═══ Leaderboards (full width) ═══ */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Top Scorers */}
         <div className={card}>
           <h2 className={cardHeader}>
@@ -632,18 +706,25 @@ function Dashboard() {
             Top Scorers
           </h2>
           <div className="space-y-1">
-            {topScorers.map((team, i) => (
-              <Link key={team.teamNumber} to={`/teams/${team.teamNumber}`} className="flex items-center justify-between px-3 py-1.5 rounded-lg hover:bg-surfaceElevated transition-colors">
-                <div className="flex items-center gap-3">
-                  <span className="w-5 text-right text-xs text-textMuted font-mono">{i + 1}</span>
-                  <div>
-                    <span className="font-semibold text-sm">{team.teamNumber}</span>
-                    {team.teamName && <p className="text-[11px] text-textSecondary leading-tight">{team.teamName}</p>}
+            {topScorers.map((team, i) => {
+              const isHome = team.teamNumber === HOME;
+              const ml = teamMatchLabel.get(team.teamNumber);
+              return (
+                <Link key={team.teamNumber} to={`/teams/${team.teamNumber}`} className={`flex items-center justify-between px-3 py-1.5 rounded-lg transition-colors ${isHome ? 'bg-warning/10' : 'hover:bg-surfaceElevated'}`}>
+                  <div className="flex items-center gap-3">
+                    <span className={`w-5 text-right font-mono ${rankClass(i)}`}>{i + 1}</span>
+                    <div>
+                      <span className={`font-semibold text-sm ${isHome ? 'text-warning' : ''}`}>{team.teamNumber}</span>
+                      {nickname(team.teamNumber) && <p className="text-xs text-textSecondary leading-tight">{nickname(team.teamNumber)}</p>}
+                    </div>
                   </div>
-                </div>
-                <span className="font-bold text-sm text-success">{team.avgTotalPoints.toFixed(1)}</span>
-              </Link>
-            ))}
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-sm text-success">{team.avgTotalPoints.toFixed(1)}</span>
+                    {ml && <span className={`text-right text-xs font-medium whitespace-nowrap ${ml.upcoming ? 'text-textSecondary' : 'text-textMuted'}`}>{ml.upcoming ? `Next: ${ml.label}` : ml.label}</span>}
+                  </div>
+                </Link>
+              );
+            })}
           </div>
         </div>
 
@@ -656,19 +737,22 @@ function Dashboard() {
           <div className="space-y-1">
             {topClimbers.map((team, i) => {
               const lvl = team.level3ClimbCount > 0 ? 'L3' : team.level2ClimbCount > 0 ? 'L2' : team.level1ClimbCount > 0 ? 'L1' : '--';
-              const color = lvl === 'L3' ? 'bg-success/20 text-success' : lvl === 'L2' ? 'bg-blueAlliance/20 text-blueAlliance' : lvl === 'L1' ? 'bg-warning/20 text-warning' : 'bg-textMuted/20 text-textMuted';
+              const color = lvl === 'L3' ? 'bg-warning/20 text-warning border border-warning/30' : lvl === 'L2' ? 'bg-success/20 text-success border border-success/30' : lvl === 'L1' ? 'bg-blueAlliance/20 text-blueAlliance border border-blueAlliance/30' : 'bg-textMuted/20 text-textMuted';
+              const isHome = team.teamNumber === HOME;
+              const ml = teamMatchLabel.get(team.teamNumber);
               return (
-                <Link key={team.teamNumber} to={`/teams/${team.teamNumber}`} className="flex items-center justify-between px-3 py-1.5 rounded-lg hover:bg-surfaceElevated transition-colors">
+                <Link key={team.teamNumber} to={`/teams/${team.teamNumber}`} className={`flex items-center justify-between px-3 py-1.5 rounded-lg transition-colors ${isHome ? 'bg-warning/10' : 'hover:bg-surfaceElevated'}`}>
                   <div className="flex items-center gap-3">
-                    <span className="w-5 text-right text-xs text-textMuted font-mono">{i + 1}</span>
+                    <span className={`w-5 text-right font-mono ${rankClass(i)}`}>{i + 1}</span>
                     <div>
-                      <span className="font-semibold text-sm">{team.teamNumber}</span>
-                      {team.teamName && <p className="text-[11px] text-textSecondary leading-tight">{team.teamName}</p>}
+                      <span className={`font-semibold text-sm ${isHome ? 'text-warning' : ''}`}>{team.teamNumber}</span>
+                      {nickname(team.teamNumber) && <p className="text-xs text-textSecondary leading-tight">{nickname(team.teamNumber)}</p>}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${color}`}>{lvl}</span>
+                    <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${color}`}>{lvl}</span>
                     <span className="font-bold text-sm text-blueAlliance">{team.avgEndgamePoints.toFixed(1)}</span>
+                    {ml && <span className={`text-right text-xs font-medium whitespace-nowrap ${ml.upcoming ? 'text-textSecondary' : 'text-textMuted'}`}>{ml.upcoming ? `Next: ${ml.label}` : ml.label}</span>}
                   </div>
                 </Link>
               );
@@ -683,25 +767,66 @@ function Dashboard() {
             Top Auto
           </h2>
           <div className="space-y-1">
-            {topAuto.map((team, i) => (
-              <Link key={team.teamNumber} to={`/teams/${team.teamNumber}`} className="flex items-center justify-between px-3 py-1.5 rounded-lg hover:bg-surfaceElevated transition-colors">
-                <div className="flex items-center gap-3">
-                  <span className="w-5 text-right text-xs text-textMuted font-mono">{i + 1}</span>
-                  <div>
-                    <span className="font-semibold text-sm">{team.teamNumber}</span>
-                    {team.teamName && <p className="text-[11px] text-textSecondary leading-tight">{team.teamName}</p>}
+            {topAuto.map((team, i) => {
+              const isHome = team.teamNumber === HOME;
+              const ml = teamMatchLabel.get(team.teamNumber);
+              return (
+                <Link key={team.teamNumber} to={`/teams/${team.teamNumber}`} className={`flex items-center justify-between px-3 py-1.5 rounded-lg transition-colors ${isHome ? 'bg-warning/10' : 'hover:bg-surfaceElevated'}`}>
+                  <div className="flex items-center gap-3">
+                    <span className={`w-5 text-right font-mono ${rankClass(i)}`}>{i + 1}</span>
+                    <div>
+                      <span className={`font-semibold text-sm ${isHome ? 'text-warning' : ''}`}>{team.teamNumber}</span>
+                      {nickname(team.teamNumber) && <p className="text-xs text-textSecondary leading-tight">{nickname(team.teamNumber)}</p>}
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {team.autoClimbCount > 0 && (
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-success/20 text-success">Climb</span>
-                  )}
-                  <span className="font-bold text-sm text-redAlliance">{team.avgAutoPoints.toFixed(1)}</span>
-                </div>
-              </Link>
-            ))}
+                  <div className="flex items-center gap-2">
+                    {team.autoClimbCount > 0 && (
+                      <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-success/20 text-success">Climb</span>
+                    )}
+                    <span className="font-bold text-sm text-redAlliance">{team.avgAutoPoints.toFixed(1)}</span>
+                    {ml && <span className={`text-right text-xs font-medium whitespace-nowrap ${ml.upcoming ? 'text-textSecondary' : 'text-textMuted'}`}>{ml.upcoming ? `Next: ${ml.label}` : ml.label}</span>}
+                  </div>
+                </Link>
+              );
+            })}
           </div>
         </div>
+
+        {/* Hot Streaks */}
+        {hotStreaks.length > 0 && (
+          <div className={card}>
+            <h2 className={cardHeader}>
+              <Flame className="text-warning" size={18} />
+              Hot Streaks
+              <span className="text-xs text-textMuted font-normal ml-1">Last 3 vs overall</span>
+            </h2>
+            <div className="space-y-1">
+              {hotStreaks.map((t, i) => {
+                const isHome = t.teamNumber === HOME;
+                const ml = teamMatchLabel.get(t.teamNumber);
+                const name = nickname(t.teamNumber);
+                return (
+                  <Link key={t.teamNumber} to={`/teams/${t.teamNumber}`} className={`flex items-center justify-between px-3 py-1.5 rounded-lg transition-colors ${isHome ? 'bg-warning/10' : 'hover:bg-surfaceElevated'}`}>
+                    <div className="flex items-center gap-3">
+                      <span className={`w-5 text-right font-mono ${rankClass(i)}`}>{i + 1}</span>
+                      <div>
+                        <span className={`font-semibold text-sm ${isHome ? 'text-warning' : ''}`}>{t.teamNumber}</span>
+                        {name && <p className="text-xs text-textSecondary leading-tight">{name}</p>}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-right">
+                        <span className="font-bold text-sm text-success">+{t.delta.toFixed(0)}%</span>
+                        <p className="text-[10px] text-textMuted">{t.overallAvg.total.toFixed(0)} → {t.last3Avg.total.toFixed(0)}</p>
+                      </div>
+                      {ml && <span className={`text-right text-xs font-medium whitespace-nowrap ${ml.upcoming ? 'text-textSecondary' : 'text-textMuted'}`}>{ml.upcoming ? `Next: ${ml.label}` : ml.label}</span>}
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

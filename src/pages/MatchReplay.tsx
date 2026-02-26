@@ -19,13 +19,18 @@ const IMG_FULL_W = 4196;
 const IMG_FULL_H = 2035;
 const SVG_ASPECT = FIELD_IMG_W / FIELD_IMG_H; // ~2.06
 
-// Scout tablet coordinate range
-const SCOUT_MAX_X = 1012;
-const SCOUT_MAX_Y = 530;
+// Scout tablet coordinate range — derived from 2026-rebuilt.json field-size
+// (54.269 x 26.474 feet) and a consistent ~14.91 px/foot scale factor.
+// Verified via data: red/blue scoring peaks are symmetric about field center with these values.
+const SCOUT_MAX_X = 809;
+const SCOUT_MAX_Y = 395;
 
-// Map scout tablet (x,y) → field image pixels
+// Map scout tablet (x,y) → field image pixels.
+// Scout tablets show the field flipped horizontally vs the field image
+// (Red on left in tablet, but Red structures are on the RIGHT in the image).
+// X is inverted; Y is not. Coordinates map to the field-corner area.
 const scoutToField = (sx: number, sy: number) => ({
-  x: FIELD_IMG_TL.x + (sx / SCOUT_MAX_X) * FIELD_IMG_W,
+  x: FIELD_IMG_BR.x - (sx / SCOUT_MAX_X) * FIELD_IMG_W,
   y: FIELD_IMG_TL.y + (sy / SCOUT_MAX_Y) * FIELD_IMG_H,
 });
 
@@ -137,6 +142,7 @@ function MatchReplay() {
     // Each robot's actions are relative to THEIR first action, not a global baseline.
     // Auto actions start at 0, teleop actions start at ~18s (auto period length).
     const AUTO_DURATION = 18; // seconds — auto period + transition buffer
+    const MATCH_DURATION = 160; // seconds — hard cap (15s auto + 3s transition + 135s teleop + buffer)
     const robotBaseTs = new Map<number, { auto: number; teleop: number }>();
     for (const robot of matchActions) {
       const autoTs = robot.auto.length > 0 ? robot.auto[0].time_stamp : Infinity;
@@ -148,9 +154,12 @@ function MatchReplay() {
       const base = robotBaseTs.get(item.teamNumber);
       if (!base) { item.relativeTime = 0; return; }
       if (item.phase === 'auto') {
-        item.relativeTime = item.action.time_stamp - base.auto;
+        item.relativeTime = Math.min(item.action.time_stamp - base.auto, AUTO_DURATION);
       } else {
-        item.relativeTime = AUTO_DURATION + (item.action.time_stamp - base.teleop);
+        item.relativeTime = Math.min(
+          AUTO_DURATION + (item.action.time_stamp - base.teleop),
+          MATCH_DURATION
+        );
       }
     });
 
@@ -162,7 +171,7 @@ function MatchReplay() {
 
   const maxTime = useMemo(() => {
     if (timeline.length === 0) return 0;
-    return timeline[timeline.length - 1].relativeTime + 2; // pad 2s
+    return Math.min(timeline[timeline.length - 1].relativeTime + 2, 162); // pad 2s, cap at match length
   }, [timeline]);
 
   // ── Per-robot fuel summaries ──
@@ -202,15 +211,35 @@ function MatchReplay() {
     return () => cancelAnimationFrame(animFrameRef.current);
   }, [isPlaying, tick]);
 
-  // ── Auto-scroll action feed ──
+  // ── Filtered timeline for the feed (must match what's rendered) ──
+  const feedTimeline = useMemo(() => {
+    return timeline.filter(t => t.isFuelEvent || t.action.type === 'AUTON_CLIMBED');
+  }, [timeline]);
+
+  // ── Auto-scroll action feed (scroll container only, not the page) ──
   useEffect(() => {
-    if (!feedRef.current) return;
-    const activeIdx = timeline.findIndex(t => t.relativeTime > currentTime) - 1;
-    if (activeIdx >= 0) {
-      const el = feedRef.current.children[activeIdx] as HTMLElement;
-      if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    const container = feedRef.current;
+    if (!container) return;
+    // Find active index in the *feed* timeline (matches rendered children)
+    let activeIdx = -1;
+    for (let i = 0; i < feedTimeline.length; i++) {
+      if (feedTimeline[i].relativeTime <= currentTime) activeIdx = i;
+      else break;
     }
-  }, [currentTime, timeline]);
+    if (activeIdx < 0) return;
+    const el = container.children[activeIdx] as HTMLElement;
+    if (!el) return;
+    // Scroll only the feed container, not the whole page
+    const elTop = el.offsetTop - container.offsetTop;
+    const elBot = elTop + el.offsetHeight;
+    const scrollTop = container.scrollTop;
+    const viewH = container.clientHeight;
+    if (elTop < scrollTop) {
+      container.scrollTop = elTop;
+    } else if (elBot > scrollTop + viewH) {
+      container.scrollTop = elBot - viewH;
+    }
+  }, [currentTime, feedTimeline]);
 
   // ── Visible actions on field (all actions up to currentTime) ──
   const visibleActions = useMemo(() => {
@@ -400,7 +429,7 @@ function MatchReplay() {
         <div className={`${card} lg:col-span-2`}>
           <h2 className="text-base font-bold mb-3">Action Feed</h2>
           <div ref={feedRef} className="max-h-[400px] overflow-y-auto space-y-0.5">
-            {timeline.filter(t => t.isFuelEvent || t.action.type === 'AUTON_CLIMBED').map((item, i) => {
+            {feedTimeline.map((item, i) => {
               const globalIdx = timeline.indexOf(item);
               const isActive = globalIdx <= currentActionIdx && globalIdx >= currentActionIdx - 2;
               const isCurrent = globalIdx === currentActionIdx;

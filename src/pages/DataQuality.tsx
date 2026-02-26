@@ -279,7 +279,7 @@ function DataQuality() {
   // ── Empty State ──
   if (scoutEntries.length === 0) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-4 md:space-y-6">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-3">
             <AlertTriangle className="text-warning" size={24} />
@@ -302,7 +302,7 @@ function DataQuality() {
     pct === null ? 'text-textMuted' : pct >= 80 ? 'text-success' : pct >= 50 ? 'text-warning' : 'text-danger';
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold flex items-center gap-3">
@@ -374,7 +374,7 @@ function DataQuality() {
         </div>
 
         {displayedFuelRows.length > 0 ? (
-          <div className="overflow-x-auto -mx-6 mt-4">
+          <div className="overflow-x-auto -mx-4 md:-mx-6 mt-4">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-xs text-textMuted">
@@ -643,7 +643,7 @@ function DataQuality() {
         </div>
 
         {displayedClimbRows.length > 0 ? (
-          <div className="overflow-x-auto -mx-6 mt-4">
+          <div className="overflow-x-auto -mx-4 md:-mx-6 mt-4">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-xs text-textMuted">

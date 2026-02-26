@@ -1,15 +1,16 @@
 import { useEffect } from 'react';
 import { X, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
-import type { ScoutEntry, TeamStatistics } from '../types/scouting';
-import { estimateMatchFuel, estimateMatchPoints, parseClimbLevel, getAlliance, getStation } from '../types/scouting';
+import type { ScoutEntry, TeamStatistics, RobotActions } from '../types/scouting';
+import { estimateMatchFuel, estimateMatchPoints, parseClimbLevel, getAlliance, getStation, computeRobotFuelFromActions } from '../types/scouting';
 
 interface MatchDetailModalProps {
   match: ScoutEntry;
   teamStats?: TeamStatistics;
+  robotActions?: RobotActions;
   onClose: () => void;
 }
 
-function MatchDetailModal({ match, teamStats, onClose }: MatchDetailModalProps) {
+function MatchDetailModal({ match, teamStats, robotActions, onClose }: MatchDetailModalProps) {
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -26,6 +27,7 @@ function MatchDetailModal({ match, teamStats, onClose }: MatchDetailModalProps) 
   const n = teamStats?.matchesPlayed;
 
   const climbLabel = ['None', 'Level 1', 'Level 2', 'Level 3'][climbLevel] ?? 'None';
+  const actionFuel = robotActions ? computeRobotFuelFromActions(robotActions) : null;
 
   // Determine start zone
   const startZones = [
@@ -220,6 +222,66 @@ function MatchDetailModal({ match, teamStats, onClose }: MatchDetailModalProps) 
                 teamContext={teamStats ? `${teamStats.dedicatedPasserCount}/${n}` : undefined} />
             </div>
           </div>
+
+          {/* Scored vs Passed Breakdown (from action data) */}
+          {actionFuel && (
+            <div>
+              <SectionHeader title="Fuel Attribution (Derived)" />
+              <p className="text-xs text-textMuted mb-3">Scored vs passed breakdown from timestamped action data</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-surfaceElevated rounded-lg p-3">
+                  <p className="text-xs text-textSecondary mb-2">Auto</p>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div>
+                      <p className="text-xs text-textMuted">Scored</p>
+                      <p className="font-bold text-success">{actionFuel.autoShots}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-textMuted">Passed</p>
+                      <p className="font-bold text-blueAlliance">{actionFuel.autoPasses}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-textMuted">Total</p>
+                      <p className="font-bold">{actionFuel.autoTotal}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-surfaceElevated rounded-lg p-3">
+                  <p className="text-xs text-textSecondary mb-2">Teleop</p>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div>
+                      <p className="text-xs text-textMuted">Scored</p>
+                      <p className="font-bold text-success">{actionFuel.teleopShots}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-textMuted">Passed</p>
+                      <p className="font-bold text-blueAlliance">{actionFuel.teleopPasses}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-textMuted">Total</p>
+                      <p className="font-bold">{actionFuel.teleopTotal}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 bg-success/10 border border-success/30 rounded-lg p-3">
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div>
+                    <p className="text-xs text-textSecondary">Total Scored</p>
+                    <p className="text-xl font-bold text-success">{actionFuel.totalShots}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-textSecondary">Total Passed</p>
+                    <p className="text-xl font-bold text-blueAlliance">{actionFuel.totalPasses}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-textSecondary">Total Moved</p>
+                    <p className="text-xl font-bold">{actionFuel.totalMoved}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Endgame */}
           <div>

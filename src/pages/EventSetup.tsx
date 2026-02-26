@@ -118,7 +118,7 @@ function EventSetup() {
   const completedMatches = sortedMatches.filter(m => m.alliances.red.score >= 0);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       <div>
         <h1 className="text-3xl font-bold">Event</h1>
         <p className="text-textSecondary mt-1 text-sm">
@@ -127,7 +127,7 @@ function EventSetup() {
       </div>
 
       {/* Current Event Info */}
-      <div className="bg-surface p-6 rounded-lg border border-border">
+      <div className="bg-surface p-4 md:p-6 rounded-lg border border-border">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <Clock size={20} className="text-blueAlliance" />
@@ -211,7 +211,7 @@ function EventSetup() {
 
       {/* Rankings */}
       {tbaData?.rankings && tbaData.rankings.rankings.length > 0 && (
-        <div className="bg-surface p-6 rounded-lg border border-border">
+        <div className="bg-surface p-4 md:p-6 rounded-lg border border-border">
           <div className="flex items-center gap-3 mb-4">
             <Trophy size={24} className="text-warning" />
             <h2 className="text-xl font-bold">Rankings</h2>
@@ -252,7 +252,7 @@ function EventSetup() {
 
       {/* Alliance Selection */}
       {tbaData?.alliances && tbaData.alliances.length > 0 && (
-        <div className="bg-surface p-6 rounded-lg border border-border">
+        <div className="bg-surface p-4 md:p-6 rounded-lg border border-border">
           <div className="flex items-center gap-3 mb-4">
             <Users size={24} className="text-success" />
             <h2 className="text-xl font-bold">Alliance Selection</h2>
@@ -281,7 +281,7 @@ function EventSetup() {
 
       {/* Match Schedule */}
       {tbaData?.matches && tbaData.matches.length > 0 && (
-        <div className="bg-surface p-6 rounded-lg border border-border">
+        <div className="bg-surface p-4 md:p-6 rounded-lg border border-border">
           <div className="flex items-center gap-3 mb-4">
             <Calendar size={24} className="text-blueAlliance" />
             <h2 className="text-xl font-bold">Matches</h2>
