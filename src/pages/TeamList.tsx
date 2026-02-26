@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useMemo } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { useMetricsStore } from '../store/useMetricsStore';
 import { ArrowUp, ArrowDown, Search, Sliders, LayoutGrid, Table2, X } from 'lucide-react';
@@ -37,26 +37,30 @@ function TeamList() {
   ]);
   const [viewMode, setViewMode] = useState<ViewMode>('table');
 
-  // Click-to-compare state (max 2 teams)
+  // Click-to-compare state (up to 4 teams)
   const [compareTeams, setCompareTeams] = useState<number[]>([]);
   const [showComparisonModal, setShowComparisonModal] = useState(false);
+
+  const navigate = useNavigate();
 
   const toggleCompare = (teamNumber: number) => {
     setCompareTeams(prev => {
       if (prev.includes(teamNumber)) {
         return prev.filter(t => t !== teamNumber);
       }
-      if (prev.length >= 2) return prev;
+      if (prev.length >= 4) return prev;
       return [...prev, teamNumber];
     });
   };
 
-  // Auto-open modal when 2 teams selected
-  useEffect(() => {
-    if (compareTeams.length === 2) {
-      setShowComparisonModal(true);
+  const handleRowClick = (e: React.MouseEvent, teamNumber: number) => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      toggleCompare(teamNumber);
+    } else {
+      navigate(`/teams/${teamNumber}`);
     }
-  }, [compareTeams]);
+  };
 
   // Sort and filter teams
   const filteredAndSortedTeams = useMemo(() => {
@@ -174,9 +178,6 @@ function TeamList() {
   };
 
 
-  const compareTeam1 = teamStatistics.find(t => t.teamNumber === compareTeams[0]);
-  const compareTeam2 = teamStatistics.find(t => t.teamNumber === compareTeams[1]);
-
   return (
     <div className="space-y-4 md:space-y-6">
       {/* Header */}
@@ -186,7 +187,7 @@ function TeamList() {
           {/* Compare indicator */}
           {compareTeams.length > 0 ? (
             <span className="text-blueAlliance text-sm font-medium">
-              Click teams to compare ({compareTeams.length}/2)
+              {compareTeams.length}/4 selected
               <button
                 onClick={() => setCompareTeams([])}
                 className="ml-2 text-textMuted hover:text-danger transition-colors"
@@ -197,7 +198,7 @@ function TeamList() {
             </span>
           ) : (
             <span className="text-textSecondary text-sm">
-              Click any team to compare
+              Ctrl+click to compare
             </span>
           )}
 
@@ -311,7 +312,7 @@ function TeamList() {
                 return (
                   <tr
                     key={team.teamNumber}
-                    onClick={() => toggleCompare(team.teamNumber)}
+                    onClick={(e) => handleRowClick(e, team.teamNumber)}
                     className={`transition-colors cursor-pointer ${
                       isSelected
                         ? 'bg-blueAlliance/10 border-l-2 border-l-blueAlliance'
@@ -322,7 +323,13 @@ function TeamList() {
                       <Link
                         to={`/teams/${team.teamNumber}`}
                         className="block hover:text-blueAlliance transition-colors"
-                        onClick={e => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (e.ctrlKey || e.metaKey) {
+                            e.preventDefault();
+                            toggleCompare(team.teamNumber);
+                          }
+                        }}
                       >
                         <p className="font-bold">{team.teamNumber}</p>
                         {team.teamName && (
@@ -425,16 +432,21 @@ function TeamList() {
       </div>
 
       {/* Comparison Modal */}
-      {showComparisonModal && compareTeam1 && compareTeam2 && (
-        <ComparisonModal
-          team1={compareTeam1}
-          team2={compareTeam2}
-          onClose={() => {
-            setShowComparisonModal(false);
-            setCompareTeams([]);
-          }}
-        />
-      )}
+      {showComparisonModal && compareTeams.length >= 2 && (() => {
+        const t1 = teamStatistics.find(t => t.teamNumber === compareTeams[0]);
+        const t2 = teamStatistics.find(t => t.teamNumber === compareTeams[1]);
+        if (!t1 || !t2) return null;
+        return (
+          <ComparisonModal
+            team1={t1}
+            team2={t2}
+            onClose={() => {
+              setShowComparisonModal(false);
+              setCompareTeams([]);
+            }}
+          />
+        );
+      })()}
     </div>
   );
 }
