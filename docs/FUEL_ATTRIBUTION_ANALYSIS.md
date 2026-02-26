@@ -230,13 +230,20 @@ Where:
 3. **No per-robot ground truth** — can only validate at alliance level
 4. **Consistency ≠ accuracy** — low CV means stable, not necessarily correct per-robot
 
-## Next Steps
+## Implementation Status
 
-1. Implement `attributeFuelScoring()` utility function using action data
-2. Add per-team "estimated balls scored" to TeamStatistics
-3. Display on team comparison views
-4. Re-evaluate β after regular-season events with more matches per team
-5. Consider adding match-level undercount/overcount alerts to Data Quality page
+All core features are implemented and deployed:
+
+- `computeMatchFuelAttribution()` in `src/utils/fuelAttribution.ts` — per-robot per-match attribution using action data with power curve β=0.7
+- `aggregateTeamFuel()` — team-level aggregation with variance for Monte Carlo predictions
+- `TeamFuelStats` feeds into the prediction engine via `buildPredictionInputs()`
+- Surfaced in customizable metrics (avg scored, accuracy, passes, moved) via `fuelField` in metric definitions
+- Data Quality page shows match-level scout vs FMS discrepancy analysis
+
+### Remaining
+
+- Re-evaluate β after regular-season events with more matches per team
+- Consider adding match-level undercount/overcount alerts to Data Quality page
 
 ## Scripts Reference
 

@@ -148,6 +148,14 @@ src/
 
 Scout entries include: auto/teleop fuel scoring, bonus buckets, climb levels, flags (lost connection, no robot, poor accuracy), start zones, and free-text notes.
 
+## Technical Documentation
+
+Deep-dive docs on how the analytics systems work:
+
+- **[Prediction & Simulation System](docs/PREDICTION_SYSTEM.md)** — deterministic scoring, Monte Carlo simulation (1,000 trials), RP probability estimation, data source merging (FMS vs scout)
+- **[Fuel Attribution Analysis](docs/FUEL_ATTRIBUTION_ANALYSIS.md)** — per-robot ball scoring attribution from alliance-level FMS data using power curve model (β=0.7), Week 0 data validation, model comparison
+- **[Trend Analysis](docs/TREND_ANALYSIS.md)** — last-3 vs overall performance comparison, ±10% classification thresholds, best 3 of 4, UI integration
+
 ## Contributing
 
 Team 148 internal tool. To contribute:
