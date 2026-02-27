@@ -393,11 +393,6 @@ function TeamList() {
                           if (longPressTriggered.current) {
                             e.preventDefault();
                             longPressTriggered.current = false;
-                            return;
-                          }
-                          if (compareMode || compareTeams.length > 0 || e.ctrlKey || e.metaKey) {
-                            e.preventDefault();
-                            toggleCompare(team.teamNumber);
                           }
                         }}
                       >
@@ -459,11 +454,6 @@ function TeamList() {
                       if (longPressTriggered.current) {
                         e.preventDefault();
                         longPressTriggered.current = false;
-                        return;
-                      }
-                      if (compareMode || compareTeams.length > 0 || e.ctrlKey || e.metaKey) {
-                        e.preventDefault();
-                        toggleCompare(team.teamNumber);
                       }
                     }}
                   >
@@ -543,7 +533,7 @@ function TeamList() {
               </button>
           )}
           <button
-            onClick={() => setCompareTeams([])}
+            onClick={() => { setCompareTeams([]); setCompareMode(false); }}
             className="p-1.5 text-textMuted hover:text-danger rounded transition-colors"
             title="Clear all"
           >
@@ -559,6 +549,7 @@ function TeamList() {
           onClose={() => {
             setShowComparisonModal(false);
             setCompareTeams([]);
+            setCompareMode(false);
           }}
         />
       )}
