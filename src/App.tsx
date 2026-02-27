@@ -5,7 +5,6 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import AppLayout from './components/AppLayout';
 import TeamList from './pages/TeamList';
-import TeamComparison from './pages/TeamComparison';
 import Dashboard from './pages/Dashboard';
 import TeamDetail from './pages/TeamDetail';
 import PickList from './pages/PickList';
@@ -60,7 +59,6 @@ function AppContent() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/teams" element={<TeamList />} />
         <Route path="/teams/:teamNumber" element={<TeamDetail />} />
-        <Route path="/compare" element={<TeamComparison />} />
         <Route path="/picklist" element={<PickList />} />
         <Route path="/predict" element={<AlliancePredictor />} />
         <Route path="/alliance-selection" element={<AllianceSelection />} />

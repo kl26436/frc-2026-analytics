@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
-import { Play, Pause, SkipBack, SkipForward, ChevronLeft } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, ChevronLeft, ChevronRight } from 'lucide-react';
 import { computeRobotFuelFromActions, getAlliance } from '../types/scouting';
 import type { ScoutAction } from '../types/scouting';
 import { formatDuration } from '../utils/formatting';
@@ -51,6 +51,7 @@ const card = 'bg-surface rounded-xl border border-border p-6 shadow-card';
 function MatchReplay() {
   const { matchNumber: matchNumStr } = useParams<{ matchNumber: string }>();
   const matchNumber = parseInt(matchNumStr || '1');
+  const navigate = useNavigate();
 
   const scoutActions = useAnalyticsStore(s => s.scoutActions);
   const scoutEntries = useAnalyticsStore(s => s.scoutEntries);
@@ -63,6 +64,22 @@ function MatchReplay() {
   const animFrameRef = useRef<number>(0);
   const lastTickRef = useRef<number>(0);
   const feedRef = useRef<HTMLDivElement>(null);
+
+  // ── Available matches (union of TBA + scout data) ──
+  const availableMatches = useMemo(() => {
+    const fromTba = pgTbaMatches.filter(m => m.comp_level === 'qm').map(m => m.match_number);
+    const fromScout = scoutEntries.map(e => e.match_number);
+    return [...new Set([...fromTba, ...fromScout])].sort((a, b) => a - b);
+  }, [pgTbaMatches, scoutEntries]);
+
+  const prevMatch = availableMatches[availableMatches.indexOf(matchNumber) - 1] ?? null;
+  const nextMatch = availableMatches[availableMatches.indexOf(matchNumber) + 1] ?? null;
+
+  // ── Reset playback when match changes ──
+  useEffect(() => {
+    setCurrentTime(0);
+    setIsPlaying(false);
+  }, [matchNumber]);
 
   // ── Find TBA match data ──
   const tbaMatch = useMemo(() => {
@@ -278,16 +295,53 @@ function MatchReplay() {
 
   const allianceColor = (a: 'red' | 'blue') => a === 'red' ? 'text-redAlliance' : 'text-blueAlliance';
 
+  const matchHeader = (
+    <div className="flex items-center gap-3 flex-wrap">
+      <button onClick={() => navigate(-1)} className="p-2 rounded-lg hover:bg-surfaceElevated transition-colors">
+        <ChevronLeft size={20} />
+      </button>
+      <h1 className="text-2xl font-bold">Match Replay</h1>
+      <div className="flex items-center gap-1">
+        <button
+          onClick={() => prevMatch !== null && navigate(`/replay/${prevMatch}`)}
+          disabled={prevMatch === null}
+          className="p-1.5 rounded-lg hover:bg-surfaceElevated transition-colors disabled:opacity-30"
+        >
+          <ChevronLeft size={16} />
+        </button>
+        <select
+          value={matchNumber}
+          onChange={e => navigate(`/replay/${e.target.value}`)}
+          className="px-3 py-1.5 bg-surfaceElevated border border-border rounded-lg text-sm font-semibold focus:outline-none focus:border-success"
+        >
+          {availableMatches.length > 0
+            ? availableMatches.map(n => <option key={n} value={n}>Q{n}</option>)
+            : <option value={matchNumber}>Q{matchNumber}</option>
+          }
+        </select>
+        <button
+          onClick={() => nextMatch !== null && navigate(`/replay/${nextMatch}`)}
+          disabled={nextMatch === null}
+          className="p-1.5 rounded-lg hover:bg-surfaceElevated transition-colors disabled:opacity-30"
+        >
+          <ChevronRight size={16} />
+        </button>
+      </div>
+      {tbaMatch && (
+        <p className="text-sm text-textSecondary">
+          <span className="text-redAlliance font-semibold">{tbaMatch.red_teams.map(t => t.replace('frc', '')).join(', ')}</span>
+          <span className="mx-2 font-bold">{tbaMatch.red_score} – {tbaMatch.blue_score}</span>
+          <span className="text-blueAlliance font-semibold">{tbaMatch.blue_teams.map(t => t.replace('frc', '')).join(', ')}</span>
+        </p>
+      )}
+    </div>
+  );
+
   // ── Empty state ──
   if (matchActions.length === 0) {
     return (
       <div className="space-y-6">
-        <div className="flex items-center gap-4">
-          <Link to="/data-quality" className="p-2 rounded-lg hover:bg-surfaceElevated transition-colors">
-            <ChevronLeft size={20} />
-          </Link>
-          <h1 className="text-2xl font-bold">Match {matchNumber} Replay</h1>
-        </div>
+        {matchHeader}
         <div className={card}>
           <div className="text-center py-12">
             <p className="text-lg font-semibold text-textPrimary">No Action Data</p>
@@ -302,22 +356,7 @@ function MatchReplay() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Link to="/data-quality" className="p-2 rounded-lg hover:bg-surfaceElevated transition-colors">
-          <ChevronLeft size={20} />
-        </Link>
-        <div>
-          <h1 className="text-2xl font-bold">Match {matchNumber} Replay</h1>
-          {tbaMatch && (
-            <p className="text-sm text-textSecondary mt-0.5">
-              <span className="text-redAlliance font-semibold">{tbaMatch.red_teams.map(t => t.replace('frc', '')).join(', ')}</span>
-              <span className="mx-2 font-bold">{tbaMatch.red_score} – {tbaMatch.blue_score}</span>
-              <span className="text-blueAlliance font-semibold">{tbaMatch.blue_teams.map(t => t.replace('frc', '')).join(', ')}</span>
-            </p>
-          )}
-        </div>
-      </div>
+      {matchHeader}
 
       {/* Field + Controls */}
       <div className={card}>

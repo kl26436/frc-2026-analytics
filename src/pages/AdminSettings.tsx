@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Shield, UserPlus, Trash2, Crown, UserCheck, UserX, Clock, Settings, Hash, Pencil, Check, X, Loader, Database, RefreshCw, Play, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Shield, UserPlus, Trash2, Crown, UserCheck, UserX, Clock, Settings, Hash, Pencil, Check, X, Loader, Database, RefreshCw, Play, ToggleLeft, ToggleRight, Rss } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import type { EventConfig } from '../contexts/AuthContext';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
@@ -24,6 +24,9 @@ function AdminSettings() {
   } = useAuth();
 
   const fetchTBAData = useAnalyticsStore(s => s.fetchTBAData);
+  const tbaLoading = useAnalyticsStore(s => s.tbaLoading);
+  const autoRefreshEnabled = useAnalyticsStore(s => s.autoRefreshEnabled);
+  const setAutoRefresh = useAnalyticsStore(s => s.setAutoRefresh);
   const clearPickList = usePickListStore(s => s.clearPickList);
   const initializePickList = usePickListStore(s => s.initializePickList);
   const importFromTBARankings = usePickListStore(s => s.importFromTBARankings);
@@ -235,6 +238,39 @@ function AdminSettings() {
               )}
             </span>
           )}
+        </div>
+      </div>
+
+      {/* ── TBA Data Refresh ──────────────────────────────────────────────── */}
+      <div className="bg-surface rounded-lg border border-border p-4 md:p-6">
+        <h2 className="text-lg font-bold mb-1 flex items-center gap-2">
+          <Rss size={20} />
+          TBA Data Refresh
+        </h2>
+        <p className="text-xs text-textSecondary mb-4">
+          Pulls latest match results, rankings, and alliance selections from The Blue Alliance.
+          Auto-refresh runs every 10 minutes in the background for all users.
+        </p>
+        <div className="flex items-center gap-4 flex-wrap">
+          <button
+            onClick={() => fetchTBAData()}
+            disabled={tbaLoading || !eventConfig?.eventCode}
+            className="flex items-center gap-2 px-5 py-2 bg-surfaceElevated hover:bg-interactive font-semibold rounded-lg transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <RefreshCw size={16} className={tbaLoading ? 'animate-spin' : ''} />
+            {tbaLoading ? 'Refreshing…' : 'Refresh Now'}
+          </button>
+          <button
+            onClick={() => setAutoRefresh(!autoRefreshEnabled)}
+            className="flex items-center gap-2 text-sm text-textSecondary hover:text-textPrimary transition-colors"
+          >
+            {autoRefreshEnabled ? (
+              <ToggleRight size={24} className="text-success" />
+            ) : (
+              <ToggleLeft size={24} className="text-textMuted" />
+            )}
+            Auto-refresh {autoRefreshEnabled ? 'on (10 min)' : 'off'}
+          </button>
         </div>
       </div>
 

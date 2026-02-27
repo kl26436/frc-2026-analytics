@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import {
   RefreshCw,
@@ -8,12 +8,11 @@ import {
   Clock,
   ChevronDown,
   ChevronRight,
+  Zap,
 } from 'lucide-react';
 import { teamKeyToNumber } from '../utils/tbaApi';
 import type { TBAMatch } from '../types/tba';
 import { formatTimestamp } from '../utils/formatting';
-
-const AUTO_REFRESH_INTERVAL = 10 * 60 * 1000; // 10 minutes
 
 function EventSetup() {
   const eventCode = useAnalyticsStore(state => state.eventCode);
@@ -21,25 +20,8 @@ function EventSetup() {
   const tbaLoading = useAnalyticsStore(state => state.tbaLoading);
   const tbaError = useAnalyticsStore(state => state.tbaError);
   const fetchTBAData = useAnalyticsStore(state => state.fetchTBAData);
-  const autoRefreshEnabled = useAnalyticsStore(state => state.autoRefreshEnabled);
-  const setAutoRefresh = useAnalyticsStore(state => state.setAutoRefresh);
-  const syncMeta = useAnalyticsStore(state => state.syncMeta);
-  const scoutEntries = useAnalyticsStore(state => state.scoutEntries);
 
   const [expandedMatch, setExpandedMatch] = useState<string | null>(null);
-  const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // Auto-refresh effect
-  useEffect(() => {
-    if (autoRefreshEnabled && eventCode) {
-      if (!tbaData) fetchTBAData();
-      refreshIntervalRef.current = setInterval(() => fetchTBAData(), AUTO_REFRESH_INTERVAL);
-      return () => { if (refreshIntervalRef.current) clearInterval(refreshIntervalRef.current); };
-    } else {
-      if (refreshIntervalRef.current) clearInterval(refreshIntervalRef.current);
-    }
-  }, [autoRefreshEnabled, eventCode, fetchTBAData, tbaData]);
-
 
   const toggleMatch = (key: string) => {
     setExpandedMatch(prev => prev === key ? null : key);
@@ -105,108 +87,145 @@ function EventSetup() {
     );
   };
 
+  const matchLabel = (match: TBAMatch) => {
+    const level = match.comp_level;
+    if (level === 'qm') return `Q${match.match_number}`;
+    return `${level.toUpperCase()} ${match.set_number}-${match.match_number}`;
+  };
+
+  const levelOrder: Record<string, number> = { qm: 0, ef: 1, qf: 2, sf: 3, f: 4 };
   const sortedMatches = tbaData?.matches?.slice().sort((a, b) => {
-    const levelOrder: Record<string, number> = { qm: 0, ef: 1, qf: 2, sf: 3, f: 4 };
     if (levelOrder[a.comp_level] !== levelOrder[b.comp_level]) {
       return levelOrder[a.comp_level] - levelOrder[b.comp_level];
     }
     return a.match_number - b.match_number;
   }) || [];
 
-  const qualMatches = sortedMatches.filter(m => m.comp_level === 'qm');
-  const playoffMatches = sortedMatches.filter(m => m.comp_level !== 'qm');
-  const completedMatches = sortedMatches.filter(m => m.alliances.red.score >= 0);
+  const upcomingMatches = sortedMatches.filter(m => m.alliances.red.score < 0);
+  const completedMatches = sortedMatches.filter(m => m.alliances.red.score >= 0).reverse();
+
+  const renderMatchRow = (match: TBAMatch, isNext = false) => {
+    const isExpanded = expandedMatch === match.key;
+    const played = match.alliances.red.score >= 0;
+
+    return (
+      <>
+        <tr
+          key={match.key}
+          onClick={() => toggleMatch(match.key)}
+          className={`border-b border-border/50 cursor-pointer transition-colors ${
+            isNext ? 'bg-blueAlliance/5 hover:bg-blueAlliance/10' :
+            isExpanded ? 'bg-surfaceElevated' : 'hover:bg-surfaceElevated/60'
+          }`}
+        >
+          <td className="py-2 px-3 text-textMuted">
+            {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          </td>
+          <td className="py-2 px-2 font-bold">
+            {isNext && <Zap size={12} className="inline mr-1 text-blueAlliance" />}
+            {matchLabel(match)}
+          </td>
+          <td className="py-2 px-2 text-center text-redAlliance text-xs">
+            {match.alliances.red.team_keys.map(k => teamKeyToNumber(k)).join(', ')}
+          </td>
+          <td className="py-2 px-2 text-center font-mono">
+            {played ? (
+              <span>
+                <span className={match.alliances.red.score > match.alliances.blue.score ? 'text-redAlliance font-bold' : 'text-textSecondary'}>
+                  {match.alliances.red.score}
+                </span>
+                <span className="text-textMuted"> – </span>
+                <span className={match.alliances.blue.score > match.alliances.red.score ? 'text-blueAlliance font-bold' : 'text-textSecondary'}>
+                  {match.alliances.blue.score}
+                </span>
+              </span>
+            ) : (
+              <span className="text-textMuted text-xs">TBD</span>
+            )}
+          </td>
+          <td className="py-2 px-2 text-center text-blueAlliance text-xs">
+            {match.alliances.blue.team_keys.map(k => teamKeyToNumber(k)).join(', ')}
+          </td>
+        </tr>
+        {isExpanded && (
+          <tr key={`${match.key}-detail`}>
+            <td colSpan={5} className="p-0">
+              {renderScoreBreakdown(match)}
+            </td>
+          </tr>
+        )}
+      </>
+    );
+  };
+
+  const matchTable = (matches: TBAMatch[]) => (
+    <div className="rounded-lg overflow-hidden border border-border">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="bg-surfaceElevated border-b border-border">
+            <th className="text-left py-2 px-3 w-6"></th>
+            <th className="text-left py-2 px-2">Match</th>
+            <th className="text-center py-2 px-2 text-redAlliance">Red</th>
+            <th className="text-center py-2 px-2">Score</th>
+            <th className="text-center py-2 px-2 text-blueAlliance">Blue</th>
+          </tr>
+        </thead>
+        <tbody>
+          {matches.map((match, idx) => renderMatchRow(match, idx === 0 && !completedMatches.includes(match)))}
+        </tbody>
+      </table>
+    </div>
+  );
 
   return (
     <div className="space-y-4 md:space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Event</h1>
-        <p className="text-textSecondary mt-1 text-sm">
-          Live event data from The Blue Alliance · Event setup is managed in Admin Settings
-        </p>
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">{tbaData?.event?.name ?? eventCode}</h1>
+          {tbaData?.event && (
+            <p className="text-textSecondary mt-1 text-sm">
+              {tbaData.event.city}, {tbaData.event.state_prov} · {tbaData.event.start_date} – {tbaData.event.end_date}
+            </p>
+          )}
+        </div>
+        <button
+          onClick={() => fetchTBAData()}
+          disabled={tbaLoading}
+          className="flex items-center gap-2 px-3 py-2 bg-surfaceElevated hover:bg-interactive rounded-lg transition-colors text-sm shrink-0"
+        >
+          <RefreshCw size={16} className={tbaLoading ? 'animate-spin' : ''} />
+          Refresh
+        </button>
       </div>
 
-      {/* Current Event Info */}
-      <div className="bg-surface p-4 md:p-6 rounded-lg border border-border">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <Clock size={20} className="text-blueAlliance" />
-            <h2 className="text-xl font-bold">{tbaData?.event?.name ?? eventCode}</h2>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => fetchTBAData()}
-              disabled={tbaLoading}
-              className="flex items-center gap-2 px-3 py-2 bg-surfaceElevated hover:bg-interactive rounded-lg transition-colors text-sm"
-            >
-              <RefreshCw size={16} className={tbaLoading ? 'animate-spin' : ''} />
-              Refresh
-            </button>
-            <label className="flex items-center gap-2 px-3 py-2 bg-surfaceElevated rounded-lg cursor-pointer">
-              <input
-                type="checkbox"
-                checked={autoRefreshEnabled}
-                onChange={e => setAutoRefresh(e.target.checked)}
-                className="w-4 h-4 rounded"
-              />
-              <span className="text-sm">Auto (10 min)</span>
-            </label>
-          </div>
+      {tbaError && (
+        <div className="p-3 bg-danger/10 border border-danger/30 rounded-lg text-danger text-sm">
+          {tbaError}
         </div>
+      )}
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-surfaceElevated p-4 rounded-lg">
-            <p className="text-xs text-textSecondary">Event Code</p>
-            <p className="text-xl font-bold">{eventCode}</p>
-          </div>
-          <div className="bg-surfaceElevated p-4 rounded-lg">
-            <p className="text-xs text-textSecondary">Teams</p>
-            <p className="text-xl font-bold">{tbaData?.teams?.length || 0}</p>
-          </div>
-          <div className="bg-surfaceElevated p-4 rounded-lg">
-            <p className="text-xs text-textSecondary">Matches</p>
-            <p className="text-xl font-bold">{tbaData?.matches?.length || 0}</p>
-          </div>
-          <div className="bg-surfaceElevated p-4 rounded-lg">
-            <p className="text-xs text-textSecondary">Last Updated</p>
-            <p className="text-lg font-bold flex items-center gap-1">
-              <Clock size={14} />
-              {formatTimestamp(tbaData?.lastUpdated || null)}
-            </p>
-          </div>
+      {/* Quick stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-surface p-4 rounded-lg border border-border">
+          <p className="text-xs text-textSecondary">Event</p>
+          <p className="text-xl font-bold">{eventCode}</p>
         </div>
-
-        {/* Scout data sync status */}
-        {syncMeta && (
-          <div className="mt-4 grid grid-cols-3 gap-3">
-            <div className="bg-surfaceElevated p-3 rounded-lg">
-              <p className="text-xs text-textSecondary">Scout Entries</p>
-              <p className="text-xl font-bold">{scoutEntries.length}</p>
-            </div>
-            <div className="bg-surfaceElevated p-3 rounded-lg">
-              <p className="text-xs text-textSecondary">Last Sync</p>
-              <p className="text-sm font-semibold">
-                {new Date(syncMeta.lastSyncAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-              </p>
-            </div>
-            <div className="bg-surfaceElevated p-3 rounded-lg">
-              <p className="text-xs text-textSecondary">Sync Duration</p>
-              <p className="text-xl font-bold">{(syncMeta.syncDurationMs / 1000).toFixed(1)}s</p>
-            </div>
-          </div>
-        )}
-
-        {tbaData?.event && (
-          <div className="mt-4 p-3 bg-surfaceElevated rounded-lg text-sm text-textSecondary">
-            {tbaData.event.city}, {tbaData.event.state_prov} · {tbaData.event.start_date} to {tbaData.event.end_date}
-          </div>
-        )}
-
-        {tbaError && (
-          <div className="mt-4 p-3 bg-danger/10 border border-danger/30 rounded-lg text-danger text-sm">
-            {tbaError}
-          </div>
-        )}
+        <div className="bg-surface p-4 rounded-lg border border-border">
+          <p className="text-xs text-textSecondary">Teams</p>
+          <p className="text-xl font-bold">{tbaData?.teams?.length || 0}</p>
+        </div>
+        <div className="bg-surface p-4 rounded-lg border border-border">
+          <p className="text-xs text-textSecondary">Completed</p>
+          <p className="text-xl font-bold">{completedMatches.length} <span className="text-sm text-textMuted font-normal">/ {sortedMatches.length}</span></p>
+        </div>
+        <div className="bg-surface p-4 rounded-lg border border-border">
+          <p className="text-xs text-textSecondary">Last Updated</p>
+          <p className="text-lg font-bold flex items-center gap-1">
+            <Clock size={14} />
+            {formatTimestamp(tbaData?.lastUpdated || null)}
+          </p>
+        </div>
       </div>
 
       {/* Rankings */}
@@ -250,6 +269,38 @@ function EventSetup() {
         </div>
       )}
 
+      {/* Matches */}
+      {tbaData?.matches && tbaData.matches.length > 0 && (
+        <div className="bg-surface p-4 md:p-6 rounded-lg border border-border">
+          <div className="flex items-center gap-3 mb-6">
+            <Calendar size={24} className="text-blueAlliance" />
+            <h2 className="text-xl font-bold">Matches</h2>
+          </div>
+
+          <div className="space-y-6">
+            {/* Upcoming */}
+            {upcomingMatches.length > 0 ? (
+              <div>
+                <p className="text-sm font-semibold text-textSecondary mb-2">Upcoming</p>
+                {matchTable(upcomingMatches)}
+              </div>
+            ) : (
+              <div className="text-sm text-textMuted italic">
+                {completedMatches.length > 0 ? 'All matches complete.' : 'No matches scheduled yet.'}
+              </div>
+            )}
+
+            {/* Results */}
+            {completedMatches.length > 0 && (
+              <div>
+                <p className="text-sm font-semibold text-textSecondary mb-2">Results</p>
+                {matchTable(completedMatches)}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Alliance Selection */}
       {tbaData?.alliances && tbaData.alliances.length > 0 && (
         <div className="bg-surface p-4 md:p-6 rounded-lg border border-border">
@@ -275,112 +326,6 @@ function EventSetup() {
                 )}
               </div>
             ))}
-          </div>
-        </div>
-      )}
-
-      {/* Match Schedule */}
-      {tbaData?.matches && tbaData.matches.length > 0 && (
-        <div className="bg-surface p-4 md:p-6 rounded-lg border border-border">
-          <div className="flex items-center gap-3 mb-4">
-            <Calendar size={24} className="text-blueAlliance" />
-            <h2 className="text-xl font-bold">Matches</h2>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <div className="bg-surfaceElevated p-3 rounded-lg">
-              <p className="text-xs text-textSecondary">Qual Matches</p>
-              <p className="text-xl font-bold">{qualMatches.length}</p>
-            </div>
-            <div className="bg-surfaceElevated p-3 rounded-lg">
-              <p className="text-xs text-textSecondary">Playoff Matches</p>
-              <p className="text-xl font-bold">{playoffMatches.length}</p>
-            </div>
-            <div className="bg-surfaceElevated p-3 rounded-lg">
-              <p className="text-xs text-textSecondary">Completed</p>
-              <p className="text-xl font-bold">{completedMatches.length}</p>
-            </div>
-            <div className="bg-surfaceElevated p-3 rounded-lg">
-              <p className="text-xs text-textSecondary">Remaining</p>
-              <p className="text-xl font-bold">{sortedMatches.length - completedMatches.length}</p>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            {(['qm', 'qf', 'sf', 'f'] as const).map(level => {
-              const levelMatches = sortedMatches.filter(m => m.comp_level === level);
-              if (levelMatches.length === 0) return null;
-              const levelLabel: Record<string, string> = { qm: 'Qualifications', qf: 'Quarterfinals', sf: 'Semifinals', f: 'Finals' };
-              return (
-                <div key={level} className="space-y-1">
-                  <p className="text-sm font-semibold text-textSecondary">{levelLabel[level]}</p>
-                  <div className="rounded-lg overflow-hidden border border-border">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="bg-surfaceElevated border-b border-border">
-                          <th className="text-left py-2 px-3 w-6"></th>
-                          <th className="text-left py-2 px-2">Match</th>
-                          <th className="text-center py-2 px-2 text-redAlliance">Red</th>
-                          <th className="text-center py-2 px-2">Score</th>
-                          <th className="text-center py-2 px-2 text-blueAlliance">Blue</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {levelMatches.map(match => {
-                          const isExpanded = expandedMatch === match.key;
-                          const played = match.alliances.red.score >= 0;
-                          const matchLabel = level === 'qm'
-                            ? `Q${match.match_number}`
-                            : `${level.toUpperCase()} ${match.set_number}-${match.match_number}`;
-                          return (
-                            <>
-                              <tr
-                                key={match.key}
-                                onClick={() => toggleMatch(match.key)}
-                                className={`border-b border-border/50 cursor-pointer transition-colors ${isExpanded ? 'bg-surfaceElevated' : 'hover:bg-surfaceElevated/60'}`}
-                              >
-                                <td className="py-2 px-3 text-textMuted">
-                                  {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                                </td>
-                                <td className="py-2 px-2 font-bold">{matchLabel}</td>
-                                <td className="py-2 px-2 text-center text-redAlliance text-xs">
-                                  {match.alliances.red.team_keys.map(k => teamKeyToNumber(k)).join(', ')}
-                                </td>
-                                <td className="py-2 px-2 text-center font-mono">
-                                  {played ? (
-                                    <span>
-                                      <span className={match.alliances.red.score > match.alliances.blue.score ? 'text-redAlliance font-bold' : 'text-textSecondary'}>
-                                        {match.alliances.red.score}
-                                      </span>
-                                      <span className="text-textMuted"> – </span>
-                                      <span className={match.alliances.blue.score > match.alliances.red.score ? 'text-blueAlliance font-bold' : 'text-textSecondary'}>
-                                        {match.alliances.blue.score}
-                                      </span>
-                                    </span>
-                                  ) : (
-                                    <span className="text-textMuted text-xs">TBD</span>
-                                  )}
-                                </td>
-                                <td className="py-2 px-2 text-center text-blueAlliance text-xs">
-                                  {match.alliances.blue.team_keys.map(k => teamKeyToNumber(k)).join(', ')}
-                                </td>
-                              </tr>
-                              {isExpanded && (
-                                <tr key={`${match.key}-detail`}>
-                                  <td colSpan={5} className="p-0">
-                                    {renderScoreBreakdown(match)}
-                                  </td>
-                                </tr>
-                              )}
-                            </>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              );
-            })}
           </div>
         </div>
       )}

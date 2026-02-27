@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
-import { BarChart3, Users, ClipboardList, Menu, X, Calendar, Swords, Handshake, ClipboardCheck, ChevronDown, Search, Target, Shield, LogOut, AlertTriangle, PlayCircle } from 'lucide-react';
+import { BarChart3, Users, ClipboardList, Menu, X, Calendar, Swords, Handshake, ClipboardCheck, ChevronDown, Search, Target, Shield, LogOut, AlertTriangle, LineChart, PlayCircle } from 'lucide-react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { useAuth } from '../contexts/AuthContext';
 import ActiveSessionBanner from './ActiveSessionBanner';
+
+const AUTO_REFRESH_INTERVAL = 10 * 60 * 1000; // 10 minutes
 
 interface NavDropdownProps {
   label: string;
@@ -16,7 +18,6 @@ function NavDropdown({ label, icon: Icon, items, isActive }: NavDropdownProps) {
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Close on click outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
@@ -60,21 +61,25 @@ function NavDropdown({ label, icon: Icon, items, isActive }: NavDropdownProps) {
 }
 
 // Navigation structure
-const scoutingItems = [
+const analysisItems = [
   { to: '/teams', icon: Users, label: 'Teams' },
+  { to: '/event', icon: Calendar, label: 'Event' },
+  { to: '/replay/1', icon: PlayCircle, label: 'Match Replay' },
+];
+
+const scoutingItems = [
   { to: '/pit-scouting', icon: ClipboardCheck, label: 'Pit Scout' },
   { to: '/data-quality', icon: AlertTriangle, label: 'Data Quality' },
-  { to: '/replay/1', icon: PlayCircle, label: 'Match Replay' },
 ];
 
 const strategyItems = [
   { to: '/picklist', icon: ClipboardList, label: 'Pick List' },
   { to: '/predict', icon: Swords, label: 'Predict' },
-  { to: '/alliance-selection', icon: Handshake, label: 'Alliance' },
+  { to: '/alliance-selection', icon: Handshake, label: 'Alliance Selection' },
 ];
 
 function UserDropdown() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, isAdmin } = useAuth();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -108,6 +113,16 @@ function UserDropdown() {
             </p>
             <p className="text-xs text-textMuted truncate">{user?.email}</p>
           </div>
+          {isAdmin && (
+            <Link
+              to="/admin"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-interactive transition-colors"
+            >
+              <Shield size={16} />
+              Admin Settings
+            </Link>
+          )}
           <button
             onClick={() => { setOpen(false); signOut(); }}
             className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-danger hover:bg-danger/10 transition-colors"
@@ -123,15 +138,38 @@ function UserDropdown() {
 
 function AppLayout() {
   const eventCode = useAnalyticsStore(state => state.eventCode);
+  const autoRefreshEnabled = useAnalyticsStore(state => state.autoRefreshEnabled);
+  const fetchTBAData = useAnalyticsStore(state => state.fetchTBAData);
   const { user, isAdmin, signOut } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
 
   const closeMobileMenu = () => setMobileMenuOpen(false);
 
-  // Check if current path is in a group
+  // TBA auto-refresh — runs app-wide when enabled by admin
+  useEffect(() => {
+    if (!autoRefreshEnabled) return;
+    const id = setInterval(() => fetchTBAData(), AUTO_REFRESH_INTERVAL);
+    return () => clearInterval(id);
+  }, [autoRefreshEnabled, fetchTBAData]);
+
   const isScoutingActive = scoutingItems.some(item => location.pathname === item.to || location.pathname.startsWith(item.to + '/'));
+  const isAnalysisActive = analysisItems.some(item => location.pathname === item.to || location.pathname.startsWith(item.to + '/'));
   const isStrategyActive = strategyItems.some(item => location.pathname === item.to || location.pathname.startsWith(item.to + '/'));
+
+  const navLinkClass = (path: string) =>
+    `flex items-center gap-2 px-3 xl:px-4 py-2 rounded-lg transition-colors text-sm xl:text-base ${
+      location.pathname === path || location.pathname.startsWith(path + '/')
+        ? 'bg-surfaceElevated text-textPrimary font-semibold'
+        : 'text-textSecondary hover:text-textPrimary hover:bg-surfaceElevated'
+    }`;
+
+  const mobileNavLinkClass = (path: string) =>
+    `flex items-center gap-3 px-4 py-3 rounded transition-colors ${
+      location.pathname === path || location.pathname.startsWith(path + '/')
+        ? 'bg-success/20 text-success'
+        : 'hover:bg-interactive'
+    }`;
 
   return (
     <div className="min-h-screen bg-background text-textPrimary">
@@ -150,58 +188,17 @@ function AppLayout() {
 
             {/* Desktop Navigation */}
             <nav className="hidden lg:flex gap-2 xl:gap-3 items-center border-l border-border pl-3 ml-3">
-              {/* Dashboard - standalone */}
-              <Link
-                to="/"
-                className={`flex items-center gap-2 px-3 xl:px-4 py-2 rounded-lg transition-colors text-sm xl:text-base ${
-                  location.pathname === '/' ? 'bg-surfaceElevated text-textPrimary font-semibold' : 'text-textSecondary hover:text-textPrimary hover:bg-surfaceElevated'
-                }`}
-              >
+              <Link to="/" className={navLinkClass('/')}>
                 <BarChart3 size={20} />
                 <span>Dashboard</span>
               </Link>
 
-              {/* Scouting dropdown */}
-              <NavDropdown
-                label="Scouting"
-                icon={Search}
-                items={scoutingItems}
-                isActive={isScoutingActive}
-              />
+              <NavDropdown label="Scouting" icon={Search} items={scoutingItems} isActive={isScoutingActive} />
 
-              {/* Strategy dropdown */}
-              <NavDropdown
-                label="Strategy"
-                icon={Target}
-                items={strategyItems}
-                isActive={isStrategyActive}
-              />
+              <NavDropdown label="Analysis" icon={LineChart} items={analysisItems} isActive={isAnalysisActive} />
 
-              {/* Event - standalone */}
-              <Link
-                to="/event"
-                className={`flex items-center gap-2 px-3 xl:px-4 py-2 rounded-lg transition-colors text-sm xl:text-base ${
-                  location.pathname === '/event' ? 'bg-surfaceElevated text-textPrimary font-semibold' : 'text-textSecondary hover:text-textPrimary hover:bg-surfaceElevated'
-                }`}
-              >
-                <Calendar size={20} />
-                <span>Event</span>
-              </Link>
+              <NavDropdown label="Strategy" icon={Target} items={strategyItems} isActive={isStrategyActive} />
 
-              {/* Admin link (admins only) */}
-              {isAdmin && (
-                <Link
-                  to="/admin"
-                  className={`flex items-center gap-2 px-3 xl:px-4 py-2 rounded-lg transition-colors text-sm xl:text-base ${
-                    location.pathname === '/admin' ? 'bg-surfaceElevated text-textPrimary font-semibold' : 'text-textSecondary hover:text-textPrimary hover:bg-surfaceElevated'
-                  }`}
-                >
-                  <Shield size={20} />
-                  <span>Admin</span>
-                </Link>
-              )}
-
-              {/* User avatar dropdown */}
               <UserDropdown />
             </nav>
 
@@ -215,86 +212,43 @@ function AppLayout() {
             </button>
           </div>
 
-          {/* Mobile Navigation - flat list with section headers */}
+          {/* Mobile Navigation */}
           {mobileMenuOpen && (
             <nav className="lg:hidden mt-4 pt-4 border-t border-border space-y-1">
-              {/* Dashboard */}
-              <Link
-                to="/"
-                onClick={closeMobileMenu}
-                className={`flex items-center gap-3 px-4 py-3 rounded transition-colors ${
-                  location.pathname === '/' ? 'bg-success/20 text-success' : 'bg-surfaceElevated hover:bg-interactive'
-                }`}
-              >
+              <Link to="/" onClick={closeMobileMenu} className={`${mobileNavLinkClass('/')} bg-surfaceElevated`}>
                 <BarChart3 size={20} />
                 <span>Dashboard</span>
               </Link>
 
-              {/* Scouting section */}
               <div className="pt-2">
                 <p className="px-4 py-1 text-xs font-semibold text-textMuted uppercase tracking-wider">Scouting</p>
                 {scoutingItems.map(({ to, icon: Icon, label }) => (
-                  <Link
-                    key={to}
-                    to={to}
-                    onClick={closeMobileMenu}
-                    className={`flex items-center gap-3 px-4 py-3 rounded transition-colors ${
-                      location.pathname === to ? 'bg-success/20 text-success' : 'hover:bg-interactive'
-                    }`}
-                  >
+                  <Link key={to} to={to} onClick={closeMobileMenu} className={mobileNavLinkClass(to)}>
                     <Icon size={20} />
                     <span>{label}</span>
                   </Link>
                 ))}
               </div>
 
-              {/* Strategy section */}
+              <div className="pt-2">
+                <p className="px-4 py-1 text-xs font-semibold text-textMuted uppercase tracking-wider">Analysis</p>
+                {analysisItems.map(({ to, icon: Icon, label }) => (
+                  <Link key={to} to={to} onClick={closeMobileMenu} className={mobileNavLinkClass(to)}>
+                    <Icon size={20} />
+                    <span>{label}</span>
+                  </Link>
+                ))}
+              </div>
+
               <div className="pt-2">
                 <p className="px-4 py-1 text-xs font-semibold text-textMuted uppercase tracking-wider">Strategy</p>
                 {strategyItems.map(({ to, icon: Icon, label }) => (
-                  <Link
-                    key={to}
-                    to={to}
-                    onClick={closeMobileMenu}
-                    className={`flex items-center gap-3 px-4 py-3 rounded transition-colors ${
-                      location.pathname === to || location.pathname.startsWith(to + '/') ? 'bg-success/20 text-success' : 'hover:bg-interactive'
-                    }`}
-                  >
+                  <Link key={to} to={to} onClick={closeMobileMenu} className={mobileNavLinkClass(to)}>
                     <Icon size={20} />
                     <span>{label}</span>
                   </Link>
                 ))}
               </div>
-
-              {/* Event */}
-              <div className="pt-2">
-                <Link
-                  to="/event"
-                  onClick={closeMobileMenu}
-                  className={`flex items-center gap-3 px-4 py-3 rounded transition-colors ${
-                    location.pathname === '/event' ? 'bg-success/20 text-success' : 'hover:bg-interactive'
-                  }`}
-                >
-                  <Calendar size={20} />
-                  <span>Event Setup</span>
-                </Link>
-              </div>
-
-              {/* Admin (admins only) */}
-              {isAdmin && (
-                <div className="pt-2">
-                  <Link
-                    to="/admin"
-                    onClick={closeMobileMenu}
-                    className={`flex items-center gap-3 px-4 py-3 rounded transition-colors ${
-                      location.pathname === '/admin' ? 'bg-success/20 text-success' : 'hover:bg-interactive'
-                    }`}
-                  >
-                    <Shield size={20} />
-                    <span>Admin</span>
-                  </Link>
-                </div>
-              )}
 
               {/* User info + sign out */}
               <div className="pt-4 mt-2 border-t border-border">
@@ -303,6 +257,16 @@ function AppLayout() {
                     <img src={user.photoURL} alt="" className="h-8 w-8 rounded-full" />
                   )}
                   <span className="flex-1 text-sm text-textSecondary truncate">{user?.email}</span>
+                  {isAdmin && (
+                    <Link
+                      to="/admin"
+                      onClick={closeMobileMenu}
+                      className="flex items-center gap-2 px-3 py-2 hover:bg-interactive rounded transition-colors text-sm"
+                    >
+                      <Shield size={16} />
+                      Admin
+                    </Link>
+                  )}
                   <button
                     onClick={() => { closeMobileMenu(); signOut(); }}
                     className="flex items-center gap-2 px-3 py-2 text-danger hover:bg-danger/10 rounded transition-colors text-sm"
