@@ -238,7 +238,7 @@ function PredictionContent({
                     <th className="px-3 py-2 text-left text-textSecondary">Team</th>
                     <th className="px-3 py-2 text-right text-textSecondary">Auto</th>
                     <th className="px-3 py-2 text-right text-textSecondary">Teleop</th>
-                    <th className="px-3 py-2 text-right text-textSecondary">Tower</th>
+                    <th className="hidden sm:table-cell px-3 py-2 text-right text-textSecondary">Tower</th>
                     <th className="px-3 py-2 text-right text-textSecondary">Total</th>
                     <th className="px-3 py-2 text-right text-textSecondary">Rel.</th>
                   </tr>
@@ -249,7 +249,7 @@ function PredictionContent({
                       <td className="px-3 py-2 text-textPrimary font-medium">{t.teamNumber}</td>
                       <td className="px-3 py-2 text-right text-textSecondary">{(t.autoHubPoints + t.autoTowerPoints).toFixed(1)}</td>
                       <td className="px-3 py-2 text-right text-textSecondary">{t.teleopHubPoints.toFixed(1)}</td>
-                      <td className="px-3 py-2 text-right text-textSecondary">{(t.autoTowerPoints + t.endgameTowerPoints).toFixed(1)}</td>
+                      <td className="hidden sm:table-cell px-3 py-2 text-right text-textSecondary">{(t.autoTowerPoints + t.endgameTowerPoints).toFixed(1)}</td>
                       <td className="px-3 py-2 text-right text-textPrimary font-medium">{t.totalPoints.toFixed(1)}</td>
                       <td className={`px-3 py-2 text-right ${confidenceColor(t.reliability >= 0.9 ? 'high' : t.reliability >= 0.75 ? 'medium' : 'low')}`}>
                         {(t.reliability * 100).toFixed(0)}%
@@ -495,8 +495,8 @@ export default function AlliancePredictor() {
                             <th className="px-3 py-2 text-right text-blueAlliance">Pred.</th>
                             <th className="px-3 py-2 text-left text-textSecondary">Blue Alliance</th>
                             <th className="px-3 py-2 text-center text-textSecondary">Favored</th>
-                            <th className="px-3 py-2 text-right text-textSecondary">Red RP</th>
-                            <th className="px-3 py-2 text-right text-textSecondary">Blue RP</th>
+                            <th className="hidden md:table-cell px-3 py-2 text-right text-textSecondary">Red RP</th>
+                            <th className="hidden md:table-cell px-3 py-2 text-right text-textSecondary">Blue RP</th>
                             {qualPredictions.some(p => p.played) && (
                               <>
                                 <th className="px-3 py-2 text-right text-textMuted">Actual</th>
@@ -536,8 +536,8 @@ export default function AlliancePredictor() {
                                 }`}>
                                   {result.favoredAlliance === 'even' ? '=' : `${result.favoredAlliance === 'red' ? 'R' : 'B'}+${result.scoreDiff.toFixed(0)}`}
                                 </td>
-                                <td className="px-3 py-2 text-right text-warning">{result.redRP.expectedTotalRP.toFixed(1)}</td>
-                                <td className="px-3 py-2 text-right text-warning">{result.blueRP.expectedTotalRP.toFixed(1)}</td>
+                                <td className="hidden md:table-cell px-3 py-2 text-right text-warning">{result.redRP.expectedTotalRP.toFixed(1)}</td>
+                                <td className="hidden md:table-cell px-3 py-2 text-right text-warning">{result.blueRP.expectedTotalRP.toFixed(1)}</td>
                                 {qualPredictions.some(p => p.played) && (
                                   <>
                                     <td className="px-3 py-2 text-right text-textMuted">

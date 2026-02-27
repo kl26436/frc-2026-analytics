@@ -253,15 +253,15 @@ function TeamDetail() {
                   <th className="px-3 py-3 text-left text-textSecondary text-sm font-semibold">Match</th>
                   <th className="px-3 py-3 text-center text-textSecondary text-sm font-semibold">Video</th>
                   <th className="px-3 py-3 text-center text-textSecondary text-sm font-semibold">Alliance</th>
-                  <th className="px-3 py-3 text-center text-textSecondary text-sm font-semibold">Start</th>
-                  <th className="px-3 py-3 text-right text-textSecondary text-sm font-semibold">Auto Scored</th>
-                  <th className="px-3 py-3 text-center text-textSecondary text-sm font-semibold">Auto Climb</th>
+                  <th className="hidden md:table-cell px-3 py-3 text-center text-textSecondary text-sm font-semibold">Start</th>
+                  <th className="hidden md:table-cell px-3 py-3 text-right text-textSecondary text-sm font-semibold">Auto Scored</th>
+                  <th className="hidden md:table-cell px-3 py-3 text-center text-textSecondary text-sm font-semibold">Auto Climb</th>
                   <th className="px-3 py-3 text-right text-textSecondary text-sm font-semibold">Auto Pts</th>
-                  <th className="px-3 py-3 text-right text-textSecondary text-sm font-semibold">Teleop Scored</th>
-                  <th className="px-3 py-3 text-right text-textSecondary text-sm font-semibold">Passes</th>
+                  <th className="hidden md:table-cell px-3 py-3 text-right text-textSecondary text-sm font-semibold">Teleop Scored</th>
+                  <th className="hidden md:table-cell px-3 py-3 text-right text-textSecondary text-sm font-semibold">Passes</th>
                   <th className="px-3 py-3 text-right text-textSecondary text-sm font-semibold">Teleop Pts</th>
                   <th className="px-3 py-3 text-center text-textSecondary text-sm font-semibold">Climb</th>
-                  <th className="px-3 py-3 text-right text-textSecondary text-sm font-semibold">End Pts</th>
+                  <th className="hidden md:table-cell px-3 py-3 text-right text-textSecondary text-sm font-semibold">End Pts</th>
                   <th className="px-3 py-3 text-right text-textSecondary text-sm font-semibold">Total Pts</th>
                   <th className="px-3 py-3 text-center text-textSecondary text-sm font-semibold">Flags</th>
                   <th className="px-3 py-3 text-left text-textSecondary text-sm font-semibold">Notes</th>
@@ -310,11 +310,11 @@ function TeamDetail() {
                           {alliance.toUpperCase()}
                         </span>
                       </td>
-                      <td className="px-3 py-3 text-center text-textSecondary">
+                      <td className="hidden md:table-cell px-3 py-3 text-center text-textSecondary">
                         {startZone > 0 ? `Z${startZone}` : '-'}
                       </td>
-                      <td className="px-3 py-3 text-right text-textSecondary">{autoScored}</td>
-                      <td className="px-3 py-3 text-center">
+                      <td className="hidden md:table-cell px-3 py-3 text-right text-textSecondary">{autoScored}</td>
+                      <td className="hidden md:table-cell px-3 py-3 text-center">
                         {entry.auton_AUTON_CLIMBED > 0 ? (
                           <span className="text-success font-semibold">Y</span>
                         ) : (
@@ -322,8 +322,8 @@ function TeamDetail() {
                         )}
                       </td>
                       <td className="px-3 py-3 text-right font-semibold">{points.autoPoints}</td>
-                      <td className="px-3 py-3 text-right text-textSecondary">{teleopScored}</td>
-                      <td className="px-3 py-3 text-right text-textSecondary">{passes > 0 ? passes : '-'}</td>
+                      <td className="hidden md:table-cell px-3 py-3 text-right text-textSecondary">{teleopScored}</td>
+                      <td className="hidden md:table-cell px-3 py-3 text-right text-textSecondary">{passes > 0 ? passes : '-'}</td>
                       <td className="px-3 py-3 text-right font-semibold">{points.teleopPoints}</td>
                       <td className="px-3 py-3 text-center">
                         <span className={climbLevel >= 2 ? 'font-semibold text-success' : climbLevel === 1 ? 'font-semibold' : 'text-textMuted'}>
@@ -333,7 +333,7 @@ function TeamDetail() {
                           <span className="ml-1 text-danger text-xs">(failed)</span>
                         )}
                       </td>
-                      <td className="px-3 py-3 text-right font-semibold">{points.endgamePoints}</td>
+                      <td className="hidden md:table-cell px-3 py-3 text-right font-semibold">{points.endgamePoints}</td>
                       <td className="px-3 py-3 text-right font-bold">{points.total}</td>
                       <td className="px-3 py-3 text-center text-xs space-x-1">
                         {entry.lost_connection && <span className="text-danger">LOST</span>}

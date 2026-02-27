@@ -382,10 +382,10 @@ function DataQuality() {
                   <th className="text-left py-2 px-3 font-medium">Match</th>
                   <th className="text-center py-2 px-3 font-medium">Alliance</th>
                   <th className="text-center py-2 px-3 font-medium">Moved</th>
-                  <th className="text-center py-2 px-3 font-medium">Passes</th>
-                  <th className="text-center py-2 px-3 font-medium">Attempts</th>
+                  <th className="hidden md:table-cell text-center py-2 px-3 font-medium">Passes</th>
+                  <th className="hidden md:table-cell text-center py-2 px-3 font-medium">Attempts</th>
                   <th className="text-center py-2 px-3 font-medium">Scored</th>
-                  <th className="text-center py-2 px-3 font-medium">Misses</th>
+                  <th className="hidden md:table-cell text-center py-2 px-3 font-medium">Misses</th>
                   <th className="text-center py-2 px-3 font-medium">Eff %</th>
                   <th className="text-center py-2 px-3 font-medium">FMS/Scout</th>
                 </tr>
@@ -434,10 +434,10 @@ function DataQuality() {
                           }`}>{row.alliance}</span>
                         </td>
                         <td className="py-2.5 px-3 text-center font-semibold">{row.scoutTotal}</td>
-                        <td className="py-2.5 px-3 text-center text-textSecondary">{row.totalPasses > 0 ? row.totalPasses : '-'}</td>
-                        <td className="py-2.5 px-3 text-center font-semibold">{row.adjustedTotal}</td>
+                        <td className="hidden md:table-cell py-2.5 px-3 text-center text-textSecondary">{row.totalPasses > 0 ? row.totalPasses : '-'}</td>
+                        <td className="hidden md:table-cell py-2.5 px-3 text-center font-semibold">{row.adjustedTotal}</td>
                         <td className="py-2.5 px-3 text-center font-semibold">{row.tbaTotal}</td>
-                        <td className={`py-2.5 px-3 text-center font-bold ${
+                        <td className={`hidden md:table-cell py-2.5 px-3 text-center font-bold ${
                           row.adjustedDelta > 0 ? 'text-warning' : 'text-textMuted'
                         }`}>
                           {row.adjustedDelta > 0 ? row.adjustedDelta : '-'}

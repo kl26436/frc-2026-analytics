@@ -35,7 +35,7 @@ function TeamList() {
   const [sortCriteria, setSortCriteria] = useState<SortCriteria[]>([
     { field: 'avgTotalPoints', direction: 'desc' }
   ]);
-  const [viewMode, setViewMode] = useState<ViewMode>('table');
+  const [viewMode, setViewMode] = useState<ViewMode>(typeof window !== 'undefined' && window.innerWidth < 768 ? 'cards' : 'table');
 
   // Click-to-compare state (up to 4 on desktop, 3 on mobile)
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
