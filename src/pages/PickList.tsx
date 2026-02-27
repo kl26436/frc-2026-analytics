@@ -1640,6 +1640,7 @@ function PickList() {
   const setRedFlagThresholds = usePickListStore(state => state.setRedFlagThresholds);
   const autoFlagTeams = usePickListStore(state => state.autoFlagTeams);
   const clearAllFlags = usePickListStore(state => state.clearAllFlags);
+  const importFromTBARankings = usePickListStore(state => state.importFromTBARankings);
 
   // Watchlist functions
   const toggleWatchlist = usePickListStore(state => state.toggleWatchlist);
@@ -1980,6 +1981,21 @@ function PickList() {
               >
                 <Upload size={18} />
                 <span>Import</span>
+              </button>
+              <button
+                onClick={() => {
+                  if (!tbaData?.rankings) return;
+                  const hasTeams = (pickList?.teams.filter(t => t.tier !== 'tier1').length ?? 0) > 0;
+                  if (hasTeams && !confirm('This will replace Potatoes and Chicken Nuggets with current TBA rankings (top 12 → Potatoes, rest → Chicken Nuggets). Your Steak teams are preserved. Continue?')) return;
+                  importFromTBARankings(tbaData.rankings);
+                }}
+                disabled={!tbaData?.rankings}
+                title={tbaData?.rankings ? 'Auto-populate tiers from TBA event rankings' : 'No TBA rankings available — fetch TBA data first'}
+                className="flex items-center gap-2 px-3 md:px-4 py-2 bg-success/20 text-success hover:bg-success/30 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors text-sm md:text-base"
+              >
+                <TrendingUp size={18} />
+                <span className="hidden sm:inline">Import TBA Rankings</span>
+                <span className="sm:hidden">TBA</span>
               </button>
             </>
           )}

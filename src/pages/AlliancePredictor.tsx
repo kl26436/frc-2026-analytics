@@ -631,7 +631,7 @@ export default function AlliancePredictor() {
                 <div className="bg-surface border border-border rounded-lg p-4">
                   <h3 className="font-medium text-textPrimary mb-1">Quick Matchups Grid</h3>
                   <p className="text-xs text-textSecondary mb-3">
-                    Click any cell to see the full prediction. Rows = Red alliance, Columns = Blue alliance.
+                    Win probability for the row (Red) alliance. Darker = larger edge. Click any cell for the full prediction.
                   </p>
                   <div className="overflow-x-auto">
                     <table className="text-xs border-separate border-spacing-1">
@@ -649,11 +649,10 @@ export default function AlliancePredictor() {
                             Red<br />↓
                           </th>
                           {allianceTeams.map((teams, bIdx) => (
-                            <th key={bIdx} className="px-1 text-center">
-                              <div className="text-blueAlliance font-medium">A{bIdx + 1}</div>
-                              <div className="text-textMuted font-normal leading-tight" style={{ fontSize: '10px' }}>
-                                {teams.slice(0, 2).join(', ')}
-                                {teams.length > 2 && <span>…</span>}
+                            <th key={bIdx} className="px-1 pb-1 text-center min-w-[88px]">
+                              <div className="text-blueAlliance font-semibold">A{bIdx + 1}</div>
+                              <div className="text-textMuted font-normal leading-tight" style={{ fontSize: '11px' }}>
+                                {teams.join(', ')}
                               </div>
                             </th>
                           ))}
@@ -663,47 +662,53 @@ export default function AlliancePredictor() {
                         {quickGrid.map((row, rIdx) => (
                           <tr key={rIdx}>
                             {/* Row header with team numbers */}
-                            <td className="pr-2 text-right align-middle">
-                              <div className="text-redAlliance font-medium">A{rIdx + 1}</div>
-                              <div className="text-textMuted leading-tight" style={{ fontSize: '10px' }}>
-                                {allianceTeams[rIdx].slice(0, 2).join(', ')}
-                                {allianceTeams[rIdx].length > 2 && <span>…</span>}
+                            <td className="pr-3 text-right align-middle whitespace-nowrap">
+                              <div className="text-redAlliance font-semibold">A{rIdx + 1}</div>
+                              <div className="text-textMuted leading-tight" style={{ fontSize: '11px' }}>
+                                {allianceTeams[rIdx].join(', ')}
                               </div>
                             </td>
                             {row.map((cell, bIdx) => {
                               const isSelf = rIdx === bIdx;
                               const isSelected = redAllianceIdx === rIdx && blueAllianceIdx === bIdx;
+                              const winProb = cell.redRP.winProbability;
+                              const redFavored = winProb > 0.55;
+                              const blueFavored = winProb < 0.45;
+                              const margin = Math.abs(winProb - 0.5);
+                              const displayPct = Math.round(Math.max(winProb, 1 - winProb) * 100);
                               const bgColor = isSelf
                                 ? 'bg-surfaceElevated'
-                                : cell.favoredAlliance === 'even'
-                                ? 'bg-surfaceElevated'
-                                : cell.favoredAlliance === 'red'
-                                ? 'bg-redAlliance/20'
-                                : 'bg-blueAlliance/20';
+                                : redFavored
+                                  ? margin > 0.3 ? 'bg-redAlliance/40' : margin > 0.2 ? 'bg-redAlliance/25' : 'bg-redAlliance/15'
+                                  : blueFavored
+                                  ? margin > 0.3 ? 'bg-blueAlliance/40' : margin > 0.2 ? 'bg-blueAlliance/25' : 'bg-blueAlliance/15'
+                                  : 'bg-surfaceElevated';
                               const textColor = isSelf
                                 ? 'text-textMuted'
-                                : cell.favoredAlliance === 'even'
-                                ? 'text-textMuted'
-                                : cell.favoredAlliance === 'red'
-                                ? 'text-redAlliance'
-                                : 'text-blueAlliance';
+                                : redFavored ? 'text-redAlliance' : blueFavored ? 'text-blueAlliance' : 'text-textMuted';
                               return (
-                                <td key={bIdx} className="p-0">
+                                <td key={bIdx} className="p-0.5">
                                   <button
                                     disabled={isSelf}
                                     onClick={() => { setRedAllianceIdx(rIdx); setBlueAllianceIdx(bIdx); }}
-                                    title={isSelf ? 'Same alliance' : `${allianceLabel(rIdx)} vs ${allianceLabel(bIdx)}`}
-                                    className={`w-16 h-12 rounded text-center font-medium transition-all ${bgColor} ${textColor} ${
+                                    title={isSelf ? 'Same alliance' : `${allianceLabel(rIdx)} vs ${allianceLabel(bIdx)}: ${displayPct}% ${redFavored ? 'Red' : blueFavored ? 'Blue' : 'Even'}`}
+                                    className={`w-20 h-14 rounded text-center transition-all ${bgColor} ${
                                       isSelf
-                                        ? 'opacity-30 cursor-default'
+                                        ? 'cursor-default opacity-30'
                                         : 'hover:ring-1 hover:ring-textSecondary cursor-pointer'
                                     } ${isSelected ? 'ring-2 ring-textPrimary' : ''}`}
                                   >
-                                    {isSelf
-                                      ? '—'
-                                      : cell.favoredAlliance === 'even'
-                                      ? '='
-                                      : `${cell.favoredAlliance === 'red' ? 'R' : 'B'}+${cell.scoreDiff.toFixed(0)}`}
+                                    {isSelf ? (
+                                      <span className="text-textMuted text-base">—</span>
+                                    ) : (
+                                      <div className="flex flex-col items-center leading-tight gap-0.5">
+                                        <span className={`font-bold text-sm ${textColor}`}>{displayPct}%</span>
+                                        <span className="text-textMuted font-normal" style={{ fontSize: '10px' }}>
+                                          {redFavored ? 'Red' : blueFavored ? 'Blue' : 'Even'}
+                                          {(redFavored || blueFavored) && ` +${cell.scoreDiff.toFixed(0)}`}
+                                        </span>
+                                      </div>
+                                    )}
                                   </button>
                                 </td>
                               );
@@ -715,22 +720,26 @@ export default function AlliancePredictor() {
                   </div>
 
                   {/* Legend */}
-                  <div className="flex flex-wrap gap-4 mt-3 text-xs text-textSecondary">
+                  <div className="flex flex-wrap gap-x-5 gap-y-1.5 mt-3 text-xs text-textSecondary">
                     <div className="flex items-center gap-1.5">
-                      <div className="w-3 h-3 rounded bg-redAlliance/20" />
-                      <span>Red favored</span>
+                      <div className="flex gap-0.5">
+                        <div className="w-4 h-4 rounded bg-redAlliance/15" />
+                        <div className="w-4 h-4 rounded bg-redAlliance/25" />
+                        <div className="w-4 h-4 rounded bg-redAlliance/40" />
+                      </div>
+                      <span>Red favored (55→65→80%+)</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <div className="w-3 h-3 rounded bg-blueAlliance/20" />
-                      <span>Blue favored</span>
+                      <div className="flex gap-0.5">
+                        <div className="w-4 h-4 rounded bg-blueAlliance/15" />
+                        <div className="w-4 h-4 rounded bg-blueAlliance/25" />
+                        <div className="w-4 h-4 rounded bg-blueAlliance/40" />
+                      </div>
+                      <span>Blue favored (55→65→80%+)</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <div className="w-3 h-3 rounded bg-surfaceElevated border border-border" />
-                      <span>Even matchup</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-medium text-textMuted">—</span>
-                      <span>Same alliance</span>
+                      <div className="w-4 h-4 rounded bg-surfaceElevated border border-border" />
+                      <span>Even / same alliance</span>
                     </div>
                   </div>
                 </div>
