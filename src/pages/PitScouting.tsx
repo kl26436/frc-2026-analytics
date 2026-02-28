@@ -4,7 +4,7 @@ import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { usePitScoutStore } from '../store/usePitScoutStore';
 import { useFirebaseAuth } from '../hooks/useFirebaseAuth';
 import { createEmptyPitScoutEntry } from '../types/pitScouting';
-import type { PitScoutEntry, DriveType, ClimbLevel, VibeCheck, ProgrammingLanguage } from '../types/pitScouting';
+import type { PitScoutEntry, DriveType, ClimbLevel, VibeCheck, ProgrammingLanguage, DriverExperience } from '../types/pitScouting';
 
 function PitScouting() {
   const eventCode = useAnalyticsStore(state => state.eventCode);
@@ -34,7 +34,7 @@ function PitScouting() {
   // Load entries once authenticated
   useEffect(() => {
     if (eventCode && user) {
-      loadEntriesFromFirestore(eventCode).catch(console.error);
+      loadEntriesFromFirestore(eventCode).catch(() => {});
     }
   }, [eventCode, user, loadEntriesFromFirestore]);
 
@@ -94,8 +94,8 @@ function PitScouting() {
       setLastScoutName(scoutName);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
-    } catch (err) {
-      console.error('Failed to save:', err);
+    } catch {
+      // save failed — setSaving(false) in finally handles UI
     } finally {
       setSaving(false);
     }
@@ -365,84 +365,24 @@ function PitScouting() {
         </div>
       </div>
 
-      {/* Fuel Intake */}
+      {/* Field Navigation */}
       <div className="bg-surface p-4 rounded-lg border border-border">
-        <h2 className="font-bold mb-3">FUEL Intake</h2>
-        <div className="space-y-2">
-          {[
-            { key: 'fuelIntakeGround', label: 'Ground Pickup' },
-            { key: 'fuelIntakeChute', label: 'From CHUTE (Human Player)' },
-            { key: 'fuelIntakeOutpost', label: 'From OUTPOST' },
-          ].map(({ key, label }) => (
-            <button
-              key={key}
-              onClick={() => updateField(key as keyof typeof formData, !formData[key as keyof typeof formData])}
-              className={`w-full flex items-center justify-between px-4 py-3 rounded-lg border transition-colors ${
-                formData[key as keyof typeof formData]
-                  ? 'bg-success/20 border-success'
-                  : 'bg-card border-border hover:border-textSecondary'
-              }`}
-            >
-              <span>{label}</span>
-              <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
-                formData[key as keyof typeof formData] ? 'border-success bg-success' : 'border-textMuted'
-              }`}>
-                {formData[key as keyof typeof formData] && <CheckCircle size={14} className="text-background" />}
-              </div>
-            </button>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mt-4">
-          <div>
-            <label className="text-sm text-textSecondary block mb-1">Capacity (# FUEL)</label>
-            <input
-              type="number"
-              value={formData.fuelCapacity}
-              onChange={e => updateField('fuelCapacity', parseInt(e.target.value) || 0)}
-              min={0}
-              className="w-full bg-card border border-border rounded-lg px-3 py-2 text-textPrimary"
-            />
+        <h2 className="font-bold mb-3">Field Navigation</h2>
+        <button
+          onClick={() => updateField('canGoUnderTrench', !formData.canGoUnderTrench)}
+          className={`w-full flex items-center justify-between px-4 py-3 rounded-lg border transition-colors ${
+            formData.canGoUnderTrench
+              ? 'bg-success/20 border-success'
+              : 'bg-card border-border hover:border-textSecondary'
+          }`}
+        >
+          <span>Can Go Under TRENCH</span>
+          <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
+            formData.canGoUnderTrench ? 'border-success bg-success' : 'border-textMuted'
+          }`}>
+            {formData.canGoUnderTrench && <CheckCircle size={14} className="text-background" />}
           </div>
-          <div>
-            <label className="text-sm text-textSecondary block mb-1">Cycle Time (sec)</label>
-            <input
-              type="number"
-              value={formData.fuelCycleTime}
-              onChange={e => updateField('fuelCycleTime', parseInt(e.target.value) || 0)}
-              min={0}
-              className="w-full bg-card border border-border rounded-lg px-3 py-2 text-textPrimary"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Scoring & Obstacles */}
-      <div className="bg-surface p-4 rounded-lg border border-border">
-        <h2 className="font-bold mb-3">Scoring & Obstacles</h2>
-        <div className="space-y-2">
-          {[
-            { key: 'canScoreActiveHub', label: 'Can Score in HUB' },
-            { key: 'canCrossBumps', label: 'Can Cross BUMPS' },
-          ].map(({ key, label }) => (
-            <button
-              key={key}
-              onClick={() => updateField(key as keyof typeof formData, !formData[key as keyof typeof formData])}
-              className={`w-full flex items-center justify-between px-4 py-3 rounded-lg border transition-colors ${
-                formData[key as keyof typeof formData]
-                  ? 'bg-success/20 border-success'
-                  : 'bg-card border-border hover:border-textSecondary'
-              }`}
-            >
-              <span>{label}</span>
-              <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
-                formData[key as keyof typeof formData] ? 'border-success bg-success' : 'border-textMuted'
-              }`}>
-                {formData[key as keyof typeof formData] && <CheckCircle size={14} className="text-background" />}
-              </div>
-            </button>
-          ))}
-        </div>
+        </button>
       </div>
 
       {/* Tower Climb */}
@@ -462,68 +402,6 @@ function PitScouting() {
               {value === 'level1' ? 'Level 1' : value === 'level2' ? 'Level 2' : value === 'level3' ? 'Level 3' : 'None'}
             </button>
           ))}
-        </div>
-
-        <div className="mt-4">
-          <label className="text-sm text-textSecondary block mb-1">Climb Time (sec)</label>
-          <input
-            type="number"
-            value={formData.climbTime}
-            onChange={e => updateField('climbTime', parseInt(e.target.value) || 0)}
-            min={0}
-            className="w-full bg-card border border-border rounded-lg px-3 py-2 text-textPrimary"
-          />
-        </div>
-      </div>
-
-      {/* Auto */}
-      <div className="bg-surface p-4 rounded-lg border border-border">
-        <h2 className="font-bold mb-3">Auto Capabilities</h2>
-        <div className="space-y-2">
-          {[
-            { key: 'autoMobility', label: 'Can Leave Starting Zone' },
-            { key: 'autoClimbLevel1', label: 'Can Reach LEVEL 1 in Auto' },
-          ].map(({ key, label }) => (
-            <button
-              key={key}
-              onClick={() => updateField(key as keyof typeof formData, !formData[key as keyof typeof formData])}
-              className={`w-full flex items-center justify-between px-4 py-3 rounded-lg border transition-colors ${
-                formData[key as keyof typeof formData]
-                  ? 'bg-success/20 border-success'
-                  : 'bg-card border-border hover:border-textSecondary'
-              }`}
-            >
-              <span>{label}</span>
-              <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
-                formData[key as keyof typeof formData] ? 'border-success bg-success' : 'border-textMuted'
-              }`}>
-                {formData[key as keyof typeof formData] && <CheckCircle size={14} className="text-background" />}
-              </div>
-            </button>
-          ))}
-        </div>
-
-        <div className="mt-4">
-          <label className="text-sm text-textSecondary block mb-1">Auto FUEL Scored (typical)</label>
-          <input
-            type="number"
-            value={formData.autoFuelCapability}
-            onChange={e => updateField('autoFuelCapability', parseInt(e.target.value) || 0)}
-            min={0}
-            max={50}
-            className="w-full bg-card border border-border rounded-lg px-3 py-2 text-textPrimary"
-          />
-        </div>
-
-        <div className="mt-4">
-          <label className="text-sm text-textSecondary block mb-1">Auto Notes</label>
-          <textarea
-            value={formData.autoNotes}
-            onChange={e => updateField('autoNotes', e.target.value)}
-            rows={2}
-            className="w-full bg-card border border-border rounded-lg px-3 py-2 text-textPrimary resize-none"
-            placeholder="Starting positions, paths, etc."
-          />
         </div>
       </div>
 
@@ -557,6 +435,45 @@ function PitScouting() {
                   }`}
                 >
                   {num}{num === 7 ? '+' : ''}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <button
+            onClick={() => updateField('rotatesDriveTeam', !formData.rotatesDriveTeam)}
+            className={`w-full flex items-center justify-between px-4 py-3 rounded-lg border transition-colors ${
+              formData.rotatesDriveTeam
+                ? 'bg-success/20 border-success'
+                : 'bg-card border-border hover:border-textSecondary'
+            }`}
+          >
+            <span>Rotates Drive Team Members</span>
+            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
+              formData.rotatesDriveTeam ? 'border-success bg-success' : 'border-textMuted'
+            }`}>
+              {formData.rotatesDriveTeam && <CheckCircle size={14} className="text-background" />}
+            </div>
+          </button>
+
+          <div>
+            <label className="text-sm text-textSecondary block mb-1">Driver Experience</label>
+            <div className="grid grid-cols-3 gap-2">
+              {([
+                { value: '1stYear', label: '1st Year' },
+                { value: '2ndYear', label: '2nd Year' },
+                { value: '3plusYears', label: '3+ Years' },
+              ] as { value: DriverExperience; label: string }[]).map(({ value, label }) => (
+                <button
+                  key={value}
+                  onClick={() => updateField('driverExperience', value)}
+                  className={`px-4 py-3 rounded-lg border font-semibold transition-colors ${
+                    formData.driverExperience === value
+                      ? 'bg-success/20 border-success text-success'
+                      : 'bg-card border-border hover:border-success'
+                  }`}
+                >
+                  {label}
                 </button>
               ))}
             </div>

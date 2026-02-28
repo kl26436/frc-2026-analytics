@@ -587,8 +587,8 @@ export const usePickListStore = create<PickListState>()(
         try {
           const pickList = JSON.parse(jsonString) as PickList;
           set({ pickList });
-        } catch (error) {
-          console.error('Failed to import pick list:', error);
+        } catch {
+          // invalid JSON — silently ignore
         }
       },
     }),

@@ -82,7 +82,7 @@ import {
   applyLiveSameTierMove,
   applyLiveCrossTierMove,
   applyLiveMoveAbove,
-} from './pickListHelpers';
+} from '../utils/pickListHelpers';
 
 // Multi-column DnD collision strategy:
 //   1. If the pointer is directly over a team card → use that card (precise within-tier insertion)

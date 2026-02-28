@@ -124,8 +124,8 @@ export const usePitScoutStore = create<PitScoutState>()(
         try {
           const storageRef = ref(storage, path);
           await deleteObject(storageRef);
-        } catch (err) {
-          console.warn('Failed to delete photo:', err);
+        } catch {
+          // photo may already be deleted — ignore
         }
       },
 

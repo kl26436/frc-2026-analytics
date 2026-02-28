@@ -93,8 +93,8 @@ function AllianceSelection() {
         createdByName: displayName,
         startedAt: new Date().toISOString(),
       });
-    } catch (err) {
-      console.error('Failed to broadcast live session:', err);
+    } catch {
+      // best-effort broadcast — continue to session regardless
     }
 
     navigate(`/alliance-selection/${result.sessionCode}`);
@@ -168,7 +168,7 @@ function AllianceSelection() {
     if (!success) return; // Firestore update failed — don't proceed with cleanup
     if (status === 'completed') {
       leavingRef.current = true; // Block auto-rejoin during transition
-      try { await clearLiveSession(); } catch (err) { console.error('Failed to clear live session:', err); }
+      try { await clearLiveSession(); } catch { /* best-effort cleanup */ }
       // Auto-leave after ending
       leaveSession();
       setActiveSessionId(null);

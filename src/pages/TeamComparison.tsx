@@ -66,7 +66,7 @@ function TeamComparison() {
             videos[team.teamNumber] = matchesWithVideos;
           }
         } catch (error) {
-          console.error(`Failed to load videos for team ${team.teamNumber}:`, error);
+          // video fetch failed for this team — skip
         }
       }
       setTeamVideos(videos);

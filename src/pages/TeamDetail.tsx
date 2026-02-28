@@ -82,7 +82,7 @@ function TeamDetail() {
         const matches = await getTeamEventMatches(teamKey, eventCode, tbaApiKey);
         setTbaMatches(matches);
       } catch (error) {
-        console.error('Failed to load TBA matches:', error);
+        // TBA fetch failed — matches section will be empty
       }
     }
     fetchMatches();

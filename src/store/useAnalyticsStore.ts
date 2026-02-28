@@ -130,7 +130,6 @@ export const useAnalyticsStore = create<AnalyticsState>()(
             get().calculateRealStats();
           },
           (error) => {
-            console.error('Scout data listener error:', error);
             set({ dataError: error.message, dataLoading: false });
           }
         );
@@ -144,9 +143,7 @@ export const useAnalyticsStore = create<AnalyticsState>()(
               set({ syncMeta: snapshot.data() as SyncMeta });
             }
           },
-          (error) => {
-            console.error('SyncMeta listener error:', error);
-          }
+          () => {}
         );
 
         // 3. Subscribe to TBA matches: tbaData/{eventKey}/matches
@@ -158,9 +155,7 @@ export const useAnalyticsStore = create<AnalyticsState>()(
             set({ pgTbaMatches: matches });
             get().calculateFuelAttribution();
           },
-          (error) => {
-            console.error('TBA matches listener error:', error);
-          }
+          () => {}
         );
 
         // 4. Subscribe to scout actions: scoutActions/{eventKey}/actions
@@ -172,9 +167,7 @@ export const useAnalyticsStore = create<AnalyticsState>()(
             set({ scoutActions: actions });
             get().calculateFuelAttribution();
           },
-          (error) => {
-            console.error('Scout actions listener error:', error);
-          }
+          () => {}
         );
 
         // 5. Subscribe to excluded entries: excludedEntries/{eventKey}/excluded
@@ -186,9 +179,7 @@ export const useAnalyticsStore = create<AnalyticsState>()(
             set({ excludedEntries: excluded });
             get().calculateRealStats();
           },
-          (error) => {
-            console.error('Excluded entries listener error:', error);
-          }
+          () => {}
         );
       },
 
