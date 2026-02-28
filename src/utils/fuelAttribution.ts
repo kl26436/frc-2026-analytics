@@ -17,10 +17,12 @@ export interface RobotMatchFuel {
   isDedicatedPasser: boolean;
   hasActionData: boolean;
   // Quality flags
-  isNoShow: boolean;         // no_robot_on_field → absolute zero
+  isNoShow: boolean;         // no_robot_on_field flag was set by scouter
+  isRealNoShow: boolean;     // truly no data — no-show flag AND no fuel data
+  noShowMislabeled: boolean; // no-show flag set but robot has fuel data (scouter mistake)
   isLostConnection: boolean; // lost_connection → keep pre-death data, flag for review
   isBulldozedOnly: boolean;  // eff_rep_bulldozed_fuel AND no FUEL_SCORE/FUEL_PASS actions
-  isZeroWeight: boolean;     // true if excluded from power curve (no-show OR bulldozed-only)
+  isZeroWeight: boolean;     // true if excluded from power curve (real-no-show OR bulldozed-only)
   hasFuelActions: boolean;   // has at least one FUEL_SCORE or FUEL_PASS (trusted signal)
   // From FMS attribution (power curve β) — ball counts
   fmsAllianceTotal: number;  // hubScore.totalCount for this alliance
@@ -135,6 +137,8 @@ export function computeMatchFuelAttribution(
     hasActionData: boolean;
     hasFuelActions: boolean;
     isNoShow: boolean;
+    isRealNoShow: boolean;
+    noShowMislabeled: boolean;
     isLostConnection: boolean;
     isBulldozedOnly: boolean;
     isZeroWeight: boolean;
@@ -158,7 +162,13 @@ export function computeMatchFuelAttribution(
 
     // Bulldozed-only = flagged as bulldozer AND has no trusted fuel actions
     const isBulldozedOnly = !!entry.eff_rep_bulldozed_fuel && !hasFuelActions;
-    const isZeroWeight = isNoShow || isBulldozedOnly;
+
+    // No-show: only trust the flag if the robot has no actual fuel data.
+    // If there's fuel data despite the no-show flag, the flag is likely a scouter mistake.
+    const hasSummaryFuel = (entry.auton_FUEL_SCORE || 0) + (entry.teleop_FUEL_SCORE || 0) +
+      (entry.auton_FUEL_PASS || 0) + (entry.teleop_FUEL_PASS || 0) > 0;
+    const isRealNoShow = isNoShow && !hasFuelActions && !hasSummaryFuel;
+    const isZeroWeight = isRealNoShow || isBulldozedOnly;
 
     let totalMoved: number;
     let passes: number;
@@ -167,8 +177,8 @@ export function computeMatchFuelAttribution(
     let teleopShots: number;
     let hasActionData = false;
 
-    // No-show robots get absolute zero
-    if (isNoShow) {
+    // Only zero out if genuinely no data — if no-show flag + fuel data, compute normally
+    if (isRealNoShow) {
       totalMoved = 0;
       passes = 0;
       shots = 0;
@@ -220,7 +230,8 @@ export function computeMatchFuelAttribution(
     return {
       entry, totalMoved, passes, shots, autoShots, teleopShots,
       isDedicatedPasser, hasActionData, hasFuelActions,
-      isNoShow, isLostConnection, isBulldozedOnly, isZeroWeight,
+      isNoShow, isRealNoShow, noShowMislabeled: isNoShow && !isRealNoShow,
+      isLostConnection, isBulldozedOnly, isZeroWeight,
       alliance,
     };
   });
@@ -297,6 +308,8 @@ export function computeMatchFuelAttribution(
         isDedicatedPasser: r.isDedicatedPasser,
         hasActionData: r.hasActionData,
         isNoShow: r.isNoShow,
+        isRealNoShow: r.isRealNoShow,
+        noShowMislabeled: r.noShowMislabeled,
         isLostConnection: r.isLostConnection,
         isBulldozedOnly: r.isBulldozedOnly,
         isZeroWeight: r.isZeroWeight,

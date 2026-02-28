@@ -1,9 +1,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { collection, doc, onSnapshot } from 'firebase/firestore';
+import { collection, doc, onSnapshot, setDoc, deleteDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
-import { db, functions } from '../lib/firebase';
-import type { ScoutEntry, TeamStatistics, PgTBAMatch, SyncMeta, RobotActions } from '../types/scouting';
+import { db, functions, auth } from '../lib/firebase';
+import type { ScoutEntry, TeamStatistics, PgTBAMatch, SyncMeta, RobotActions, ExcludedEntry } from '../types/scouting';
 import type { TBAEventData } from '../types/tba';
 import { calculateAllTeamStatistics, calculateTeamStatistics } from '../utils/statistics';
 import { computeMatchFuelAttribution, aggregateTeamFuel } from '../utils/fuelAttribution';
@@ -17,6 +17,7 @@ import { getAllEventData } from '../utils/tbaApi';
 interface AnalyticsState {
   // ── Scout data ──
   scoutEntries: ScoutEntry[];
+  excludedEntries: ExcludedEntry[];
   teamStatistics: TeamStatistics[];
   pgTbaMatches: PgTBAMatch[];
   scoutActions: RobotActions[];
@@ -55,6 +56,7 @@ interface AnalyticsState {
   setAutoRefresh: (enabled: boolean) => void;
   clearTBAData: () => void;
   triggerSync: (eventKey: string) => Promise<SyncMeta>;
+  toggleExcludeEntry: (matchNumber: number, teamNumber: number) => Promise<void>;
 }
 
 // Store unsubscribe functions outside the store to avoid serialization issues
@@ -62,6 +64,7 @@ let _unsubScout: (() => void) | null = null;
 let _unsubSyncMeta: (() => void) | null = null;
 let _unsubTbaMatches: (() => void) | null = null;
 let _unsubActions: (() => void) | null = null;
+let _unsubExcluded: (() => void) | null = null;
 let _subscribedEventKey: string | null = null;
 
 export const useAnalyticsStore = create<AnalyticsState>()(
@@ -69,6 +72,7 @@ export const useAnalyticsStore = create<AnalyticsState>()(
     (set, get) => ({
       // Initial state
       scoutEntries: [],
+      excludedEntries: [],
       teamStatistics: [],
       pgTbaMatches: [],
       scoutActions: [],
@@ -103,6 +107,7 @@ export const useAnalyticsStore = create<AnalyticsState>()(
           dataLoading: true,
           dataError: null,
           scoutEntries: [],
+          excludedEntries: [],
           teamStatistics: [],
           pgTbaMatches: [],
           scoutActions: [],
@@ -171,6 +176,20 @@ export const useAnalyticsStore = create<AnalyticsState>()(
             console.error('Scout actions listener error:', error);
           }
         );
+
+        // 5. Subscribe to excluded entries: excludedEntries/{eventKey}/excluded
+        const excludedRef = collection(db, 'excludedEntries', eventKey, 'excluded');
+        _unsubExcluded = onSnapshot(
+          excludedRef,
+          (snapshot) => {
+            const excluded: ExcludedEntry[] = snapshot.docs.map(d => d.data() as ExcludedEntry);
+            set({ excludedEntries: excluded });
+            get().calculateRealStats();
+          },
+          (error) => {
+            console.error('Excluded entries listener error:', error);
+          }
+        );
       },
 
       unsubscribeFromData: () => {
@@ -178,15 +197,18 @@ export const useAnalyticsStore = create<AnalyticsState>()(
         if (_unsubSyncMeta) { _unsubSyncMeta(); _unsubSyncMeta = null; }
         if (_unsubTbaMatches) { _unsubTbaMatches(); _unsubTbaMatches = null; }
         if (_unsubActions) { _unsubActions(); _unsubActions = null; }
+        if (_unsubExcluded) { _unsubExcluded(); _unsubExcluded = null; }
         _subscribedEventKey = null;
       },
 
       calculateRealStats: () => {
-        const { scoutEntries, tbaData } = get();
+        const { scoutEntries, excludedEntries, tbaData } = get();
+        const excludedSet = new Set(excludedEntries.map(e => `${e.matchNumber}_${e.teamNumber}`));
+        const filteredEntries = scoutEntries.filter(e => !excludedSet.has(`${e.match_number}_${e.team_number}`));
         const teamNamesMap = new Map<number, string>(
           tbaData?.teams?.map(t => [t.team_number, t.nickname]) ?? []
         );
-        const teamStatistics = calculateAllTeamStatistics(scoutEntries, teamNamesMap.size > 0 ? teamNamesMap : undefined);
+        const teamStatistics = calculateAllTeamStatistics(filteredEntries, teamNamesMap.size > 0 ? teamNamesMap : undefined);
 
         // Include TBA teams that have no scout entries yet (new event)
         if (tbaData?.teams) {
@@ -200,19 +222,21 @@ export const useAnalyticsStore = create<AnalyticsState>()(
           }
         }
 
-        const teamTrends = computeAllTeamTrends(scoutEntries);
+        const teamTrends = computeAllTeamTrends(filteredEntries);
         set({ teamStatistics, teamTrends });
         get().calculateFuelAttribution();
       },
 
       calculateFuelAttribution: () => {
-        const { scoutEntries, scoutActions, pgTbaMatches } = get();
-        if (scoutEntries.length === 0 || pgTbaMatches.length === 0) {
+        const { scoutEntries, excludedEntries, scoutActions, pgTbaMatches } = get();
+        const excludedSet = new Set(excludedEntries.map(e => `${e.matchNumber}_${e.teamNumber}`));
+        const filteredEntries = scoutEntries.filter(e => !excludedSet.has(`${e.match_number}_${e.team_number}`));
+        if (filteredEntries.length === 0 || pgTbaMatches.length === 0) {
           // No FMS data yet — still build prediction inputs from scout-only
           get().calculatePredictionInputs();
           return;
         }
-        const matchFuelAttribution = computeMatchFuelAttribution(scoutEntries, scoutActions, pgTbaMatches);
+        const matchFuelAttribution = computeMatchFuelAttribution(filteredEntries, scoutActions, pgTbaMatches);
         const teamFuelStats = aggregateTeamFuel(matchFuelAttribution);
         set({ matchFuelAttribution, teamFuelStats });
         get().calculatePredictionInputs();
@@ -251,6 +275,7 @@ export const useAnalyticsStore = create<AnalyticsState>()(
             tbaData: null,
             tbaError: null,
             scoutEntries: [],
+            excludedEntries: [],
             teamStatistics: [],
             pgTbaMatches: [],
             scoutActions: [],
@@ -303,6 +328,25 @@ export const useAnalyticsStore = create<AnalyticsState>()(
         const syncFn = httpsCallable<{ eventKey: string }, SyncMeta>(functions, 'syncScoutData');
         const result = await syncFn({ eventKey });
         return result.data;
+      },
+
+      toggleExcludeEntry: async (matchNumber: number, teamNumber: number) => {
+        const { excludedEntries, eventCode } = get();
+        const docId = `${matchNumber}_${teamNumber}`;
+        const docRef = doc(db, 'excludedEntries', eventCode, 'excluded', docId);
+        const existing = excludedEntries.find(
+          e => e.matchNumber === matchNumber && e.teamNumber === teamNumber
+        );
+        if (existing) {
+          await deleteDoc(docRef);
+        } else {
+          await setDoc(docRef, {
+            matchNumber,
+            teamNumber,
+            excludedAt: new Date().toISOString(),
+            excludedBy: auth.currentUser?.email ?? 'unknown',
+          });
+        }
       },
     }),
     {

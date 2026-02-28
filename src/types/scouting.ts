@@ -268,6 +268,18 @@ export function computeRobotFuelFromActions(robotActions: RobotActions): {
 }
 
 // ============================================================================
+// Excluded Entries (Data Quality exclusions)
+// ============================================================================
+
+/** A scout entry marked as excluded from team stats, fuel attribution, and predictions */
+export interface ExcludedEntry {
+  matchNumber: number;
+  teamNumber: number;
+  excludedAt: string;   // ISO timestamp
+  excludedBy: string;   // user email
+}
+
+// ============================================================================
 // Sync Metadata
 // ============================================================================
 

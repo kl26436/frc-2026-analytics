@@ -5,6 +5,7 @@ import { AlertTriangle, CheckCircle, ChevronDown, ArrowUpDown, Search, TrendingU
 // CheckCircle used in climb table
 import { estimateMatchFuel, parseClimbLevel, getAlliance, getStation, computeRobotFuelFromActions } from '../types/scouting';
 import type { PgTBAMatch, ScoutEntry, RobotActions } from '../types/scouting';
+import type { RobotMatchFuel } from '../utils/fuelAttribution';
 
 // ── Types ──
 type RobotFuelDetail = {
@@ -56,6 +57,77 @@ type ClimbComparisonRow = {
   isMatch: boolean;
 };
 
+// ── Mismatch Diagnosis ──
+type RobotContribution = {
+  teamNumber: number;
+  contribution: number;   // shots - attributed scored (positive = over-scouted)
+  pctOfDelta: number;     // 0-100
+  shots: number;
+  scored: number;
+  accuracy: number;       // 0-1
+};
+
+type MismatchDiagnosis = {
+  summary: string;
+  robotContributions: RobotContribution[];
+  outlierTeam?: number;
+};
+
+function diagnoseMismatch(
+  row: FuelComparisonRow,
+  matchFuelAttribution: RobotMatchFuel[]
+): MismatchDiagnosis | null {
+  if (!row.isMismatch) return null;
+
+  const contributions: RobotContribution[] = row.robots.map(r => {
+    const attrRow = matchFuelAttribution.find(
+      a => a.matchNumber === row.matchNum && a.teamNumber === r.teamNumber
+    );
+    const shots = r.hasActionData ? r.actionShots : (r.isDedicatedPasser ? 0 : r.fuelEstimate - r.passes);
+    const scored = attrRow?.shotsScored ?? 0;
+    const accuracy = attrRow?.scoringAccuracy ?? 0;
+    return {
+      teamNumber: r.teamNumber,
+      contribution: shots - scored,
+      pctOfDelta: 0, // filled below
+      shots,
+      scored,
+      accuracy,
+    };
+  });
+
+  const totalAbsContribution = contributions.reduce((s, c) => s + Math.abs(c.contribution), 0);
+  if (totalAbsContribution > 0) {
+    contributions.forEach(c => { c.pctOfDelta = (Math.abs(c.contribution) / totalAbsContribution) * 100; });
+  }
+
+  // Check for single-robot outlier
+  const sorted = [...contributions].sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution));
+  const top = sorted[0];
+  const isOutlier = top && top.pctOfDelta > 60 && Math.abs(top.contribution) > 3;
+
+  let summary: string;
+  if (isOutlier) {
+    summary = `Team ${top.teamNumber} drove this mismatch — ${top.shots} attempts scouted, ${top.scored.toFixed(1)} attributed by FMS`;
+  } else {
+    const avgAccuracy = contributions.length > 0
+      ? Math.round(contributions.reduce((s, c) => s + c.accuracy, 0) / contributions.length * 100)
+      : 0;
+    summary = `Alliance-wide mismatch — average scoring accuracy ${avgAccuracy}%`;
+  }
+
+  const direction = row.adjustedDelta > 0
+    ? ` (scouts tracked ${Math.abs(row.adjustedDelta)} more than FMS)`
+    : ` (FMS scored ${Math.abs(row.adjustedDelta)} more than scouts tracked)`;
+  summary += direction;
+
+  return {
+    summary,
+    robotContributions: contributions,
+    outlierTeam: isOutlier ? top.teamNumber : undefined,
+  };
+}
+
 const card = 'bg-surface rounded-xl border border-border p-6 shadow-card';
 const cardHeader = 'text-base font-bold flex items-center gap-2 mb-4';
 
@@ -64,8 +136,15 @@ function DataQuality() {
   const pgTbaMatches = useAnalyticsStore(state => state.pgTbaMatches);
   const scoutActions = useAnalyticsStore(state => state.scoutActions);
   const matchFuelAttribution = useAnalyticsStore(state => state.matchFuelAttribution);
+  const excludedEntries = useAnalyticsStore(state => state.excludedEntries);
+  const toggleExcludeEntry = useAnalyticsStore(state => state.toggleExcludeEntry);
   const tbaData = useAnalyticsStore(state => state.tbaData);
   const fetchTBAData = useAnalyticsStore(state => state.fetchTBAData);
+
+  const excludedSet = useMemo(() =>
+    new Set(excludedEntries.map(e => `${e.matchNumber}_${e.teamNumber}`)),
+    [excludedEntries]
+  );
 
   useEffect(() => {
     if (!tbaData) fetchTBAData();
@@ -497,17 +576,52 @@ function DataQuality() {
                                 </div>
                               </div>
 
+                              {/* Mismatch diagnosis banner */}
+                              {row.isMismatch && (() => {
+                                const diagnosis = diagnoseMismatch(row, matchFuelAttribution);
+                                if (!diagnosis) return null;
+                                return (
+                                  <div className="bg-danger/5 border border-danger/20 rounded-lg p-3 text-sm">
+                                    <p className="font-semibold text-danger flex items-center gap-2">
+                                      <AlertTriangle size={14} />
+                                      {diagnosis.summary}
+                                    </p>
+                                    <div className="flex h-3 rounded-full overflow-hidden mt-2 bg-surface">
+                                      {diagnosis.robotContributions.map(rc => (
+                                        <div
+                                          key={rc.teamNumber}
+                                          style={{ width: `${Math.max(rc.pctOfDelta, 2)}%` }}
+                                          className={rc.teamNumber === diagnosis.outlierTeam ? 'bg-danger' : 'bg-warning/60'}
+                                          title={`${rc.teamNumber}: ${rc.pctOfDelta.toFixed(0)}%`}
+                                        />
+                                      ))}
+                                    </div>
+                                    <div className="flex gap-4 mt-1.5 text-xs text-textMuted">
+                                      {diagnosis.robotContributions.map(rc => (
+                                        <span key={rc.teamNumber}>
+                                          <span className={`font-bold ${rc.teamNumber === diagnosis.outlierTeam ? 'text-danger' : 'text-textPrimary'}`}>
+                                            {rc.teamNumber}
+                                          </span>
+                                          : {rc.contribution > 0 ? '+' : ''}{rc.contribution.toFixed(1)} ({Math.round(rc.accuracy * 100)}% acc)
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              })()}
+
                               {/* Per-robot detail cards */}
                               <div className="space-y-2">
                                 {row.robots.map(r => {
                                   const attrRow = matchFuelAttribution.find(a => a.matchNumber === row.matchNum && a.teamNumber === r.teamNumber);
                                   const displayShots = r.hasActionData ? r.actionShots : (r.isDedicatedPasser ? 0 : r.fuelEstimate - r.passes);
                                   const displayPasses = r.hasActionData ? r.actionPasses : (r.isDedicatedPasser ? r.fuelEstimate : r.passes);
+                                  const isExcluded = excludedSet.has(`${row.matchNum}_${r.teamNumber}`);
 
                                   return (
                                     <div
                                       key={r.teamNumber}
-                                      className={`rounded-lg border p-3 text-xs ${
+                                      className={`rounded-lg border p-3 text-xs ${isExcluded ? 'opacity-40' : ''} ${
                                         attrRow?.isNoShow ? 'bg-danger/10 border-danger/30' :
                                         attrRow?.isBulldozedOnly ? 'bg-danger/5 border-danger/20' :
                                         attrRow?.isLostConnection ? 'bg-warning/5 border-warning/20' :
@@ -520,12 +634,17 @@ function DataQuality() {
                                         <div className="space-y-1.5">
                                           <div className="flex items-center gap-2">
                                             <span className="text-lg font-black text-textPrimary">{r.teamNumber}</span>
+                                            {isExcluded && (
+                                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-textMuted/20 text-textMuted">EXCLUDED</span>
+                                            )}
                                             {r.isSecondReview && (
                                               <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-danger/20 text-danger">FLAGGED</span>
                                             )}
                                           </div>
                                           <div className="flex flex-wrap gap-1">
-                                            {attrRow?.isNoShow ? (
+                                            {attrRow?.noShowMislabeled ? (
+                                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-warning/20 text-warning" title="Scouter marked no-show but robot has scoring data — flag ignored">NO-SHOW?</span>
+                                            ) : attrRow?.isRealNoShow ? (
                                               <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-danger/20 text-danger">NO-SHOW</span>
                                             ) : attrRow?.isBulldozedOnly ? (
                                               <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-danger/20 text-danger">BULLDOZE</span>
@@ -549,6 +668,21 @@ function DataQuality() {
                                           {r.notes && (
                                             <p className="text-[10px] text-warning italic mt-1">"{r.notes}"</p>
                                           )}
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              if (isExcluded || confirm(`Exclude team ${r.teamNumber} Q${row.matchNum} from all stats and predictions?`)) {
+                                                toggleExcludeEntry(row.matchNum, r.teamNumber);
+                                              }
+                                            }}
+                                            className={`mt-1.5 px-2 py-1 rounded text-[10px] font-bold transition-colors ${
+                                              isExcluded
+                                                ? 'bg-danger/20 text-danger hover:bg-danger/30'
+                                                : 'bg-textMuted/10 text-textMuted hover:bg-danger/10 hover:text-danger'
+                                            }`}
+                                          >
+                                            {isExcluded ? 'RESTORE' : 'EXCLUDE'}
+                                          </button>
                                         </div>
 
                                         {/* Col 2: Raw scout input */}

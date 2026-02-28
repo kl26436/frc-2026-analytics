@@ -213,6 +213,8 @@ Where:
 | Dedicated passer | 0 shots → 0 scored attribution |
 | FMS > scout shots (undercount) | Model still works — attributed total sums to FMS truth |
 | Field anomaly (Q1 RED: 73→1) | Model works — everyone gets ~0.3 scored |
+| Real no-show (flag + no fuel data) | 0 weight → 0 scored attribution, excluded from power curve |
+| Mislabeled no-show (flag + has fuel data) | Treated as normal robot — flag ignored, computed from actual actions |
 
 ---
 
@@ -240,10 +242,18 @@ All core features are implemented and deployed:
 - Surfaced in customizable metrics (avg scored, accuracy, passes, moved) via `fuelField` in metric definitions
 - Data Quality page shows match-level scout vs FMS discrepancy analysis
 
+### No-Show Mislabel Detection
+
+The system distinguishes between **real no-shows** and **mislabeled no-shows**:
+
+- **Real no-show** (`isRealNoShow`): `no_robot_on_field` flag is set AND the robot has zero fuel actions and zero summary fuel data. Robot gets 0 weight in the power curve → 0 scored attribution. The FMS total is distributed among the remaining robots.
+- **Mislabeled no-show** (`noShowMislabeled`): `no_robot_on_field` flag is set BUT the robot has actual fuel actions or summary data. The no-show flag is ignored and the robot is computed normally. This catches scouter mistakes (e.g., Team 1721 Q5 was marked no-show but had 19 teleop actions logged).
+
+The Data Quality page shows a yellow **NO-SHOW?** badge for mislabeled no-shows and a red **NO-SHOW** badge for real ones.
+
 ### Remaining
 
 - Re-evaluate β after regular-season events with more matches per team
-- Consider adding match-level undercount/overcount alerts to Data Quality page
 
 ## Scripts Reference
 
