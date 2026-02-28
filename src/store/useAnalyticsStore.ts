@@ -5,7 +5,7 @@ import { httpsCallable } from 'firebase/functions';
 import { db, functions } from '../lib/firebase';
 import type { ScoutEntry, TeamStatistics, PgTBAMatch, SyncMeta, RobotActions } from '../types/scouting';
 import type { TBAEventData } from '../types/tba';
-import { calculateAllTeamStatistics } from '../utils/statistics';
+import { calculateAllTeamStatistics, calculateTeamStatistics } from '../utils/statistics';
 import { computeMatchFuelAttribution, aggregateTeamFuel } from '../utils/fuelAttribution';
 import type { RobotMatchFuel, TeamFuelStats } from '../utils/fuelAttribution';
 import { buildPredictionInputs } from '../utils/predictions';
@@ -182,8 +182,24 @@ export const useAnalyticsStore = create<AnalyticsState>()(
       },
 
       calculateRealStats: () => {
-        const { scoutEntries } = get();
-        const teamStatistics = calculateAllTeamStatistics(scoutEntries);
+        const { scoutEntries, tbaData } = get();
+        const teamNamesMap = new Map<number, string>(
+          tbaData?.teams?.map(t => [t.team_number, t.nickname]) ?? []
+        );
+        const teamStatistics = calculateAllTeamStatistics(scoutEntries, teamNamesMap.size > 0 ? teamNamesMap : undefined);
+
+        // Include TBA teams that have no scout entries yet (new event)
+        if (tbaData?.teams) {
+          const scoutedTeams = new Set(teamStatistics.map(t => t.teamNumber));
+          for (const tbaTeam of tbaData.teams) {
+            if (!scoutedTeams.has(tbaTeam.team_number)) {
+              teamStatistics.push(
+                calculateTeamStatistics(tbaTeam.team_number, [], tbaTeam.nickname)
+              );
+            }
+          }
+        }
+
         const teamTrends = computeAllTeamTrends(scoutEntries);
         set({ teamStatistics, teamTrends });
         get().calculateFuelAttribution();
@@ -266,6 +282,7 @@ export const useAnalyticsStore = create<AnalyticsState>()(
         try {
           const data = await getAllEventData(code);
           set({ tbaData: data, tbaLoading: false });
+          get().calculateRealStats(); // Re-run so team names from TBA propagate to statistics
           return data;
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Failed to fetch TBA data';

@@ -340,6 +340,17 @@ function Dashboard() {
                   <div className="flex items-center justify-between">
                     <div className="text-center flex-1">
                       <p className="text-xs text-redAlliance font-semibold mb-1">Red</p>
+                      <div className="flex justify-center gap-1 mb-2 flex-wrap">
+                        {targetMatch.alliances.red.team_keys.map(k => {
+                          const num = teamKeyToNumber(k);
+                          return (
+                            <Link key={k} to={`/teams/${num}`} onClick={e => e.stopPropagation()}
+                              className={`text-[11px] font-bold px-1.5 py-0.5 rounded hover:opacity-80 transition-opacity ${num === HOME ? 'bg-redAlliance/20 text-redAlliance ring-1 ring-redAlliance/50' : 'bg-surface text-textSecondary'}`}>
+                              {num}
+                            </Link>
+                          );
+                        })}
+                      </div>
                       <p className="text-3xl md:text-4xl font-black text-redAlliance">{red.totalScore.toFixed(1)}</p>
                       <span className={`inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-semibold ${
                         red.confidence === 'high' ? 'bg-success/20 text-success' : red.confidence === 'medium' ? 'bg-warning/20 text-warning' : 'bg-danger/20 text-danger'
@@ -348,6 +359,17 @@ function Dashboard() {
                     <span className="text-textMuted text-lg font-semibold px-4">vs</span>
                     <div className="text-center flex-1">
                       <p className="text-xs text-blueAlliance font-semibold mb-1">Blue</p>
+                      <div className="flex justify-center gap-1 mb-2 flex-wrap">
+                        {targetMatch.alliances.blue.team_keys.map(k => {
+                          const num = teamKeyToNumber(k);
+                          return (
+                            <Link key={k} to={`/teams/${num}`} onClick={e => e.stopPropagation()}
+                              className={`text-[11px] font-bold px-1.5 py-0.5 rounded hover:opacity-80 transition-opacity ${num === HOME ? 'bg-blueAlliance/20 text-blueAlliance ring-1 ring-blueAlliance/50' : 'bg-surface text-textSecondary'}`}>
+                              {num}
+                            </Link>
+                          );
+                        })}
+                      </div>
                       <p className="text-3xl md:text-4xl font-black text-blueAlliance">{blue.totalScore.toFixed(1)}</p>
                       <span className={`inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-semibold ${
                         blue.confidence === 'high' ? 'bg-success/20 text-success' : blue.confidence === 'medium' ? 'bg-warning/20 text-warning' : 'bg-danger/20 text-danger'

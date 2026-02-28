@@ -1,6 +1,7 @@
 // REBUILT 2026 Pit Scouting Types
 
 export type DriveType = 'swerve' | 'tank' | 'mecanum' | 'other';
+export type ProgrammingLanguage = 'java' | 'cpp' | 'python' | 'labview' | 'other';
 export type ClimbLevel = 'level1' | 'level2' | 'level3' | 'none';
 export type FuelIntake = 'ground' | 'chute' | 'outpost' | 'all';
 export type VibeCheck = 'good' | 'bad';
@@ -19,7 +20,8 @@ export interface PitScoutEntry {
   photoPath: string | null; // Firebase Storage path
 
   // Drive Train
-  driveType: DriveType;
+  driveType: DriveType | null;
+  programmingLanguage: ProgrammingLanguage | null;
 
   // Fuel Capabilities
   fuelIntakeGround: boolean;    // Can pick up FUEL from ground
@@ -29,7 +31,7 @@ export interface PitScoutEntry {
   fuelCycleTime: number;        // Estimated seconds per cycle
 
   // Scoring
-  canScoreActiveHub: boolean;   // Can score in active HUB
+  canScoreActiveHub: boolean;   // Can score in HUB
   canScoreInactiveHub: boolean; // Can score in inactive HUB (if applicable)
 
   // Obstacles
@@ -38,7 +40,6 @@ export interface PitScoutEntry {
   // Tower/Climb
   climbLevel: ClimbLevel;       // Highest climb level
   climbTime: number;            // Estimated seconds to climb
-  canAssistClimb: boolean;      // Can help other robots climb
 
   // Auto Capabilities
   autoMobility: boolean;        // Can leave starting zone
@@ -51,7 +52,7 @@ export interface PitScoutEntry {
   batteryCount: number;
 
   // Subjective
-  vibeCheck: VibeCheck;
+  vibeCheck: VibeCheck | null;
   specialFeatures: string;
   concerns: string;
   notes: string;
@@ -65,25 +66,25 @@ export const createEmptyPitScoutEntry = (eventCode: string, scoutName: string): 
   scoutName,
   photoUrl: null,
   photoPath: null,
-  driveType: 'swerve',
+  driveType: null,
+  programmingLanguage: null,
   fuelIntakeGround: false,
-  fuelIntakeChute: true,
+  fuelIntakeChute: false,
   fuelIntakeOutpost: false,
-  fuelCapacity: 1,
+  fuelCapacity: 0,
   fuelCycleTime: 0,
-  canScoreActiveHub: true,
+  canScoreActiveHub: false,
   canScoreInactiveHub: false,
-  canCrossBumps: true,
+  canCrossBumps: false,
   climbLevel: 'none',
   climbTime: 0,
-  canAssistClimb: false,
-  autoMobility: true,
+  autoMobility: false,
   autoFuelCapability: 0,
   autoClimbLevel1: false,
   autoNotes: '',
   coachName: '',
-  batteryCount: 4,
-  vibeCheck: 'good',
+  batteryCount: 0,
+  vibeCheck: null,
   specialFeatures: '',
   concerns: '',
   notes: '',

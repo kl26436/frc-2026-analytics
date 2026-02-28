@@ -175,10 +175,9 @@ function DataQuality() {
     return rows;
   }, [scoutEntries, pgTbaMatches, actionLookup]);
 
-  // Check if a row needs rescouting: mismatch, flagged by scouter, or no-show robot
+  // Check if a row needs rescouting: mismatch or flagged by scouter
   const fuelRowNeedsRescout = (row: FuelComparisonRow) => {
-    return row.isMismatch || row.robots.some(r => r.isSecondReview) ||
-      matchFuelAttribution.some(a => a.matchNumber === row.matchNum && a.alliance === row.alliance && a.isNoShow);
+    return row.isMismatch || row.robots.some(r => r.isSecondReview);
   };
 
   const displayedFuelRows = useMemo(() => {
@@ -394,8 +393,7 @@ function DataQuality() {
                 {displayedFuelRows.map((row, i) => {
                   const rowKey = `${row.matchNum}_${row.alliance}`;
                   const isExpanded = expandedFuelRows.has(rowKey);
-                  const needsRescout = row.isMismatch || row.robots.some(r => r.isSecondReview) ||
-                    matchFuelAttribution.some(a => a.matchNumber === row.matchNum && a.alliance === row.alliance && a.isNoShow);
+                  const needsRescout = fuelRowNeedsRescout(row);
                   return (
                     <>
                       <tr
@@ -424,7 +422,15 @@ function DataQuality() {
                               <PlayCircle size={14} />
                             </Link>
                             {needsRescout && (
-                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-danger/20 text-danger">RESCOUT?</span>
+                              <span className="inline-flex items-center gap-1">
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-danger/20 text-danger">RESCOUT?</span>
+                                {row.isMismatch && (
+                                  <span className="px-1 py-0.5 rounded text-[8px] font-semibold bg-warning/20 text-warning">MISMATCH</span>
+                                )}
+                                {row.robots.some(r => r.isSecondReview) && (
+                                  <span className="px-1 py-0.5 rounded text-[8px] font-semibold bg-blueAlliance/20 text-blueAlliance">SCOUTER</span>
+                                )}
+                              </span>
                             )}
                           </span>
                         </td>

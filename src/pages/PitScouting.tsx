@@ -4,7 +4,7 @@ import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { usePitScoutStore } from '../store/usePitScoutStore';
 import { useFirebaseAuth } from '../hooks/useFirebaseAuth';
 import { createEmptyPitScoutEntry } from '../types/pitScouting';
-import type { PitScoutEntry, DriveType, ClimbLevel, VibeCheck } from '../types/pitScouting';
+import type { PitScoutEntry, DriveType, ClimbLevel, VibeCheck, ProgrammingLanguage } from '../types/pitScouting';
 
 function PitScouting() {
   const eventCode = useAnalyticsStore(state => state.eventCode);
@@ -345,6 +345,26 @@ function PitScouting() {
         </div>
       </div>
 
+      {/* Programming Language */}
+      <div className="bg-surface p-4 rounded-lg border border-border">
+        <h2 className="font-bold mb-3">Programming Language</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+          {(['java', 'cpp', 'python', 'labview', 'other'] as ProgrammingLanguage[]).map(lang => (
+            <button
+              key={lang}
+              onClick={() => updateField('programmingLanguage', lang)}
+              className={`px-4 py-3 rounded-lg border font-semibold transition-colors ${
+                formData.programmingLanguage === lang
+                  ? 'bg-success/20 border-success text-success'
+                  : 'bg-card border-border hover:border-success'
+              }`}
+            >
+              {lang === 'cpp' ? 'C++' : lang.charAt(0).toUpperCase() + lang.slice(1)}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Fuel Intake */}
       <div className="bg-surface p-4 rounded-lg border border-border">
         <h2 className="font-bold mb-3">FUEL Intake</h2>
@@ -402,7 +422,7 @@ function PitScouting() {
         <h2 className="font-bold mb-3">Scoring & Obstacles</h2>
         <div className="space-y-2">
           {[
-            { key: 'canScoreActiveHub', label: 'Can Score in Active HUB' },
+            { key: 'canScoreActiveHub', label: 'Can Score in HUB' },
             { key: 'canCrossBumps', label: 'Can Cross BUMPS' },
           ].map(({ key, label }) => (
             <button
@@ -429,48 +449,30 @@ function PitScouting() {
       <div className="bg-surface p-4 rounded-lg border border-border">
         <h2 className="font-bold mb-3">TOWER Climb *</h2>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {([
-            { value: 'level3', label: 'Level 3', points: '30pts' },
-            { value: 'level2', label: 'Level 2', points: '20pts' },
-            { value: 'level1', label: 'Level 1', points: '10pts' },
-            { value: 'none', label: 'None', points: '—' },
-          ] as { value: ClimbLevel; label: string; points: string }[]).map(({ value, label, points }) => (
+          {(['level3', 'level2', 'level1', 'none'] as ClimbLevel[]).map(value => (
             <button
               key={value}
               onClick={() => updateField('climbLevel', value)}
-              className={`px-4 py-3 rounded-lg border transition-colors ${
+              className={`px-4 py-3 rounded-lg border font-semibold capitalize transition-colors ${
                 formData.climbLevel === value
                   ? 'bg-success/20 border-success text-success'
                   : 'bg-card border-border hover:border-success'
               }`}
             >
-              <div className="font-semibold">{label}</div>
-              <div className="text-xs text-textSecondary">{points}</div>
+              {value === 'level1' ? 'Level 1' : value === 'level2' ? 'Level 2' : value === 'level3' ? 'Level 3' : 'None'}
             </button>
           ))}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mt-4">
-          <div>
-            <label className="text-sm text-textSecondary block mb-1">Climb Time (sec)</label>
-            <input
-              type="number"
-              value={formData.climbTime}
-              onChange={e => updateField('climbTime', parseInt(e.target.value) || 0)}
-              min={0}
-              className="w-full bg-card border border-border rounded-lg px-3 py-2 text-textPrimary"
-            />
-          </div>
-          <button
-            onClick={() => updateField('canAssistClimb', !formData.canAssistClimb)}
-            className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg border transition-colors ${
-              formData.canAssistClimb
-                ? 'bg-success/20 border-success'
-                : 'bg-card border-border hover:border-success'
-            }`}
-          >
-            <span className="text-sm">Can Assist Climb</span>
-          </button>
+        <div className="mt-4">
+          <label className="text-sm text-textSecondary block mb-1">Climb Time (sec)</label>
+          <input
+            type="number"
+            value={formData.climbTime}
+            onChange={e => updateField('climbTime', parseInt(e.target.value) || 0)}
+            min={0}
+            className="w-full bg-card border border-border rounded-lg px-3 py-2 text-textPrimary"
+          />
         </div>
       </div>
 
