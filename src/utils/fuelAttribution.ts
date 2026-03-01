@@ -46,13 +46,13 @@ export interface RobotMatchFuel {
 
 // ── Power Curve Attribution ──────────────────────────────────────────────────
 
-const DEFAULT_BETA = 0.7;
+export const DEFAULT_BETA = 0.7;
 
 /**
  * Distribute fmsTotal across robots proportionally using shots^β.
  * Returns an array of attributed scored balls in the same order as `shots`.
  */
-function powerCurveAttribution(
+export function powerCurveAttribution(
   shots: number[],
   fmsTotal: number,
   beta: number,
@@ -106,11 +106,15 @@ function getTowerData(
  *   - autoScored, teleopScored (same curve applied to FMS auto/teleop counts)
  *   - scoringAccuracy (shotsScored / shots)
  */
+/** A function that distributes fmsTotal across robots given their shots. */
+export type AttributionFn = (shots: number[], fmsTotal: number) => number[];
+
 export function computeMatchFuelAttribution(
   scoutEntries: ScoutEntry[],
   scoutActions: RobotActions[],
   pgTbaMatches: PgTBAMatch[],
   beta: number = DEFAULT_BETA,
+  attributionFn?: AttributionFn,
 ): RobotMatchFuel[] {
   // 1. Build lookups
   const actionLookup = new Map<string, RobotActions>();
@@ -266,19 +270,20 @@ export function computeMatchFuelAttribution(
     // Sum of all alliance shots (for FMS/scout ratio)
     const allianceScoutShots = group.reduce((s, r) => s + r.shots, 0);
 
-    // Power curve on total shots for overall attribution
-    const allShots = group.map(r => r.shots);
-    const attributed = powerCurveAttribution(allShots, fmsAllianceTotal, beta);
+    // Attribution function: use custom if provided, otherwise power curve with beta
+    const attrib = attributionFn ?? ((s: number[], t: number) => powerCurveAttribution(s, t, beta));
 
-    // Power curve on auto/teleop shots for phase-level attribution (counts)
+    // Distribute FMS totals to individual robots
+    const allShots = group.map(r => r.shots);
+    const attributed = attrib(allShots, fmsAllianceTotal);
+
     const allAutoShots = group.map(r => r.autoShots);
     const allTeleopShots = group.map(r => r.teleopShots);
-    const autoAttributed = powerCurveAttribution(allAutoShots, fmsAutoCount, beta);
-    const teleopAttributed = powerCurveAttribution(allTeleopShots, fmsTeleopCount, beta);
+    const autoAttributed = attrib(allAutoShots, fmsAutoCount);
+    const teleopAttributed = attrib(allTeleopShots, fmsTeleopCount);
 
-    // Power curve on auto/teleop shots for point-level attribution
-    const autoPointsAttributed = powerCurveAttribution(allAutoShots, fmsAutoPoints, beta);
-    const teleopPointsAttributed = powerCurveAttribution(allTeleopShots, fmsTeleopPoints, beta);
+    const autoPointsAttributed = attrib(allAutoShots, fmsAutoPoints);
+    const teleopPointsAttributed = attrib(allTeleopShots, fmsTeleopPoints);
 
     // Unattributed = FMS total minus what was attributed (human player balls, etc)
     const totalAttributed = attributed.reduce((s, v) => s + v, 0);

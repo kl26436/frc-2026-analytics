@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
-import { BarChart3, Users, ClipboardList, Menu, X, Calendar, Swords, Handshake, ClipboardCheck, ChevronDown, Search, Target, Shield, LogOut, AlertTriangle, LineChart, PlayCircle, Eye } from 'lucide-react';
+import { BarChart3, Users, ClipboardList, Menu, X, Calendar, Swords, Handshake, ClipboardCheck, ChevronDown, Search, Target, Shield, LogOut, AlertTriangle, LineChart, PlayCircle, Eye, FlaskConical } from 'lucide-react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { useAuth } from '../contexts/AuthContext';
 import ActiveSessionBanner from './ActiveSessionBanner';
@@ -115,14 +115,24 @@ function UserDropdown() {
             <p className="text-xs text-textMuted truncate">{user?.email}</p>
           </div>
           {isAdmin && (
-            <Link
-              to="/admin"
-              onClick={() => setOpen(false)}
-              className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-interactive transition-colors"
-            >
-              <Shield size={16} />
-              Admin Settings
-            </Link>
+            <>
+              <Link
+                to="/admin"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-interactive transition-colors"
+              >
+                <Shield size={16} />
+                Admin Settings
+              </Link>
+              <Link
+                to="/calibration"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-interactive transition-colors"
+              >
+                <FlaskConical size={16} />
+                Fuel Calibration
+              </Link>
+            </>
           )}
           <button
             onClick={() => { setOpen(false); signOut(); }}
@@ -259,14 +269,24 @@ function AppLayout() {
                   )}
                   <span className="flex-1 text-sm text-textSecondary truncate">{user?.email}</span>
                   {isAdmin && (
-                    <Link
-                      to="/admin"
-                      onClick={closeMobileMenu}
-                      className="flex items-center gap-2 px-3 py-2 hover:bg-interactive rounded transition-colors text-sm"
-                    >
-                      <Shield size={16} />
-                      Admin
-                    </Link>
+                    <>
+                      <Link
+                        to="/admin"
+                        onClick={closeMobileMenu}
+                        className="flex items-center gap-2 px-3 py-2 hover:bg-interactive rounded transition-colors text-sm"
+                      >
+                        <Shield size={16} />
+                        Admin
+                      </Link>
+                      <Link
+                        to="/calibration"
+                        onClick={closeMobileMenu}
+                        className="flex items-center gap-2 px-3 py-2 hover:bg-interactive rounded transition-colors text-sm"
+                      >
+                        <FlaskConical size={16} />
+                        Calibrate
+                      </Link>
+                    </>
                   )}
                   <button
                     onClick={() => { closeMobileMenu(); signOut(); }}

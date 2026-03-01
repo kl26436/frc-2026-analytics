@@ -19,6 +19,7 @@ import DataQuality from './pages/DataQuality';
 import MatchReplay from './pages/MatchReplay';
 import NinjaDashboard from './pages/NinjaDashboard';
 import NinjaTeamDetail from './pages/NinjaTeamDetail';
+import FuelCalibration from './pages/FuelCalibration';
 
 function AppContent() {
   const setEventCode = useAnalyticsStore(state => state.setEventCode);
@@ -73,6 +74,7 @@ function AppContent() {
         <Route path="/ninja" element={<NinjaDashboard />} />
         <Route path="/ninja/:teamNumber" element={<NinjaTeamDetail />} />
         <Route path="/admin" element={<AdminSettings />} />
+        <Route path="/calibration" element={<FuelCalibration />} />
       </Route>
     </Routes>
   );

@@ -6,8 +6,9 @@ import { db, functions, auth } from '../lib/firebase';
 import type { ScoutEntry, TeamStatistics, PgTBAMatch, SyncMeta, RobotActions, ExcludedEntry } from '../types/scouting';
 import type { TBAEventData } from '../types/tba';
 import { calculateAllTeamStatistics, calculateTeamStatistics } from '../utils/statistics';
-import { computeMatchFuelAttribution, aggregateTeamFuel } from '../utils/fuelAttribution';
-import type { RobotMatchFuel, TeamFuelStats } from '../utils/fuelAttribution';
+import { computeMatchFuelAttribution, aggregateTeamFuel, powerCurveAttribution, DEFAULT_BETA } from '../utils/fuelAttribution';
+import type { RobotMatchFuel, TeamFuelStats, AttributionFn } from '../utils/fuelAttribution';
+import { logCurveAttribution, equalAttribution, rankBasedAttribution } from '../utils/modelComparison';
 import { buildPredictionInputs } from '../utils/predictions';
 import type { PredictionTeamInput } from '../utils/predictions';
 import { computeAllTeamTrends } from '../utils/trendAnalysis';
@@ -16,6 +17,11 @@ import { getAllEventData, getEventOPRs } from '../utils/tbaApi';
 import { computeOPR } from '../utils/opr';
 import type { OPRResults } from '../utils/opr';
 import type { TBAOPRs } from '../types/tba';
+
+export interface AttributionModelConfig {
+  family: 'power' | 'log' | 'equal' | 'rank';
+  beta: number; // only used for power family
+}
 
 interface AnalyticsState {
   // ── Scout data ──
@@ -45,6 +51,7 @@ interface AnalyticsState {
   selectedTeams: number[];
   eventCode: string;
   homeTeamNumber: number;
+  attributionModel: AttributionModelConfig;
 
   // ── Actions ──
   subscribeToData: (eventKey: string) => void;
@@ -64,6 +71,7 @@ interface AnalyticsState {
   clearTBAData: () => void;
   triggerSync: (eventKey: string) => Promise<SyncMeta>;
   toggleExcludeEntry: (matchNumber: number, teamNumber: number) => Promise<void>;
+  setAttributionModel: (config: AttributionModelConfig) => void;
 }
 
 // Store unsubscribe functions outside the store to avoid serialization issues
@@ -93,6 +101,7 @@ export const useAnalyticsStore = create<AnalyticsState>()(
       selectedTeams: [],
       eventCode: '2026week0',
       homeTeamNumber: 148,
+      attributionModel: { family: 'power', beta: DEFAULT_BETA },
       tbaApiKey: '',
       tbaData: null,
       tbaOPRs: null,
@@ -229,7 +238,7 @@ export const useAnalyticsStore = create<AnalyticsState>()(
       },
 
       calculateFuelAttribution: () => {
-        const { scoutEntries, excludedEntries, scoutActions, pgTbaMatches } = get();
+        const { scoutEntries, excludedEntries, scoutActions, pgTbaMatches, attributionModel } = get();
         const excludedSet = new Set(excludedEntries.map(e => `${e.matchNumber}_${e.teamNumber}`));
         const filteredEntries = scoutEntries.filter(e => !excludedSet.has(`${e.match_number}_${e.team_number}`));
         if (filteredEntries.length === 0 || pgTbaMatches.length === 0) {
@@ -237,7 +246,28 @@ export const useAnalyticsStore = create<AnalyticsState>()(
           get().calculatePredictionInputs();
           return;
         }
-        const matchFuelAttribution = computeMatchFuelAttribution(filteredEntries, scoutActions, pgTbaMatches);
+
+        // Build attribution function from selected model config
+        let attribFn: AttributionFn | undefined;
+        switch (attributionModel.family) {
+          case 'log':
+            attribFn = logCurveAttribution;
+            break;
+          case 'equal':
+            attribFn = (shots, total) => equalAttribution(shots, total, shots.map(s => s === 0));
+            break;
+          case 'rank':
+            attribFn = (shots, total) => rankBasedAttribution(shots, total, shots.map(s => s === 0));
+            break;
+          case 'power':
+          default:
+            // Use beta param — undefined attribFn falls back to powerCurveAttribution(beta)
+            break;
+        }
+
+        const matchFuelAttribution = computeMatchFuelAttribution(
+          filteredEntries, scoutActions, pgTbaMatches, attributionModel.beta, attribFn
+        );
         const teamFuelStats = aggregateTeamFuel(matchFuelAttribution);
         set({ matchFuelAttribution, teamFuelStats });
         get().calculateLocalOPR();
@@ -376,6 +406,11 @@ export const useAnalyticsStore = create<AnalyticsState>()(
           });
         }
       },
+
+      setAttributionModel: (config: AttributionModelConfig) => {
+        set({ attributionModel: config });
+        get().calculateFuelAttribution();
+      },
     }),
     {
       name: 'frc-analytics-storage',
@@ -388,6 +423,7 @@ export const useAnalyticsStore = create<AnalyticsState>()(
         tbaApiKey: state.tbaApiKey,
         tbaData: state.tbaData,
         autoRefreshEnabled: state.autoRefreshEnabled,
+        attributionModel: state.attributionModel,
       }),
     }
   )
