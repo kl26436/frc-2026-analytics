@@ -45,6 +45,16 @@ function TeamDetail() {
   const [selectedVideo, setSelectedVideo] = useState<{ matchNumber: number; videoUrl: string } | null>(null);
   const [selectedMatch, setSelectedMatch] = useState<ScoutEntry | null>(null);
   const [photoExpanded, setPhotoExpanded] = useState(false);
+
+  // Derive primary photo URL from photos array with legacy fallback
+  const primaryPhotoUrl = useMemo(() => {
+    if (!pitScoutEntry) return null;
+    if (pitScoutEntry.photos?.length) {
+      const primary = pitScoutEntry.photos.find(p => p.isPrimary) ?? pitScoutEntry.photos[0];
+      return primary?.url ?? null;
+    }
+    return pitScoutEntry.photoUrl ?? null;
+  }, [pitScoutEntry]);
   const teamStats = teamStatistics.find(t => t.teamNumber === teamNum);
 
   // Get real scout entries for this team
@@ -146,14 +156,14 @@ function TeamDetail() {
         >
           <ArrowLeft size={20} />
         </button>
-        {pitScoutEntry?.photoUrl && (
+        {primaryPhotoUrl && (
           <button
             onClick={() => setPhotoExpanded(true)}
             className="flex-shrink-0 w-16 h-16 md:w-20 md:h-20 rounded-lg overflow-hidden border border-border hover:border-blueAlliance transition-colors cursor-pointer"
-            title="View robot photo"
+            title="View robot photos"
           >
             <img
-              src={pitScoutEntry.photoUrl}
+              src={primaryPhotoUrl}
               alt={`Team ${teamNum} robot`}
               className="w-full h-full object-cover"
             />
@@ -715,18 +725,18 @@ function TeamDetail() {
           </div>
         </div>
       )}
-      {/* Robot Photo Modal */}
-      {photoExpanded && pitScoutEntry?.photoUrl && (
+      {/* Robot Photo Gallery Modal */}
+      {photoExpanded && pitScoutEntry && (primaryPhotoUrl || pitScoutEntry.photos?.length > 0) && (
         <div
           className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
           onClick={() => setPhotoExpanded(false)}
         >
           <div
-            className="bg-surface rounded-lg max-w-3xl w-full overflow-hidden"
+            className="bg-surface rounded-lg max-w-3xl w-full overflow-hidden max-h-[90vh] flex flex-col"
             onClick={e => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between p-4 border-b border-border">
-              <h3 className="font-bold">Team {teamNum} Robot</h3>
+            <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
+              <h3 className="font-bold">Team {teamNum} Robot Photos</h3>
               <button
                 onClick={() => setPhotoExpanded(false)}
                 className="p-1 hover:bg-interactive rounded transition-colors"
@@ -734,12 +744,24 @@ function TeamDetail() {
                 <X size={20} />
               </button>
             </div>
-            <div className="p-4">
-              <img
-                src={pitScoutEntry.photoUrl}
-                alt={`Team ${teamNum} robot`}
-                className="w-full h-auto max-h-[70vh] object-contain rounded"
-              />
+            <div className="p-4 space-y-4 overflow-y-auto">
+              {(pitScoutEntry.photos?.length
+                ? pitScoutEntry.photos
+                : pitScoutEntry.photoUrl
+                  ? [{ url: pitScoutEntry.photoUrl, path: '', caption: '', isPrimary: true }]
+                  : []
+              ).map((photo, idx) => (
+                <div key={idx}>
+                  <img
+                    src={photo.url}
+                    alt={photo.caption || `Team ${teamNum} photo ${idx + 1}`}
+                    className="w-full h-auto max-h-[50vh] object-contain rounded"
+                  />
+                  {photo.caption && (
+                    <p className="text-sm text-textSecondary mt-1 text-center">{photo.caption}</p>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         </div>

@@ -509,6 +509,10 @@ exports.syncScoutData = onCall(
     region: "us-central1",
     cors: [
       "https://kl26436.github.io",
+      "https://data-wrangler-2026.web.app",
+      "https://data-wrangler-2026.firebaseapp.com",
+      "https://analytics.bigsurf.fit",
+      "https://team.148.wtf",
       "http://localhost:5173",
     ],
   },

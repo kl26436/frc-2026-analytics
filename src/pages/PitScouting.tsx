@@ -1,15 +1,15 @@
 import { useState, useRef, useEffect } from 'react';
-import { Camera, Upload, Save, Loader2, CheckCircle, ChevronLeft, Trash2 } from 'lucide-react';
+import { Camera, Upload, Save, Loader2, CheckCircle, ChevronLeft, Trash2, Star } from 'lucide-react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { usePitScoutStore } from '../store/usePitScoutStore';
 import { useFirebaseAuth } from '../hooks/useFirebaseAuth';
 import { createEmptyPitScoutEntry } from '../types/pitScouting';
-import type { PitScoutEntry, DriveType, ClimbLevel, VibeCheck, ProgrammingLanguage, DriverExperience } from '../types/pitScouting';
+import type { PitScoutEntry, DriveType, ClimbLevel, VibeCheck, ProgrammingLanguage, DriverExperience, DriveTeamRole } from '../types/pitScouting';
 
 function PitScouting() {
   const eventCode = useAnalyticsStore(state => state.eventCode);
   const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
-  const { entries, error, lastScoutName, setLastScoutName, addEntry, uploadPhoto, loadEntriesFromFirestore } = usePitScoutStore();
+  const { entries, error, lastScoutName, setLastScoutName, addEntry, uploadPhoto, deletePhoto, loadEntriesFromFirestore } = usePitScoutStore();
   const { user, loading: authLoading, signIn } = useFirebaseAuth();
 
   // Auto sign-in on mount
@@ -23,8 +23,7 @@ function PitScouting() {
   const [scoutNameConfirmed, setScoutNameConfirmed] = useState(!!lastScoutName);
   const [selectedTeam, setSelectedTeam] = useState<number | null>(null);
   const [formData, setFormData] = useState<Omit<PitScoutEntry, 'id' | 'timestamp'> | null>(null);
-  const [photoFile, setPhotoFile] = useState<File | null>(null);
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [pendingPhotos, setPendingPhotos] = useState<{ file: File; preview: string; caption: string }[]>([]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -45,7 +44,6 @@ function PitScouting() {
       if (existing) {
         const { id, timestamp, ...rest } = existing;
         setFormData(rest);
-        setPhotoPreview(existing.photoUrl);
       } else {
         const teamStats = teamStatistics.find(t => t.teamNumber === selectedTeam);
         setFormData({
@@ -53,20 +51,27 @@ function PitScouting() {
           teamNumber: selectedTeam,
           teamName: teamStats?.teamName || '',
         });
-        setPhotoPreview(null);
       }
-      setPhotoFile(null);
+      setPendingPhotos([]);
     }
   }, [selectedTeam, scoutName, eventCode, entries, teamStatistics]);
 
+  const totalPhotos = (formData?.photos?.length ?? 0) + pendingPhotos.length;
+
   const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      setPhotoFile(file);
-      const reader = new FileReader();
-      reader.onload = () => setPhotoPreview(reader.result as string);
-      reader.readAsDataURL(file);
-    }
+    if (!file || totalPhotos >= 5) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setPendingPhotos(prev => [...prev, {
+        file,
+        preview: reader.result as string,
+        caption: '',
+      }]);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
   };
 
   const handleSubmit = async () => {
@@ -74,23 +79,25 @@ function PitScouting() {
 
     setSaving(true);
     try {
-      let photoUrl = formData.photoUrl;
-      let photoPath = formData.photoPath;
+      const photos = [...(formData.photos || [])];
 
-      // Upload new photo if selected
-      if (photoFile) {
-        const result = await uploadPhoto(selectedTeam, eventCode, photoFile);
-        photoUrl = result.url;
-        photoPath = result.path;
+      for (const pending of pendingPhotos) {
+        const result = await uploadPhoto(selectedTeam, eventCode, pending.file);
+        photos.push({
+          url: result.url,
+          path: result.path,
+          caption: pending.caption,
+          isPrimary: photos.length === 0,
+        });
       }
 
       await addEntry({
         ...formData,
-        photoUrl,
-        photoPath,
+        photos,
         scoutName,
       });
 
+      setPendingPhotos([]);
       setLastScoutName(scoutName);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -268,28 +275,100 @@ function PitScouting() {
 
       {/* Photo Section */}
       <div className="bg-surface p-4 rounded-lg border border-border">
-        <h2 className="font-bold mb-3">Robot Photo</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-bold">Robot Photos</h2>
+          <span className="text-sm text-textSecondary">{totalPhotos} / 5</span>
+        </div>
 
-        {photoPreview ? (
-          <div className="relative">
-            <img
-              src={photoPreview}
-              alt="Robot"
-              className="w-full max-h-64 object-contain rounded-lg bg-card"
-            />
-            <button
-              onClick={() => {
-                setPhotoFile(null);
-                setPhotoPreview(null);
-                updateField('photoUrl', null);
-                updateField('photoPath', null);
-              }}
-              className="absolute top-2 right-2 p-2 bg-danger/90 text-white rounded-lg hover:bg-danger transition-colors"
-            >
-              <Trash2 size={16} />
-            </button>
+        {totalPhotos > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-3">
+            {/* Existing uploaded photos */}
+            {formData.photos?.map((photo, idx) => (
+              <div key={photo.path} className="relative">
+                <img
+                  src={photo.url}
+                  alt={photo.caption || `Photo ${idx + 1}`}
+                  className="w-full h-32 object-cover rounded-lg bg-card"
+                />
+                <button
+                  onClick={() => {
+                    const updated = formData.photos.map((p, i) => ({
+                      ...p,
+                      isPrimary: i === idx,
+                    }));
+                    updateField('photos', updated);
+                  }}
+                  className={`absolute top-1 left-1 p-1 rounded-lg transition-colors ${
+                    photo.isPrimary
+                      ? 'bg-warning/90 text-background'
+                      : 'bg-black/50 text-white hover:bg-warning/70'
+                  }`}
+                  title={photo.isPrimary ? 'Primary photo' : 'Set as primary'}
+                >
+                  <Star size={14} fill={photo.isPrimary ? 'currentColor' : 'none'} />
+                </button>
+                <button
+                  onClick={async () => {
+                    await deletePhoto(photo.path);
+                    const updated = formData.photos.filter((_, i) => i !== idx);
+                    if (photo.isPrimary && updated.length > 0) {
+                      updated[0] = { ...updated[0], isPrimary: true };
+                    }
+                    updateField('photos', updated);
+                  }}
+                  className="absolute top-1 right-1 p-1 bg-danger/90 text-white rounded-lg hover:bg-danger transition-colors"
+                >
+                  <Trash2 size={14} />
+                </button>
+                <input
+                  type="text"
+                  value={photo.caption}
+                  onChange={e => {
+                    const updated = [...formData.photos];
+                    updated[idx] = { ...updated[idx], caption: e.target.value };
+                    updateField('photos', updated);
+                  }}
+                  placeholder="Caption (optional)"
+                  className="mt-1 w-full text-xs bg-card border border-border rounded px-2 py-1 text-textPrimary"
+                />
+              </div>
+            ))}
+
+            {/* Pending photos (not yet uploaded) */}
+            {pendingPhotos.map((pending, idx) => (
+              <div key={idx} className="relative opacity-80">
+                <img
+                  src={pending.preview}
+                  alt={`New photo ${idx + 1}`}
+                  className="w-full h-32 object-cover rounded-lg bg-card"
+                />
+                <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-warning/90 text-background text-xs rounded font-semibold">
+                  NEW
+                </div>
+                <button
+                  onClick={() => setPendingPhotos(prev => prev.filter((_, i) => i !== idx))}
+                  className="absolute top-1 right-1 p-1 bg-danger/90 text-white rounded-lg hover:bg-danger transition-colors"
+                >
+                  <Trash2 size={14} />
+                </button>
+                <input
+                  type="text"
+                  value={pending.caption}
+                  onChange={e => {
+                    setPendingPhotos(prev => prev.map((p, i) =>
+                      i === idx ? { ...p, caption: e.target.value } : p
+                    ));
+                  }}
+                  placeholder="Caption (optional)"
+                  className="mt-1 w-full text-xs bg-card border border-border rounded px-2 py-1 text-textPrimary"
+                />
+              </div>
+            ))}
           </div>
-        ) : (
+        )}
+
+        {/* Add photo buttons */}
+        {totalPhotos < 5 && (
           <div className="flex gap-3">
             <button
               onClick={() => cameraInputRef.current?.click()}
@@ -441,7 +520,14 @@ function PitScouting() {
           </div>
 
           <button
-            onClick={() => updateField('rotatesDriveTeam', !formData.rotatesDriveTeam)}
+            onClick={() => {
+              const newValue = !formData.rotatesDriveTeam;
+              setFormData({
+                ...formData,
+                rotatesDriveTeam: newValue,
+                rotatingRoles: newValue ? formData.rotatingRoles : [],
+              });
+            }}
             className={`w-full flex items-center justify-between px-4 py-3 rounded-lg border transition-colors ${
               formData.rotatesDriveTeam
                 ? 'bg-success/20 border-success'
@@ -455,6 +541,39 @@ function PitScouting() {
               {formData.rotatesDriveTeam && <CheckCircle size={14} className="text-background" />}
             </div>
           </button>
+
+          {formData.rotatesDriveTeam && (
+            <div className="ml-4">
+              <p className="text-sm text-textSecondary mb-2">Which roles rotate?</p>
+              <div className="flex flex-wrap gap-2">
+                {([
+                  { value: 'driver' as DriveTeamRole, label: 'Driver' },
+                  { value: 'driveCoach' as DriveTeamRole, label: 'Drive Coach' },
+                  { value: 'humanPlayer' as DriveTeamRole, label: 'Human Player' },
+                ]).map(({ value, label }) => {
+                  const selected = formData.rotatingRoles.includes(value);
+                  return (
+                    <button
+                      key={value}
+                      onClick={() => {
+                        const roles = selected
+                          ? formData.rotatingRoles.filter(r => r !== value)
+                          : [...formData.rotatingRoles, value];
+                        updateField('rotatingRoles', roles);
+                      }}
+                      className={`px-4 py-2 rounded-lg border font-semibold transition-colors ${
+                        selected
+                          ? 'bg-success/20 border-success text-success'
+                          : 'bg-card border-border hover:border-success'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="text-sm text-textSecondary block mb-1">Driver Experience</label>

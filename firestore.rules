@@ -137,6 +137,25 @@ service cloud.firestore {
                       get(/databases/$(database)/documents/config/access).data.adminEmails;
     }
 
+    // ── Ninja Assignments (admin-managed team-to-ninja mapping) ──
+    match /ninjaAssignments/{eventCode} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+                   && request.auth.token.email in
+                      get(/databases/$(database)/documents/config/access).data.adminEmails;
+    }
+
+    // ── Ninja Notes (qualitative scouting observations) ──
+    match /ninjaNotes/{eventCode}/notes/{noteId} {
+      allow read: if request.auth != null;
+      // Allowed users can write (app-level check enforces ninja-or-admin)
+      allow write: if request.auth != null
+                   && (request.auth.token.email in
+                       get(/databases/$(database)/documents/config/access).data.allowedEmails
+                    || request.auth.token.email in
+                       get(/databases/$(database)/documents/config/access).data.adminEmails);
+    }
+
     // ── Sync Metadata ──
     // (Handled by existing /config/{docId} rules — syncMeta is a config doc)
   }

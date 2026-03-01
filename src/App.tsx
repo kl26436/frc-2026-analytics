@@ -17,6 +17,8 @@ import PitScouting from './pages/PitScouting';
 import AdminSettings from './pages/AdminSettings';
 import DataQuality from './pages/DataQuality';
 import MatchReplay from './pages/MatchReplay';
+import NinjaDashboard from './pages/NinjaDashboard';
+import NinjaTeamDetail from './pages/NinjaTeamDetail';
 
 function AppContent() {
   const setEventCode = useAnalyticsStore(state => state.setEventCode);
@@ -68,6 +70,8 @@ function AppContent() {
         <Route path="/replay/:matchNumber" element={<MatchReplay />} />
         <Route path="/event" element={<EventSetup />} />
         <Route path="/metrics" element={<MetricsSettings />} />
+        <Route path="/ninja" element={<NinjaDashboard />} />
+        <Route path="/ninja/:teamNumber" element={<NinjaTeamDetail />} />
         <Route path="/admin" element={<AdminSettings />} />
       </Route>
     </Routes>
@@ -76,7 +80,7 @@ function AppContent() {
 
 function App() {
   return (
-    <Router basename="/frc-2026-analytics">
+    <Router basename={import.meta.env.BASE_URL}>
       <AuthProvider>
         <AppContent />
       </AuthProvider>

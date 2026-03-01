@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
-import { BarChart3, Users, ClipboardList, Menu, X, Calendar, Swords, Handshake, ClipboardCheck, ChevronDown, Search, Target, Shield, LogOut, AlertTriangle, LineChart, PlayCircle } from 'lucide-react';
+import { BarChart3, Users, ClipboardList, Menu, X, Calendar, Swords, Handshake, ClipboardCheck, ChevronDown, Search, Target, Shield, LogOut, AlertTriangle, LineChart, PlayCircle, Eye } from 'lucide-react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { useAuth } from '../contexts/AuthContext';
 import ActiveSessionBanner from './ActiveSessionBanner';
@@ -69,6 +69,7 @@ const analysisItems = [
 
 const scoutingItems = [
   { to: '/pit-scouting', icon: ClipboardCheck, label: 'Pit Scout' },
+  { to: '/ninja', icon: Eye, label: 'Ninja' },
   { to: '/data-quality', icon: AlertTriangle, label: 'Data Quality' },
 ];
 

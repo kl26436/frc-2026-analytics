@@ -4,6 +4,7 @@ import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage
 import { collection, doc, setDoc, getDocs, deleteDoc, query, where } from 'firebase/firestore';
 import { storage, db } from '../lib/firebase';
 import type { PitScoutEntry } from '../types/pitScouting';
+import { normalizePitScoutEntry } from '../types/pitScouting';
 
 interface PitScoutState {
   entries: PitScoutEntry[];
@@ -36,10 +37,14 @@ export const usePitScoutStore = create<PitScoutState>()(
         set({ loading: true, error: null });
         try {
           const id = `${entryData.eventCode}-${entryData.teamNumber}`;
+          // Sync legacy photo fields from photos array
+          const primary = entryData.photos?.find(p => p.isPrimary) ?? entryData.photos?.[0];
           const entry: PitScoutEntry = {
             ...entryData,
             id,
             timestamp: new Date().toISOString(),
+            photoUrl: primary?.url ?? null,
+            photoPath: primary?.path ?? null,
           };
 
           // Save to Firestore
@@ -89,8 +94,10 @@ export const usePitScoutStore = create<PitScoutState>()(
         try {
           const entry = get().entries.find(e => e.id === id);
 
-          // Delete photo if exists
-          if (entry?.photoPath) {
+          // Delete all photos
+          if (entry?.photos?.length) {
+            await Promise.all(entry.photos.map(p => get().deletePhoto(p.path)));
+          } else if (entry?.photoPath) {
             await get().deletePhoto(entry.photoPath);
           }
 
@@ -135,7 +142,7 @@ export const usePitScoutStore = create<PitScoutState>()(
           const q = query(collection(db, 'pitScouting'), where('eventCode', '==', eventCode));
           const snapshot = await getDocs(q);
 
-          const entries: PitScoutEntry[] = snapshot.docs.map(doc => doc.data() as PitScoutEntry);
+          const entries: PitScoutEntry[] = snapshot.docs.map(d => normalizePitScoutEntry(d.data() as Record<string, unknown>));
 
           set({ entries, loading: false });
         } catch (err) {
@@ -155,6 +162,14 @@ export const usePitScoutStore = create<PitScoutState>()(
         entries: state.entries,
         lastScoutName: state.lastScoutName,
       }),
+      merge: (persisted, current) => {
+        const p = persisted as Partial<PitScoutState> | undefined;
+        return {
+          ...current,
+          ...p,
+          entries: (p?.entries ?? []).map(e => normalizePitScoutEntry(e as unknown as Record<string, unknown>)),
+        };
+      },
     }
   )
 );

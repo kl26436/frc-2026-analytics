@@ -3,8 +3,16 @@
 export type DriveType = 'swerve' | 'tank' | 'mecanum' | 'other';
 export type ProgrammingLanguage = 'java' | 'cpp' | 'python' | 'labview' | 'other';
 export type ClimbLevel = 'level1' | 'level2' | 'level3' | 'none';
-export type FuelIntake = 'ground' | 'chute' | 'outpost' | 'all';
+export type DriverExperience = '1stYear' | '2ndYear' | '3plusYears';
+export type DriveTeamRole = 'driver' | 'driveCoach' | 'humanPlayer';
 export type VibeCheck = 'good' | 'bad';
+
+export interface PitPhoto {
+  url: string;
+  path: string;
+  caption: string;
+  isPrimary: boolean;
+}
 
 export interface PitScoutEntry {
   // Metadata
@@ -15,41 +23,29 @@ export interface PitScoutEntry {
   scoutName: string;
   timestamp: string;
 
-  // Robot Photo
+  // Robot Photos
+  photos: PitPhoto[];
+  /** @deprecated Use photos array. Kept for backward compat. */
   photoUrl: string | null;
-  photoPath: string | null; // Firebase Storage path
+  /** @deprecated Use photos array. Kept for backward compat. */
+  photoPath: string | null;
 
   // Drive Train
   driveType: DriveType | null;
   programmingLanguage: ProgrammingLanguage | null;
 
-  // Fuel Capabilities
-  fuelIntakeGround: boolean;    // Can pick up FUEL from ground
-  fuelIntakeChute: boolean;     // Can receive from CHUTE (human player)
-  fuelIntakeOutpost: boolean;   // Can receive from OUTPOST
-  fuelCapacity: number;         // How many FUEL can hold at once
-  fuelCycleTime: number;        // Estimated seconds per cycle
-
-  // Scoring
-  canScoreActiveHub: boolean;   // Can score in HUB
-  canScoreInactiveHub: boolean; // Can score in inactive HUB (if applicable)
-
-  // Obstacles
-  canCrossBumps: boolean;       // Can cross BUMPS on the field
+  // Field Navigation
+  canGoUnderTrench: boolean;
 
   // Tower/Climb
-  climbLevel: ClimbLevel;       // Highest climb level
-  climbTime: number;            // Estimated seconds to climb
-
-  // Auto Capabilities
-  autoMobility: boolean;        // Can leave starting zone
-  autoFuelCapability: number;   // Typical FUEL scored in auto (0-10+)
-  autoClimbLevel1: boolean;     // Can reach LEVEL 1 in auto
-  autoNotes: string;
+  climbLevel: ClimbLevel | null;
 
   // General
   coachName: string;
   batteryCount: number;
+  rotatesDriveTeam: boolean;
+  rotatingRoles: DriveTeamRole[];
+  driverExperience: DriverExperience | null;
 
   // Subjective
   vibeCheck: VibeCheck | null;
@@ -64,28 +60,44 @@ export const createEmptyPitScoutEntry = (eventCode: string, scoutName: string): 
   teamNumber: 0,
   teamName: '',
   scoutName,
+  photos: [],
   photoUrl: null,
   photoPath: null,
   driveType: null,
   programmingLanguage: null,
-  fuelIntakeGround: false,
-  fuelIntakeChute: false,
-  fuelIntakeOutpost: false,
-  fuelCapacity: 0,
-  fuelCycleTime: 0,
-  canScoreActiveHub: false,
-  canScoreInactiveHub: false,
-  canCrossBumps: false,
-  climbLevel: 'none',
-  climbTime: 0,
-  autoMobility: false,
-  autoFuelCapability: 0,
-  autoClimbLevel1: false,
-  autoNotes: '',
+  canGoUnderTrench: false,
+  climbLevel: null,
   coachName: '',
   batteryCount: 0,
+  rotatesDriveTeam: false,
+  rotatingRoles: [],
+  driverExperience: null,
   vibeCheck: null,
   specialFeatures: '',
   concerns: '',
   notes: '',
 });
+
+/** Normalize a PitScoutEntry loaded from Firestore or localStorage.
+ *  Handles legacy entries with photoUrl/photoPath but no photos array. */
+export function normalizePitScoutEntry(raw: Record<string, unknown>): PitScoutEntry {
+  const entry = raw as unknown as PitScoutEntry;
+
+  if (!entry.photos || !Array.isArray(entry.photos)) {
+    if (entry.photoUrl && entry.photoPath) {
+      entry.photos = [{ url: entry.photoUrl, path: entry.photoPath, caption: '', isPrimary: true }];
+    } else {
+      entry.photos = [];
+    }
+  }
+
+  if (!entry.rotatingRoles || !Array.isArray(entry.rotatingRoles)) {
+    entry.rotatingRoles = [];
+  }
+
+  const primary = entry.photos.find(p => p.isPrimary) ?? entry.photos[0];
+  entry.photoUrl = primary?.url ?? null;
+  entry.photoPath = primary?.path ?? null;
+
+  return entry;
+}
