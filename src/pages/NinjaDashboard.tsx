@@ -114,6 +114,20 @@ function NinjaDashboard() {
     return a && a.ninjaEmail === userEmail;
   });
 
+  // Group assigned teams by ninja
+  const teamsByNinja = useMemo(() => {
+    const grouped: Record<string, { name: string; email: string; teams: typeof allTeams }> = {};
+    for (const team of assignedTeams) {
+      const a = assignments[String(team.number)];
+      if (!a) continue;
+      if (!grouped[a.ninjaEmail]) {
+        grouped[a.ninjaEmail] = { name: a.ninjaName, email: a.ninjaEmail, teams: [] };
+      }
+      grouped[a.ninjaEmail].teams.push(team);
+    }
+    return Object.values(grouped).sort((a, b) => a.name.localeCompare(b.name));
+  }, [assignedTeams, assignments, allTeams]);
+
   const handleAssign = async () => {
     if (!assigningTeam || !selectedNinjaEmail || !eventCode) return;
     const ninjaUser = allowedUsers.find(u => u.email === selectedNinjaEmail);
@@ -283,76 +297,93 @@ function NinjaDashboard() {
         </div>
       )}
 
-      {/* Assigned Teams */}
-      {(isAdmin || assignedTeams.length > 0) && (
-        <div className="bg-surface p-4 rounded-lg border border-border">
-          <h2 className="text-lg font-bold mb-3">
-            {isAdmin ? `Assigned Teams (${assignedTeams.length})` : `All Assigned Teams (${assignedTeams.length})`}
-          </h2>
-          {assignedTeams.length === 0 ? (
-            <p className="text-textMuted text-center py-4">No teams assigned yet.</p>
-          ) : (
-            <div className="space-y-2">
-              {assignedTeams.map(team => {
-                const assignment = assignments[String(team.number)];
-                const count = noteCountByTeam[team.number] ?? 0;
-                const lastNote = latestNoteByTeam[team.number];
-                const tags = latestTagsByTeam[team.number] ?? [];
-                const isMyTeam = assignment?.ninjaEmail === userEmail;
-                return (
-                  <div
-                    key={team.number}
-                    className={`flex items-center gap-3 px-4 py-3 bg-card rounded-lg border transition-colors ${
-                      isMyTeam ? 'border-success/40' : 'border-border'
-                    }`}
-                  >
-                    <Link to={`/ninja/${team.number}`} className="flex-1 min-w-0 hover:opacity-80">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-lg">{team.number}</span>
-                        <span className="text-textSecondary text-sm truncate">{team.name}</span>
-                      </div>
-                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                        <span className="text-xs text-textMuted">
-                          Ninja: <span className={`font-medium ${isMyTeam ? 'text-success' : 'text-textSecondary'}`}>{assignment.ninjaName}</span>
-                        </span>
-                        {tags.length > 0 && tags.slice(0, 2).map(tag => (
-                          <span key={tag} className={`text-xs px-1.5 py-0.5 rounded border ${NINJA_TAG_COLORS[tag]}`}>
-                            {NINJA_TAG_LABELS[tag]}
-                          </span>
-                        ))}
-                      </div>
-                    </Link>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      {count > 0 && (
-                        <span className="flex items-center gap-1 text-sm text-textMuted">
-                          <StickyNote size={14} />
-                          {count}
-                        </span>
-                      )}
-                      {lastNote && (
-                        <span className="hidden sm:flex items-center gap-1 text-xs text-textMuted">
-                          <Clock size={14} />
-                          {formatRelativeTime(lastNote)}
-                        </span>
-                      )}
-                      {isAdmin && (
-                        <button
-                          onClick={() => handleUnassign(team.number)}
-                          className="p-1.5 rounded text-textMuted hover:text-danger hover:bg-interactive transition-colors"
-                          title="Unassign ninja"
-                        >
-                          <X size={16} />
-                        </button>
-                      )}
-                      <Link to={`/ninja/${team.number}`} className="p-1.5 rounded text-textMuted hover:text-textPrimary hover:bg-interactive transition-colors">
-                        <ChevronRight size={18} />
-                      </Link>
-                    </div>
+      {/* Teams Grouped by Ninja */}
+      {teamsByNinja.length > 0 && (
+        <div className="space-y-4">
+          {teamsByNinja.map(ninja => {
+            const isMe = ninja.email === userEmail;
+            const ninjaNotesCount = ninja.teams.reduce((sum, t) => sum + (noteCountByTeam[t.number] ?? 0), 0);
+            return (
+              <div
+                key={ninja.email}
+                className={`bg-surface p-4 rounded-lg border transition-colors ${isMe ? 'border-success/40' : 'border-border'}`}
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <h2 className={`text-lg font-bold ${isMe ? 'text-success' : ''}`}>{ninja.name}</h2>
+                    <span className="text-xs text-textMuted bg-card px-2 py-0.5 rounded-full">{ninja.teams.length} team{ninja.teams.length !== 1 ? 's' : ''}</span>
+                    {ninjaNotesCount > 0 && (
+                      <span className="flex items-center gap-1 text-xs text-textMuted">
+                        <StickyNote size={12} />
+                        {ninjaNotesCount} note{ninjaNotesCount !== 1 ? 's' : ''}
+                      </span>
+                    )}
                   </div>
-                );
-              })}
-            </div>
-          )}
+                </div>
+                <div className="space-y-2">
+                  {ninja.teams.map(team => {
+                    const count = noteCountByTeam[team.number] ?? 0;
+                    const lastNote = latestNoteByTeam[team.number];
+                    const tags = latestTagsByTeam[team.number] ?? [];
+                    return (
+                      <div
+                        key={team.number}
+                        className="flex items-center gap-3 px-4 py-3 bg-card rounded-lg border border-border"
+                      >
+                        <Link to={`/ninja/${team.number}`} className="flex-1 min-w-0 hover:opacity-80">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-lg">{team.number}</span>
+                            <span className="text-textSecondary text-sm truncate">{team.name}</span>
+                          </div>
+                          {tags.length > 0 && (
+                            <div className="flex gap-1 mt-1 flex-wrap">
+                              {tags.slice(0, 3).map(tag => (
+                                <span key={tag} className={`text-xs px-1.5 py-0.5 rounded border ${NINJA_TAG_COLORS[tag]}`}>
+                                  {NINJA_TAG_LABELS[tag]}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </Link>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          {count > 0 && (
+                            <span className="flex items-center gap-1 text-sm text-textMuted">
+                              <StickyNote size={14} />
+                              {count}
+                            </span>
+                          )}
+                          {lastNote && (
+                            <span className="hidden sm:flex items-center gap-1 text-xs text-textMuted">
+                              <Clock size={14} />
+                              {formatRelativeTime(lastNote)}
+                            </span>
+                          )}
+                          {isAdmin && (
+                            <button
+                              onClick={() => handleUnassign(team.number)}
+                              className="p-1.5 rounded text-textMuted hover:text-danger hover:bg-interactive transition-colors"
+                              title="Unassign ninja"
+                            >
+                              <X size={16} />
+                            </button>
+                          )}
+                          <Link to={`/ninja/${team.number}`} className="p-1.5 rounded text-textMuted hover:text-textPrimary hover:bg-interactive transition-colors">
+                            <ChevronRight size={18} />
+                          </Link>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {(isAdmin || assignedTeams.length > 0) && teamsByNinja.length === 0 && (
+        <div className="bg-surface p-4 rounded-lg border border-border">
+          <p className="text-textMuted text-center py-4">No teams assigned yet.</p>
         </div>
       )}
 
