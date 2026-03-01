@@ -32,6 +32,9 @@ interface AllianceRow {
   efficiency: number; // fmsTotal / scoutShots
   unattributed: number;
   hasFlags: boolean;
+  // Model-dependent (changes when active model switches)
+  weightedAccuracy: number; // sum(shotsScored) / sum(shots) for this alliance-match
+  topScorer: { teamNumber: number; attributed: number };
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -47,17 +50,21 @@ function buildAllianceRows(matchFuel: RobotMatchFuel[]): AllianceRow[] {
   return Array.from(groups.entries()).map(([key, robots]) => {
     const scoutShots = robots.reduce((s, r) => s + r.shots, 0);
     const fmsTotal = robots[0].fmsAllianceTotal;
+    const sorted = robots.sort((a, b) => b.shotsScored - a.shotsScored);
+    const totalScored = robots.reduce((s, r) => s + r.shotsScored, 0);
     return {
       key,
       matchNumber: robots[0].matchNumber,
       alliance: robots[0].alliance,
-      robots: robots.sort((a, b) => b.shots - a.shots),
+      robots: sorted,
       scoutShots,
       fmsTotal,
       delta: fmsTotal - scoutShots,
       efficiency: scoutShots > 0 ? fmsTotal / scoutShots : 0,
       unattributed: robots[0].allianceUnattributed,
       hasFlags: robots.some(r => r.isRealNoShow || r.isLostConnection || r.isBulldozedOnly),
+      weightedAccuracy: scoutShots > 0 ? totalScored / scoutShots : 0,
+      topScorer: { teamNumber: sorted[0].teamNumber, attributed: sorted[0].shotsScored },
     };
   });
 }
@@ -121,7 +128,7 @@ export default function FuelCalibration() {
       let cmp = 0;
       switch (sortField) {
         case 'matchNum': cmp = a.matchNumber - b.matchNumber || a.alliance.localeCompare(b.alliance); break;
-        case 'accuracy': cmp = a.efficiency - b.efficiency; break;
+        case 'accuracy': cmp = a.weightedAccuracy - b.weightedAccuracy; break;
         case 'delta': cmp = Math.abs(b.delta) - Math.abs(a.delta); break;
       }
       return sortDir === 'asc' ? cmp : -cmp;
@@ -312,28 +319,22 @@ function MatchesTab({
               <th className="text-center py-2 px-3 font-medium">Alliance</th>
               <th className="text-right py-2 px-3 font-medium">Scout Shots</th>
               <th className="text-right py-2 px-3 font-medium">FMS Scored</th>
-              <SortHeader label="Efficiency" field="accuracy" current={sortField} dir={sortDir} onSort={toggleSort} align="right" />
+              <SortHeader label="Accuracy" field="accuracy" current={sortField} dir={sortDir} onSort={toggleSort} align="right" />
+              <th className="text-right py-2 px-3 font-medium">Top Scorer</th>
               <SortHeader label="Delta" field="delta" current={sortField} dir={sortDir} onSort={toggleSort} align="right" />
-              <th className="hidden md:table-cell text-right py-2 px-3 font-medium">Unattr.</th>
               <th className="text-center py-2 px-3 font-medium">Flags</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, i) => {
-              const isExpanded = expandedRows.has(row.key);
-              const effColor = row.efficiency > 1.2 ? 'text-warning' :
-                               row.efficiency < 0.3 ? 'text-danger' : '';
-              return (
-                <MatchRow
-                  key={row.key}
-                  row={row}
-                  isExpanded={isExpanded}
-                  isStriped={i % 2 === 0}
-                  effColor={effColor}
-                  toggleExpand={toggleExpand}
-                />
-              );
-            })}
+            {rows.map((row, i) => (
+              <MatchRow
+                key={row.key}
+                row={row}
+                isExpanded={expandedRows.has(row.key)}
+                isStriped={i % 2 === 0}
+                toggleExpand={toggleExpand}
+              />
+            ))}
           </tbody>
         </table>
       </div>
@@ -367,9 +368,9 @@ function SortHeader({ label, field, current, dir, onSort, align = 'left' }: {
   );
 }
 
-function MatchRow({ row, isExpanded, isStriped, effColor, toggleExpand }: {
+function MatchRow({ row, isExpanded, isStriped, toggleExpand }: {
   row: AllianceRow; isExpanded: boolean; isStriped: boolean;
-  effColor: string; toggleExpand: (key: string) => void;
+  toggleExpand: (key: string) => void;
 }) {
   const bgClass = isStriped ? 'bg-surfaceAlt' : '';
   return (
@@ -391,16 +392,21 @@ function MatchRow({ row, isExpanded, isStriped, effColor, toggleExpand }: {
         </td>
         <td className="py-2.5 px-3 text-right">{row.scoutShots}</td>
         <td className="py-2.5 px-3 text-right font-medium">{row.fmsTotal}</td>
-        <td className={`py-2.5 px-3 text-right font-medium ${effColor}`}>
-          {row.scoutShots > 0 ? pct(row.efficiency) : '—'}
+        <td className={`py-2.5 px-3 text-right font-medium ${
+          row.weightedAccuracy > 1 ? 'text-warning' :
+          row.weightedAccuracy < 0.3 && row.scoutShots > 5 ? 'text-danger' : 'text-success'
+        }`}>
+          {row.scoutShots > 0 ? pct(row.weightedAccuracy) : '—'}
+        </td>
+        <td className="py-2.5 px-3 text-right">
+          <span className="text-textSecondary text-xs">{row.topScorer.teamNumber}</span>
+          {' '}
+          <span className="font-medium">{row.topScorer.attributed.toFixed(1)}</span>
         </td>
         <td className="py-2.5 px-3 text-right">
           <span className={row.delta > 0 ? 'text-success' : row.delta < 0 ? 'text-danger' : ''}>
             {row.delta > 0 ? '+' : ''}{row.delta}
           </span>
-        </td>
-        <td className="hidden md:table-cell py-2.5 px-3 text-right text-textMuted">
-          {row.unattributed.toFixed(1)}
         </td>
         <td className="py-2.5 px-3 text-center">
           {row.hasFlags && <AlertTriangle size={14} className="inline text-warning" />}
@@ -408,7 +414,7 @@ function MatchRow({ row, isExpanded, isStriped, effColor, toggleExpand }: {
       </tr>
       {isExpanded && (
         <tr className={bgClass}>
-          <td colSpan={9} className="px-4 pb-3">
+          <td colSpan={10} className="px-4 pb-3">
             <div className="bg-card rounded-lg border border-border/50 p-3 mt-1">
               <table className="w-full text-xs">
                 <thead>
