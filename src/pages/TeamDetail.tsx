@@ -1,8 +1,8 @@
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useState, useEffect, useMemo } from 'react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 
-import { ArrowLeft, TrendingUp, TrendingDown, Minus, Play, X, Trophy, Hash, Droplets, ArrowUpCircle } from 'lucide-react';
+import { ArrowLeft, TrendingUp, TrendingDown, Minus, Play, X, Trophy, Hash, Droplets, ArrowUpCircle, Eye } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { estimateMatchFuel, estimateMatchPoints, parseClimbLevel, computeRobotFuelFromActions } from '../types/scouting';
 import type { ScoutEntry } from '../types/scouting';
@@ -10,6 +10,8 @@ import type { TBAMatch } from '../types/tba';
 import { getTeamEventMatches, getMatchVideoUrl, teamNumberToKey } from '../utils/tbaApi';
 import MatchDetailModal from '../components/MatchDetailModal';
 import { usePitScoutStore } from '../store/usePitScoutStore';
+import { useNinjaStore } from '../store/useNinjaStore';
+import { NINJA_CATEGORY_LABELS, NINJA_CATEGORY_COLORS, NINJA_TAG_LABELS, NINJA_TAG_COLORS } from '../types/ninja';
 
 // Chart colors — read from CSS design tokens (SVG attributes can't use var())
 const getCssHsl = (name: string) => `hsl(${getComputedStyle(document.documentElement).getPropertyValue(name).trim()})`;
@@ -40,6 +42,12 @@ function TeamDetail() {
   const teamNum = parseInt(teamNumber || '0');
 
   const pitScoutEntry = usePitScoutStore(s => s.getEntryByTeam(teamNum));
+
+  const ninjaNotes = useNinjaStore(s => s.notes);
+  const ninjaAssignments = useNinjaStore(s => s.assignments);
+  const subscribeToNinjaNotes = useNinjaStore(s => s.subscribeToNotes);
+  const subscribeToNinjaAssignments = useNinjaStore(s => s.subscribeToAssignments);
+  const unsubscribeNinja = useNinjaStore(s => s.unsubscribeAll);
 
   const [tbaMatches, setTbaMatches] = useState<TBAMatch[]>([]);
   const [selectedVideo, setSelectedVideo] = useState<{ matchNumber: number; videoUrl: string } | null>(null);
@@ -83,6 +91,23 @@ function TeamDetail() {
     }),
     [teamEntries, scoutActions]
   );
+
+  // Subscribe to ninja data
+  useEffect(() => {
+    if (eventCode) {
+      subscribeToNinjaAssignments(eventCode);
+      subscribeToNinjaNotes(eventCode);
+    }
+    return () => unsubscribeNinja();
+  }, [eventCode, subscribeToNinjaAssignments, subscribeToNinjaNotes, unsubscribeNinja]);
+
+  // Ninja notes for this team (newest first, already sorted from store)
+  const teamNinjaNotes = useMemo(() =>
+    ninjaNotes.filter(n => n.teamNumber === teamNum),
+    [ninjaNotes, teamNum]
+  );
+
+  const ninjaAssignment = ninjaAssignments[String(teamNum)];
 
   // Fetch TBA match data for videos
   useEffect(() => {
@@ -663,16 +688,81 @@ function TeamDetail() {
         </div>
       </div>
 
-      {/* Scout Notes */}
-      {teamStats.notesList && teamStats.notesList.length > 0 && (
+
+      {/* Ninja Notes */}
+      {teamNinjaNotes.length > 0 && (
         <div className="bg-surface p-6 rounded-lg border border-border">
-          <h3 className="text-lg font-bold mb-4">Scout Notes ({teamStats.notesList.length})</h3>
-          <div className="space-y-2">
-            {teamStats.notesList.map((note: string, i: number) => (
-              <div key={i} className="p-3 bg-surfaceElevated rounded-lg text-sm text-textSecondary">
-                {note}
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold flex items-center gap-2">
+              <Eye size={20} />
+              Ninja Notes ({teamNinjaNotes.length})
+            </h3>
+            <Link
+              to={`/ninja/${teamNum}`}
+              className="text-sm text-blueAlliance hover:underline"
+            >
+              View all &rarr;
+            </Link>
+          </div>
+          {ninjaAssignment && (
+            <p className="text-xs text-textMuted mb-3">
+              Ninja: <span className="text-textSecondary font-medium">{ninjaAssignment.ninjaName}</span>
+            </p>
+          )}
+          <div className="space-y-3">
+            {teamNinjaNotes.slice(0, 10).map(note => (
+              <div key={note.id} className="p-3 bg-surfaceElevated rounded-lg">
+                <div className="flex items-center gap-2 flex-wrap mb-1">
+                  <span className={`text-xs px-1.5 py-0.5 rounded border font-semibold ${NINJA_CATEGORY_COLORS[note.category]}`}>
+                    {NINJA_CATEGORY_LABELS[note.category]}
+                  </span>
+                  <span className="text-xs text-textMuted">{note.authorName}</span>
+                  <span className="text-xs text-textMuted">
+                    {(() => {
+                      const diff = Date.now() - new Date(note.createdAt).getTime();
+                      const mins = Math.floor(diff / 60000);
+                      if (mins < 60) return `${mins}m ago`;
+                      const hours = Math.floor(mins / 60);
+                      if (hours < 24) return `${hours}h ago`;
+                      return new Date(note.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' });
+                    })()}
+                  </span>
+                  {note.matchNumber && (
+                    <span className="text-xs px-1.5 py-0.5 bg-blueAlliance/20 text-blueAlliance rounded border border-blueAlliance/30">
+                      Match {note.matchNumber}
+                    </span>
+                  )}
+                </div>
+                {note.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mb-1">
+                    {note.tags.map(tag => (
+                      <span key={tag} className={`text-xs px-1.5 py-0.5 rounded border ${NINJA_TAG_COLORS[tag]}`}>
+                        {NINJA_TAG_LABELS[tag]}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <p className="text-sm text-textSecondary whitespace-pre-wrap">{note.text}</p>
+                {note.photos?.length > 0 && (
+                  <div className="flex gap-2 mt-2">
+                    {note.photos.map((photo, idx) => (
+                      <img
+                        key={idx}
+                        src={photo.url}
+                        alt={photo.caption || ''}
+                        className="w-16 h-16 object-cover rounded-lg bg-card cursor-pointer"
+                        onClick={() => window.open(photo.url, '_blank')}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
+            {teamNinjaNotes.length > 10 && (
+              <Link to={`/ninja/${teamNum}`} className="block text-center text-sm text-blueAlliance hover:underline py-2">
+                View all {teamNinjaNotes.length} notes &rarr;
+              </Link>
+            )}
           </div>
         </div>
       )}
