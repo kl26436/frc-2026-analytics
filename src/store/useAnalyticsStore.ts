@@ -12,7 +12,10 @@ import { buildPredictionInputs } from '../utils/predictions';
 import type { PredictionTeamInput } from '../utils/predictions';
 import { computeAllTeamTrends } from '../utils/trendAnalysis';
 import type { TeamTrend } from '../utils/trendAnalysis';
-import { getAllEventData } from '../utils/tbaApi';
+import { getAllEventData, getEventOPRs } from '../utils/tbaApi';
+import { computeOPR } from '../utils/opr';
+import type { OPRResults } from '../utils/opr';
+import type { TBAOPRs } from '../types/tba';
 
 interface AnalyticsState {
   // ── Scout data ──
@@ -32,6 +35,8 @@ interface AnalyticsState {
   // ── TBA data ──
   tbaApiKey: string;
   tbaData: TBAEventData | null;
+  tbaOPRs: TBAOPRs | null;
+  localOPR: OPRResults | null;
   tbaLoading: boolean;
   tbaError: string | null;
   autoRefreshEnabled: boolean;
@@ -53,6 +58,8 @@ interface AnalyticsState {
   setHomeTeamNumber: (n: number) => void;
   setTBAApiKey: (key: string) => void;
   fetchTBAData: (eventCode?: string) => Promise<TBAEventData | null>;
+  fetchTBAOPRs: (eventCode?: string) => Promise<void>;
+  calculateLocalOPR: () => void;
   setAutoRefresh: (enabled: boolean) => void;
   clearTBAData: () => void;
   triggerSync: (eventKey: string) => Promise<SyncMeta>;
@@ -88,6 +95,8 @@ export const useAnalyticsStore = create<AnalyticsState>()(
       homeTeamNumber: 148,
       tbaApiKey: '',
       tbaData: null,
+      tbaOPRs: null,
+      localOPR: null,
       tbaLoading: false,
       tbaError: null,
       autoRefreshEnabled: false,
@@ -115,6 +124,7 @@ export const useAnalyticsStore = create<AnalyticsState>()(
           teamFuelStats: [],
           predictionInputs: [],
           teamTrends: [],
+          localOPR: null,
         });
 
         // 1. Subscribe to scout entries: scoutData/{eventKey}/entries
@@ -230,6 +240,7 @@ export const useAnalyticsStore = create<AnalyticsState>()(
         const matchFuelAttribution = computeMatchFuelAttribution(filteredEntries, scoutActions, pgTbaMatches);
         const teamFuelStats = aggregateTeamFuel(matchFuelAttribution);
         set({ matchFuelAttribution, teamFuelStats });
+        get().calculateLocalOPR();
         get().calculatePredictionInputs();
       },
 
@@ -264,6 +275,8 @@ export const useAnalyticsStore = create<AnalyticsState>()(
           set({
             eventCode: code,
             tbaData: null,
+            tbaOPRs: null,
+            localOPR: null,
             tbaError: null,
             scoutEntries: [],
             excludedEntries: [],
@@ -296,7 +309,10 @@ export const useAnalyticsStore = create<AnalyticsState>()(
         const code = eventCodeOverride || get().eventCode;
         set({ tbaLoading: true, tbaError: null });
         try {
-          const data = await getAllEventData(code);
+          const [data] = await Promise.all([
+            getAllEventData(code),
+            get().fetchTBAOPRs(code),
+          ]);
           set({ tbaData: data, tbaLoading: false });
           get().calculateRealStats(); // Re-run so team names from TBA propagate to statistics
           return data;
@@ -305,6 +321,27 @@ export const useAnalyticsStore = create<AnalyticsState>()(
           set({ tbaError: message, tbaLoading: false });
           return null;
         }
+      },
+
+      fetchTBAOPRs: async (eventCodeOverride?: string) => {
+        const code = eventCodeOverride || get().eventCode;
+        try {
+          const oprs = await getEventOPRs(code, get().tbaApiKey || undefined);
+          set({ tbaOPRs: oprs });
+        } catch {
+          // OPRs may not be available yet (no matches played) — fail silently
+          set({ tbaOPRs: null });
+        }
+      },
+
+      calculateLocalOPR: () => {
+        const { pgTbaMatches } = get();
+        if (pgTbaMatches.length === 0) {
+          set({ localOPR: null });
+          return;
+        }
+        const results = computeOPR(pgTbaMatches);
+        set({ localOPR: results });
       },
 
       setAutoRefresh: (enabled: boolean) => {

@@ -112,6 +112,13 @@ export interface TBAAlliance {
   };
 }
 
+// TBA OPR/DPR/CCWM response
+export interface TBAOPRs {
+  oprs: Record<string, number>;   // team key → OPR
+  dprs: Record<string, number>;   // team key → DPR
+  ccwms: Record<string, number>;  // team key → CCWM
+}
+
 // All TBA data for an event
 export interface TBAEventData {
   event: TBAEvent | null;

@@ -8,6 +8,7 @@ import type {
   TBAEventTeam,
   TBAAlliance,
   TBAEventData,
+  TBAOPRs,
 } from '../types/tba';
 
 const TBA_API_BASE = 'https://www.thebluealliance.com/api/v3';
@@ -56,6 +57,11 @@ export async function getTeam(teamKey: string, apiKey?: string): Promise<TBATeam
 // Get matches for a specific team at an event
 export async function getTeamEventMatches(teamKey: string, eventKey: string, apiKey?: string): Promise<TBAMatch[]> {
   return fetchTBA<TBAMatch[]>(`/team/${teamKey}/event/${eventKey}/matches`, apiKey);
+}
+
+// Get OPR/DPR/CCWM for an event
+export async function getEventOPRs(eventKey: string, apiKey?: string): Promise<TBAOPRs> {
+  return fetchTBA<TBAOPRs>(`/event/${eventKey}/oprs`, apiKey);
 }
 
 // Get alliance selections at an event
