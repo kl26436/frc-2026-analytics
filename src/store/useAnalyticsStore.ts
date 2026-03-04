@@ -6,7 +6,7 @@ import { db, functions, auth } from '../lib/firebase';
 import type { ScoutEntry, TeamStatistics, PgTBAMatch, SyncMeta, RobotActions, ExcludedEntry } from '../types/scouting';
 import type { TBAEventData } from '../types/tba';
 import { calculateAllTeamStatistics, calculateTeamStatistics } from '../utils/statistics';
-import { computeMatchFuelAttribution, aggregateTeamFuel, powerCurveAttribution, DEFAULT_BETA } from '../utils/fuelAttribution';
+import { computeMatchFuelAttribution, aggregateTeamFuel, DEFAULT_BETA } from '../utils/fuelAttribution';
 import type { RobotMatchFuel, TeamFuelStats, AttributionFn } from '../utils/fuelAttribution';
 import { logCurveAttribution, equalAttribution, rankBasedAttribution } from '../utils/modelComparison';
 import { buildPredictionInputs } from '../utils/predictions';
@@ -80,6 +80,7 @@ let _unsubSyncMeta: (() => void) | null = null;
 let _unsubTbaMatches: (() => void) | null = null;
 let _unsubActions: (() => void) | null = null;
 let _unsubExcluded: (() => void) | null = null;
+let _unsubAttrModel: (() => void) | null = null;
 let _subscribedEventKey: string | null = null;
 
 export const useAnalyticsStore = create<AnalyticsState>()(
@@ -200,6 +201,24 @@ export const useAnalyticsStore = create<AnalyticsState>()(
           },
           () => {}
         );
+
+        // 6. Subscribe to shared attribution model: config/attributionModel
+        const attrModelRef = doc(db, 'config', 'attributionModel');
+        _unsubAttrModel = onSnapshot(
+          attrModelRef,
+          (snapshot) => {
+            if (snapshot.exists()) {
+              const data = snapshot.data() as AttributionModelConfig;
+              const current = get().attributionModel;
+              // Only update if different to avoid loops
+              if (data.family !== current.family || data.beta !== current.beta) {
+                set({ attributionModel: data });
+                get().calculateFuelAttribution();
+              }
+            }
+          },
+          () => {}
+        );
       },
 
       unsubscribeFromData: () => {
@@ -208,6 +227,7 @@ export const useAnalyticsStore = create<AnalyticsState>()(
         if (_unsubTbaMatches) { _unsubTbaMatches(); _unsubTbaMatches = null; }
         if (_unsubActions) { _unsubActions(); _unsubActions = null; }
         if (_unsubExcluded) { _unsubExcluded(); _unsubExcluded = null; }
+        if (_unsubAttrModel) { _unsubAttrModel(); _unsubAttrModel = null; }
         _subscribedEventKey = null;
       },
 
@@ -410,6 +430,9 @@ export const useAnalyticsStore = create<AnalyticsState>()(
       setAttributionModel: (config: AttributionModelConfig) => {
         set({ attributionModel: config });
         get().calculateFuelAttribution();
+        // Persist to Firestore so all users share the same model
+        const attrModelRef = doc(db, 'config', 'attributionModel');
+        setDoc(attrModelRef, { family: config.family, beta: config.beta }).catch(() => {});
       },
     }),
     {

@@ -8,7 +8,7 @@ import type { ModelComparisonResult } from './modelComparison';
  */
 export function buildCalibrationPrompt(
   matchFuel: RobotMatchFuel[],
-  teamFuel: TeamFuelStats[],
+  _teamFuel: TeamFuelStats[],
   modelComparison: ModelComparisonResult,
   eventCode: string,
 ): string {

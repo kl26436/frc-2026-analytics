@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import type { AttributionModelConfig } from '../store/useAnalyticsStore';
 import { useAuth } from '../contexts/AuthContext';
@@ -496,7 +496,7 @@ function MatchRow({ row, isExpanded, isStriped, toggleExpand }: {
 }
 
 function RobotFlags({ robot }: { robot: RobotMatchFuel }) {
-  const flags: JSX.Element[] = [];
+  const flags: React.ReactElement[] = [];
   if (robot.isRealNoShow) flags.push(
     <span key="ns" className="px-1.5 py-0.5 bg-danger/20 text-danger rounded text-[10px] font-semibold">NO-SHOW</span>
   );
@@ -550,7 +550,7 @@ function ModelFitTab({
         <StatCard
           label="Best Model"
           value={bestModel?.variant.label ?? '—'}
-          highlight={bestModel && !bestModel.variant.isCurrent}
+          highlight={bestModel ? !bestModel.variant.isCurrent : undefined}
         />
       </div>
 
@@ -582,16 +582,17 @@ function ModelFitTab({
                   borderRadius: '8px',
                   color: 'hsl(0 0% 100%)',
                 }}
-                formatter={(value: number) => [`${value}%`, 'Avg CV']}
+                formatter={(value: number | undefined) => [`${value ?? 0}%`, 'Avg CV']}
               />
               <Line
                 type="monotone"
                 dataKey="avgCV"
                 stroke="hsl(142 71% 45%)"
                 strokeWidth={2}
-                dot={(props: { cx: number; cy: number; payload: typeof chartData[number] }) => {
+                dot={(props: any) => {
                   const { cx, cy, payload } = props;
-                  if (payload.isCurrent) {
+                  if (!cx || !cy) return <circle key="empty" cx={0} cy={0} r={0} />;
+                  if (payload?.isCurrent) {
                     return (
                       <circle
                         key="current"
@@ -602,7 +603,7 @@ function ModelFitTab({
                       />
                     );
                   }
-                  return <circle key={payload.label} cx={cx} cy={cy} r={3} fill="hsl(142 71% 45%)" />;
+                  return <circle key={payload?.label} cx={cx} cy={cy} r={3} fill="hsl(142 71% 45%)" />;
                 }}
               />
               {currentPoint && (
@@ -657,7 +658,7 @@ function ModelFitTab({
                   borderRadius: '8px',
                   color: 'hsl(0 0% 100%)',
                 }}
-                formatter={(value: number) => [`${value}%`, 'Accuracy']}
+                formatter={(value: number | undefined) => [`${value ?? 0}%`, 'Accuracy']}
               />
               <Bar dataKey="accuracy" radius={[4, 4, 0, 0]}>
                 {teamAccuracyData.map((entry, i) => (

@@ -30,6 +30,12 @@ service cloud.firestore {
                    && request.auth.token.email in
                       get(/databases/$(database)/documents/config/access).data.adminEmails;
 
+      // attributionModel doc: admins only (shared fuel attribution model for all users)
+      allow write: if request.auth != null
+                   && docId == 'attributionModel'
+                   && request.auth.token.email in
+                      get(/databases/$(database)/documents/config/access).data.adminEmails;
+
       // userProfiles doc: any allowed user can write (sign-in upsert) or admin can write (manual name edit)
       allow write: if request.auth != null
                    && docId == 'userProfiles'
