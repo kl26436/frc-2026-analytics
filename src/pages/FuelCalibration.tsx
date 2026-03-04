@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { DEFAULT_BETA } from '../utils/fuelAttribution';
 import {
   Shield, FlaskConical, ChevronDown, ArrowUpDown, Copy, Check,
-  BarChart3, Table2, Bot, AlertTriangle, Wifi, WifiOff,
+  BarChart3, Table2, Bot, Wifi, WifiOff,
 } from 'lucide-react';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip,
@@ -19,7 +19,12 @@ import type { ModelResult } from '../utils/modelComparison';
 // ── Types ────────────────────────────────────────────────────────────────────
 
 type TabId = 'matches' | 'modelFit' | 'ai';
-type MatchSortField = 'matchNum' | 'accuracy' | 'delta';
+type MatchSortField = 'matchNum' | 'spread' | 'delta';
+
+interface AttentionFlag {
+  label: string;
+  color: 'warning' | 'danger'; // warning = yellow, danger = red
+}
 
 interface AllianceRow {
   key: string; // "matchNum_alliance"
@@ -30,11 +35,10 @@ interface AllianceRow {
   fmsTotal: number;
   delta: number; // fmsTotal - scoutShots
   efficiency: number; // fmsTotal / scoutShots
-  unattributed: number;
-  hasFlags: boolean;
   // Model-dependent (changes when active model switches)
-  weightedAccuracy: number; // sum(shotsScored) / sum(shots) for this alliance-match
-  topScorer: { teamNumber: number; attributed: number };
+  attribution: { teamNumber: number; scored: number }[]; // per-robot, sorted desc
+  spreadRatio: number; // max attributed / min attributed (higher = more uneven)
+  flags: AttentionFlag[]; // calibration-relevant anomalies
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -51,7 +55,21 @@ function buildAllianceRows(matchFuel: RobotMatchFuel[]): AllianceRow[] {
     const scoutShots = robots.reduce((s, r) => s + r.shots, 0);
     const fmsTotal = robots[0].fmsAllianceTotal;
     const sorted = robots.sort((a, b) => b.shotsScored - a.shotsScored);
-    const totalScored = robots.reduce((s, r) => s + r.shotsScored, 0);
+    const attribution = sorted.map(r => ({ teamNumber: r.teamNumber, scored: r.shotsScored }));
+    const activeScores = sorted.filter(r => !r.isZeroWeight).map(r => r.shotsScored);
+    const maxScore = activeScores.length > 0 ? Math.max(...activeScores) : 0;
+    const minScore = activeScores.length > 0 ? Math.min(...activeScores) : 0;
+    const efficiency = scoutShots > 0 ? fmsTotal / scoutShots : 0;
+    const spreadRatio = minScore > 0 ? maxScore / minScore : 0;
+
+    // Build attention flags — things worth investigating
+    const flags: AttentionFlag[] = [];
+    if (efficiency > 1.3) flags.push({ label: `${(efficiency * 100).toFixed(0)}% eff`, color: 'danger' });
+    else if (efficiency > 1.1) flags.push({ label: `${(efficiency * 100).toFixed(0)}% eff`, color: 'warning' });
+    else if (efficiency < 0.5 && scoutShots > 5) flags.push({ label: `${(efficiency * 100).toFixed(0)}% eff`, color: 'danger' });
+    if (spreadRatio > 5) flags.push({ label: `${spreadRatio.toFixed(1)}x spread`, color: 'danger' });
+    else if (spreadRatio > 3) flags.push({ label: `${spreadRatio.toFixed(1)}x spread`, color: 'warning' });
+
     return {
       key,
       matchNumber: robots[0].matchNumber,
@@ -60,11 +78,10 @@ function buildAllianceRows(matchFuel: RobotMatchFuel[]): AllianceRow[] {
       scoutShots,
       fmsTotal,
       delta: fmsTotal - scoutShots,
-      efficiency: scoutShots > 0 ? fmsTotal / scoutShots : 0,
-      unattributed: robots[0].allianceUnattributed,
-      hasFlags: robots.some(r => r.isRealNoShow || r.isLostConnection || r.isBulldozedOnly),
-      weightedAccuracy: scoutShots > 0 ? totalScored / scoutShots : 0,
-      topScorer: { teamNumber: sorted[0].teamNumber, attributed: sorted[0].shotsScored },
+      efficiency,
+      attribution,
+      spreadRatio,
+      flags,
     };
   });
 }
@@ -123,12 +140,12 @@ export default function FuelCalibration() {
   // ── Sort & Filter ──────────────────────────────────────────────────────────
 
   const sortedRows = useMemo(() => {
-    let rows = showFlaggedOnly ? allianceRows.filter(r => r.hasFlags) : allianceRows;
+    let rows = showFlaggedOnly ? allianceRows.filter(r => r.flags.length > 0) : allianceRows;
     rows = [...rows].sort((a, b) => {
       let cmp = 0;
       switch (sortField) {
         case 'matchNum': cmp = a.matchNumber - b.matchNumber || a.alliance.localeCompare(b.alliance); break;
-        case 'accuracy': cmp = a.weightedAccuracy - b.weightedAccuracy; break;
+        case 'spread': cmp = a.spreadRatio - b.spreadRatio; break;
         case 'delta': cmp = Math.abs(b.delta) - Math.abs(a.delta); break;
       }
       return sortDir === 'asc' ? cmp : -cmp;
@@ -319,10 +336,10 @@ function MatchesTab({
               <th className="text-center py-2 px-3 font-medium">Alliance</th>
               <th className="text-right py-2 px-3 font-medium">Scout Shots</th>
               <th className="text-right py-2 px-3 font-medium">FMS Scored</th>
-              <SortHeader label="Accuracy" field="accuracy" current={sortField} dir={sortDir} onSort={toggleSort} align="right" />
-              <th className="text-right py-2 px-3 font-medium">Top Scorer</th>
+              <th className="text-left py-2 px-3 font-medium">Attribution</th>
+              <SortHeader label="Spread" field="spread" current={sortField} dir={sortDir} onSort={toggleSort} align="right" />
               <SortHeader label="Delta" field="delta" current={sortField} dir={sortDir} onSort={toggleSort} align="right" />
-              <th className="text-center py-2 px-3 font-medium">Flags</th>
+              <th className="text-left py-2 px-3 font-medium">Attention</th>
             </tr>
           </thead>
           <tbody>
@@ -392,24 +409,39 @@ function MatchRow({ row, isExpanded, isStriped, toggleExpand }: {
         </td>
         <td className="py-2.5 px-3 text-right">{row.scoutShots}</td>
         <td className="py-2.5 px-3 text-right font-medium">{row.fmsTotal}</td>
-        <td className={`py-2.5 px-3 text-right font-medium ${
-          row.weightedAccuracy > 1 ? 'text-warning' :
-          row.weightedAccuracy < 0.3 && row.scoutShots > 5 ? 'text-danger' : 'text-success'
-        }`}>
-          {row.scoutShots > 0 ? pct(row.weightedAccuracy) : '—'}
+        <td className="py-2.5 px-3 text-left">
+          <span className="text-xs font-mono">
+            {row.attribution.map((a, i) => (
+              <span key={a.teamNumber}>
+                {i > 0 && <span className="text-textMuted"> / </span>}
+                <span className="text-textSecondary">{a.teamNumber}:</span>
+                <span className="font-medium">{a.scored.toFixed(1)}</span>
+              </span>
+            ))}
+          </span>
         </td>
-        <td className="py-2.5 px-3 text-right">
-          <span className="text-textSecondary text-xs">{row.topScorer.teamNumber}</span>
-          {' '}
-          <span className="font-medium">{row.topScorer.attributed.toFixed(1)}</span>
+        <td className={`py-2.5 px-3 text-right font-medium ${
+          row.spreadRatio > 3 ? 'text-warning' : row.spreadRatio > 5 ? 'text-danger' : ''
+        }`}>
+          {row.spreadRatio > 0 ? `${row.spreadRatio.toFixed(1)}x` : '—'}
         </td>
         <td className="py-2.5 px-3 text-right">
           <span className={row.delta > 0 ? 'text-success' : row.delta < 0 ? 'text-danger' : ''}>
             {row.delta > 0 ? '+' : ''}{row.delta}
           </span>
         </td>
-        <td className="py-2.5 px-3 text-center">
-          {row.hasFlags && <AlertTriangle size={14} className="inline text-warning" />}
+        <td className="py-2.5 px-3">
+          {row.flags.length > 0 ? (
+            <div className="flex gap-1 flex-wrap">
+              {row.flags.map(f => (
+                <span key={f.label} className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                  f.color === 'danger' ? 'bg-danger/20 text-danger' : 'bg-warning/20 text-warning'
+                }`}>
+                  {f.label}
+                </span>
+              ))}
+            </div>
+          ) : null}
         </td>
       </tr>
       {isExpanded && (
