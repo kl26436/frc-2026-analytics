@@ -24,18 +24,23 @@ import FuelCalibration from './pages/FuelCalibration';
 function AppContent() {
   const setEventCode = useAnalyticsStore(state => state.setEventCode);
   const setHomeTeamNumber = useAnalyticsStore(state => state.setHomeTeamNumber);
+  const fetchTBAData = useAnalyticsStore(state => state.fetchTBAData);
   const subscribeToData = useAnalyticsStore(state => state.subscribeToData);
   const unsubscribeFromData = useAnalyticsStore(state => state.unsubscribeFromData);
   const storeEventCode = useAnalyticsStore(state => state.eventCode);
   const { eventConfig, user } = useAuth();
 
   // Sync admin-configured event settings to local store for all users
+  // and immediately fetch TBA data for the correct event code.
+  // This prevents a dead-end where the Dashboard's initial fetch gets
+  // discarded by the stale guard and nothing re-triggers for the real event.
   useEffect(() => {
     if (eventConfig) {
       setEventCode(eventConfig.eventCode);
       setHomeTeamNumber(eventConfig.homeTeamNumber);
+      fetchTBAData(eventConfig.eventCode);
     }
-  }, [eventConfig, setEventCode, setHomeTeamNumber]);
+  }, [eventConfig, setEventCode, setHomeTeamNumber, fetchTBAData]);
 
   // Subscribe to real Firestore data — use eventConfig with store fallback.
   // tbaData is not persisted so stale cache is not a concern; the stale-fetch
