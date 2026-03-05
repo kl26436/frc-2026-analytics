@@ -379,10 +379,13 @@ export const useAnalyticsStore = create<AnalyticsState>()(
             getAllEventData(code),
             get().fetchTBAOPRs(code),
           ]);
+          // Discard stale results if the event code changed while we were fetching
+          if (get().eventCode !== code) return null;
           set({ tbaData: data, tbaLoading: false });
           get().calculateRealStats(); // Re-run so team names from TBA propagate to statistics
           return data;
         } catch (error) {
+          if (get().eventCode !== code) return null; // stale error, ignore
           const message = error instanceof Error ? error.message : 'Failed to fetch TBA data';
           set({ tbaError: message, tbaLoading: false });
           return null;
@@ -393,8 +396,10 @@ export const useAnalyticsStore = create<AnalyticsState>()(
         const code = eventCodeOverride || get().eventCode;
         try {
           const oprs = await getEventOPRs(code, get().tbaApiKey || undefined);
+          if (get().eventCode !== code) return; // stale, discard
           set({ tbaOPRs: oprs });
         } catch {
+          if (get().eventCode !== code) return;
           // OPRs may not be available yet (no matches played) — fail silently
           set({ tbaOPRs: null });
         }
@@ -460,9 +465,10 @@ export const useAnalyticsStore = create<AnalyticsState>()(
         homeTeamNumber: state.homeTeamNumber,
         selectedTeams: state.selectedTeams,
         tbaApiKey: state.tbaApiKey,
-        tbaData: state.tbaData,
         autoRefreshEnabled: state.autoRefreshEnabled,
         attributionModel: state.attributionModel,
+        // NOTE: tbaData intentionally NOT persisted — always fetched fresh from
+        // TBA API to prevent stale event data surviving across event resets.
       }),
     }
   )

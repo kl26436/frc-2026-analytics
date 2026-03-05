@@ -37,7 +37,9 @@ function AppContent() {
     }
   }, [eventConfig, setEventCode, setHomeTeamNumber]);
 
-  // Subscribe to real Firestore data — only after auth, use eventConfig with store fallback
+  // Subscribe to real Firestore data — use eventConfig with store fallback.
+  // tbaData is not persisted so stale cache is not a concern; the stale-fetch
+  // guard in fetchTBAData discards results if the event code changes mid-flight.
   const activeEventCode = eventConfig?.eventCode || storeEventCode;
   useEffect(() => {
     if (user && activeEventCode) {
