@@ -133,6 +133,21 @@ function Dashboard() {
     return map;
   }, [tbaData]);
 
+  // Current match on the field (first unplayed match = last completed + 1)
+  const currentMatchLabel = useMemo(() => {
+    if (!tbaData?.matches) return null;
+    const pfx: Record<string, string> = { qm: 'Q', ef: 'E', qf: 'QF', sf: 'SF', f: 'F' };
+    const lo: Record<string, number> = { qm: 0, ef: 1, qf: 2, sf: 3, f: 4 };
+    const sorted = [...tbaData.matches].sort((a, b) => {
+      if (lo[a.comp_level] !== lo[b.comp_level]) return lo[a.comp_level] - lo[b.comp_level];
+      return a.match_number - b.match_number;
+    });
+    // First unplayed match = currently on the field or queuing
+    const current = sorted.find(m => m.alliances.red.score < 0);
+    if (current) return `${pfx[current.comp_level]}${current.match_number}`;
+    return null;
+  }, [tbaData]);
+
   const SCHEDULE_PREVIEW = 5;
   const schedulePreview = useMemo(() => {
     // Show last 2 completed + next 3 upcoming, or fill from whichever side has more
@@ -229,6 +244,7 @@ function Dashboard() {
               <div className="flex-1">
                 <h2 className="text-lg md:text-xl font-bold">Robowranglers</h2>
                 <p className="text-sm text-textSecondary">{tbaData.event?.name || 'Loading...'}</p>
+                {currentMatchLabel && <p className="text-xs text-textMuted">Current Match {currentMatchLabel}</p>}
               </div>
               <button
                 onClick={() => fetchTBAData()}

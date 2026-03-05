@@ -82,6 +82,40 @@ function NinjaDashboard() {
     return tags;
   }, [notes]);
 
+  // Next match for each team
+  const nextMatchByTeam = useMemo(() => {
+    const map: Record<number, { label: string; upcoming: boolean }> = {};
+    if (!tbaData?.matches) return map;
+    const levelOrder: Record<string, number> = { qm: 0, ef: 1, qf: 2, sf: 3, f: 4 };
+    const sorted = [...tbaData.matches].sort((a, b) => {
+      const la = levelOrder[a.comp_level] ?? 0, lb = levelOrder[b.comp_level] ?? 0;
+      return la !== lb ? la - lb : a.match_number - b.match_number;
+    });
+    const labelFor = (m: typeof sorted[0]) => {
+      if (m.comp_level === 'qm') return `Q${m.match_number}`;
+      const prefix = m.comp_level.toUpperCase();
+      return m.set_number > 0 ? `${prefix}${m.set_number}-${m.match_number}` : `${prefix}${m.match_number}`;
+    };
+    for (const m of sorted) {
+      if (m.alliances.red.score >= 0) continue;
+      const label = labelFor(m);
+      for (const k of [...m.alliances.red.team_keys, ...m.alliances.blue.team_keys]) {
+        const num = parseInt(k.replace('frc', ''));
+        if (!map[num]) map[num] = { label, upcoming: true };
+      }
+    }
+    for (let i = sorted.length - 1; i >= 0; i--) {
+      const m = sorted[i];
+      if (m.alliances.red.score < 0) continue;
+      const label = labelFor(m);
+      for (const k of [...m.alliances.red.team_keys, ...m.alliances.blue.team_keys]) {
+        const num = parseInt(k.replace('frc', ''));
+        if (!map[num]) map[num] = { label, upcoming: false };
+      }
+    }
+    return map;
+  }, [tbaData]);
+
   // Allowed users for assignment dropdown
   const allowedUsers = useMemo(() => {
     const emails = [...(accessConfig?.allowedEmails ?? []), ...(accessConfig?.adminEmails ?? [])];
@@ -246,6 +280,7 @@ function NinjaDashboard() {
               const count = noteCountByTeam[team.number] ?? 0;
               const lastNote = latestNoteByTeam[team.number];
               const tags = latestTagsByTeam[team.number] ?? [];
+              const matchInfo = nextMatchByTeam[team.number];
               return (
                 <Link
                   key={team.number}
@@ -254,8 +289,15 @@ function NinjaDashboard() {
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="font-bold text-lg">{team.number}</span>
-                      <span className="text-textSecondary text-sm truncate">{team.name}</span>
+                      <div className="min-w-0">
+                        <span className="font-bold text-lg">{team.number}</span>
+                        <p className="text-textSecondary text-xs truncate">{team.name}</p>
+                      </div>
+                      {matchInfo && (
+                        <span className="text-sm font-semibold text-textPrimary ml-auto flex-shrink-0">
+                          {matchInfo.upcoming ? `Next: ${matchInfo.label}` : `Last: ${matchInfo.label}`}
+                        </span>
+                      )}
                     </div>
                     {tags.length > 0 && (
                       <div className="flex gap-1 mt-1 flex-wrap">
@@ -325,6 +367,7 @@ function NinjaDashboard() {
                     const count = noteCountByTeam[team.number] ?? 0;
                     const lastNote = latestNoteByTeam[team.number];
                     const tags = latestTagsByTeam[team.number] ?? [];
+                    const matchInfo = nextMatchByTeam[team.number];
                     return (
                       <div
                         key={team.number}
@@ -332,8 +375,15 @@ function NinjaDashboard() {
                       >
                         <Link to={`/ninja/${team.number}`} className="flex-1 min-w-0 hover:opacity-80">
                           <div className="flex items-center gap-2">
-                            <span className="font-bold text-lg">{team.number}</span>
-                            <span className="text-textSecondary text-sm truncate">{team.name}</span>
+                            <div className="min-w-0">
+                              <span className="font-bold text-lg">{team.number}</span>
+                              <p className="text-textSecondary text-xs truncate">{team.name}</p>
+                            </div>
+                            {matchInfo && (
+                              <span className="text-sm font-semibold text-textPrimary ml-auto flex-shrink-0">
+                                {matchInfo.upcoming ? `Next: ${matchInfo.label}` : `Last: ${matchInfo.label}`}
+                              </span>
+                            )}
                           </div>
                           {tags.length > 0 && (
                             <div className="flex gap-1 mt-1 flex-wrap">

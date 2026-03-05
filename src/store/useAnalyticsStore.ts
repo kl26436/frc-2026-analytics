@@ -340,6 +340,22 @@ export const useAnalyticsStore = create<AnalyticsState>()(
             syncMeta: null,
             selectedTeams: [],
           });
+
+          // Clear other stores' localStorage to prevent stale data on hydration.
+          // The in-memory state will be refreshed by their own Firestore listeners
+          // or page-level useEffect hooks when they re-subscribe with the new event code.
+          try {
+            localStorage.removeItem('frc-picklist-storage');
+            localStorage.removeItem('pit-scout-storage');
+            localStorage.removeItem('ninja-store');
+          } catch {
+            // localStorage may be unavailable (private browsing, etc.)
+          }
+
+          // Clear in-memory state of other stores (lazy import to avoid circular deps)
+          import('./usePickListStore').then(m => m.usePickListStore.getState().clearPickList());
+          import('./usePitScoutStore').then(m => m.usePitScoutStore.setState({ entries: [] }));
+          import('./useNinjaStore').then(m => m.useNinjaStore.setState({ assignments: {}, notes: [] }));
         } else {
           set({ eventCode: code });
         }
