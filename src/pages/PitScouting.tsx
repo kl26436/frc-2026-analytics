@@ -19,8 +19,7 @@ function PitScouting() {
     }
   }, [user, authLoading, signIn]);
 
-  const [scoutName, setScoutName] = useState(lastScoutName);
-  const [scoutNameConfirmed, setScoutNameConfirmed] = useState(!!lastScoutName);
+  const scoutName = user?.displayName || lastScoutName || 'Unknown Scout';
   const [selectedTeam, setSelectedTeam] = useState<number | null>(null);
   const [formData, setFormData] = useState<Omit<PitScoutEntry, 'id' | 'timestamp'> | null>(null);
   const [pendingPhotos, setPendingPhotos] = useState<{ file: File; preview: string; caption: string }[]>([]);
@@ -134,48 +133,6 @@ function PitScouting() {
     );
   }
 
-  // Scout name entry
-  if (!scoutNameConfirmed) {
-    const handleConfirmName = () => {
-      if (scoutName.trim()) {
-        setScoutNameConfirmed(true);
-        setLastScoutName(scoutName.trim());
-      }
-    };
-
-    return (
-      <div className="space-y-4 md:space-y-6">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold">Pit Scouting</h1>
-          <p className="text-textSecondary mt-1">REBUILT 2026 • {eventCode}</p>
-        </div>
-
-        <div className="bg-surface p-6 rounded-lg border border-border max-w-md">
-          <h2 className="text-xl font-bold mb-4">Enter Your Name</h2>
-          <input
-            type="text"
-            value={scoutName}
-            onChange={e => setScoutName(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleConfirmName()}
-            placeholder="Scout name"
-            className="w-full bg-card border border-border rounded-lg px-4 py-3 text-textPrimary placeholder-textMuted focus:outline-none focus:border-success text-lg"
-            autoFocus
-          />
-          <p className="text-textSecondary text-sm mt-2">
-            Your name will be saved with each pit scout entry.
-          </p>
-          <button
-            onClick={handleConfirmName}
-            disabled={!scoutName.trim()}
-            className="mt-4 w-full px-4 py-3 bg-success text-background font-bold rounded-lg hover:bg-success/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            Continue
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   // Team selection
   if (!selectedTeam) {
     return (
@@ -184,7 +141,6 @@ function PitScouting() {
           <h1 className="text-2xl md:text-3xl font-bold">Pit Scouting</h1>
           <p className="text-textSecondary mt-1">
             Scout: <span className="text-textPrimary font-semibold">{scoutName}</span>
-            <button onClick={() => setScoutNameConfirmed(false)} className="text-blueAlliance ml-2 text-sm">(change)</button>
           </p>
         </div>
 
