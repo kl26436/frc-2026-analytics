@@ -49,7 +49,7 @@ function makeFuelStats(overrides: Partial<TeamFuelStats> & { teamNumber: number 
     avgAutoPointsScored: 0, avgTeleopPointsScored: 0, avgFuelPointsScored: 0,
     autoClimbCount: 0, autoClimbRate: 0,
     endgameClimbCounts: [5, 0, 0, 0], endgameClimbRates: [1, 0, 0, 0],
-    avgAutoTowerPoints: 0, avgEndgameTowerPoints: 0, avgTowerPoints: 0,
+    avgAutoTowerPoints: 0, avgEndgameTowerPoints: 0, avgTowerPoints: 0, avgTotalPointsScored: 0,
     stdAutoPointsScored: 0, stdTeleopPointsScored: 0, stdFuelPointsScored: 0,
     stdAutoTowerPoints: 0, stdEndgameTowerPoints: 0, stdTowerPoints: 0,
     reliabilityRate: 1,

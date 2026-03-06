@@ -381,6 +381,7 @@ export interface TeamFuelStats {
   avgAutoTowerPoints: number;
   avgEndgameTowerPoints: number;
   avgTowerPoints: number;
+  avgTotalPointsScored: number;  // avgFuelPointsScored + avgTowerPoints (total attributed points per match)
   // Variance (standard deviations for Monte Carlo)
   stdAutoPointsScored: number;
   stdTeleopPointsScored: number;
@@ -486,6 +487,7 @@ export function aggregateTeamFuel(matchRows: RobotMatchFuel[]): TeamFuelStats[] 
       avgAutoTowerPoints,
       avgEndgameTowerPoints,
       avgTowerPoints,
+      avgTotalPointsScored: avgFuelPointsScored + avgTowerPoints,
       stdAutoPointsScored,
       stdTeleopPointsScored,
       stdFuelPointsScored,

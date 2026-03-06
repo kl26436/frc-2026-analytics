@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from 'react';
 import { Camera, Upload, Save, Loader2, CheckCircle, ChevronLeft, Trash2, Star } from 'lucide-react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { usePitScoutStore } from '../store/usePitScoutStore';
-import type { RobotPicture } from '../types/scouting';
 import { useFirebaseAuth } from '../hooks/useFirebaseAuth';
 import { createEmptyPitScoutEntry } from '../types/pitScouting';
 import type { PitScoutEntry, DriveType, ClimbLevel, VibeCheck, ProgrammingLanguage, DriverExperience, DriveTeamRole } from '../types/pitScouting';

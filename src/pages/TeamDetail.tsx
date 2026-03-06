@@ -35,6 +35,7 @@ function TeamDetail() {
   const teamStatistics = useAnalyticsStore(s => s.teamStatistics);
   const scoutEntries = useAnalyticsStore(s => s.scoutEntries);
   const scoutActions = useAnalyticsStore(s => s.scoutActions);
+  const matchFuelAttribution = useAnalyticsStore(s => s.matchFuelAttribution);
   const teamTrends = useAnalyticsStore(s => s.teamTrends);
   const eventCode = useAnalyticsStore(s => s.eventCode);
   const tbaApiKey = useAnalyticsStore(s => s.tbaApiKey);
@@ -95,16 +96,28 @@ function TeamDetail() {
         a => a.match_number === entry.match_number && a.team_number === entry.team_number
       );
       const actionFuel = actions ? computeRobotFuelFromActions(actions) : null;
+      const fuelAttrib = matchFuelAttribution.find(
+        f => f.matchNumber === entry.match_number && f.teamNumber === entry.team_number
+      );
+      const scoutPoints = estimateMatchPoints(entry);
+      // Use FMS-attributed points when available, fall back to scout estimate
+      const points = fuelAttrib ? {
+        autoPoints: Math.round(fuelAttrib.autoPointsScored + fuelAttrib.autoTowerPoints),
+        teleopPoints: Math.round(fuelAttrib.teleopPointsScored),
+        endgamePoints: fuelAttrib.endgameTowerPoints,
+        total: Math.round(fuelAttrib.totalPointsScored + fuelAttrib.totalTowerPoints),
+      } : scoutPoints;
       return {
         entry,
         fuel: estimateMatchFuel(entry),
-        points: estimateMatchPoints(entry),
+        points,
         climbLevel: parseClimbLevel(entry.climb_level),
         actions: actions ?? null,
         actionFuel,
+        fuelAttrib: fuelAttrib ?? null,
       };
     }),
-    [teamEntries, scoutActions]
+    [teamEntries, scoutActions, matchFuelAttribution]
   );
 
   // Subscribe to ninja data

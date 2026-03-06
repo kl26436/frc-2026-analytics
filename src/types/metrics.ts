@@ -32,11 +32,12 @@ export const DEFAULT_METRICS: MetricColumn[] = [
     id: 'avgTotalPoints',
     label: 'Avg Points',
     field: 'avgTotalPoints',
+    fuelField: 'avgTotalPointsScored',
     aggregation: 'avg',
     format: 'number',
     decimals: 1,
     enabled: true,
-    description: 'Average estimated total points per match',
+    description: 'Average attributed total points per match (FMS data)',
     category: 'overall',
   },
   {

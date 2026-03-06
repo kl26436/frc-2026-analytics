@@ -103,14 +103,13 @@ export const useMetricsStore = create<MetricsState>()(
     }),
     {
       name: 'frc-metrics-storage',
-      version: 8,
+      version: 9,
       migrate: (persistedState: unknown, version: number) => {
-        if (version >= 8) {
+        if (version >= 9) {
           const state = persistedState as { config: MetricsConfig };
           return { config: state.config };
         }
-        // v8: Force reset to pick up new default column order,
-        // climb level formatting, and updated enabled/disabled defaults
+        // v9: Use FMS-attributed points (fuelField) for Avg Points column
         return {
           config: {
             columns: DEFAULT_METRICS,

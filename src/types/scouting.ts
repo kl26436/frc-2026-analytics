@@ -497,9 +497,21 @@ export function estimateMatchPoints(entry: ScoutEntry): {
   total: number;
 } {
   const fuel = estimateMatchFuel(entry);
+  // fuel.auto/teleop include both shots and passes — estimate scored fraction
+  // using ratio of FUEL_SCORE events to total events (FUEL_SCORE + FUEL_PASS)
+  const autoScoreEvents = entry.auton_FUEL_SCORE || 0;
+  const autoPassEvents = entry.auton_FUEL_PASS || 0;
+  const autoTotal = autoScoreEvents + autoPassEvents;
+  const autoFuelPoints = autoTotal > 0 ? fuel.auto * (autoScoreEvents / autoTotal) : fuel.auto;
+
+  const teleopScoreEvents = entry.teleop_FUEL_SCORE || 0;
+  const teleopPassEvents = entry.teleop_FUEL_PASS || 0;
+  const teleopTotal = teleopScoreEvents + teleopPassEvents;
+  const teleopFuelPoints = teleopTotal > 0 ? fuel.teleop * (teleopScoreEvents / teleopTotal) : fuel.teleop;
+
   const autoClimbPts = entry.auton_AUTON_CLIMBED > 0 ? 15 : 0;
-  const autoPoints = fuel.auto + autoClimbPts;
-  const teleopPoints = fuel.teleop;
+  const autoPoints = autoFuelPoints + autoClimbPts;
+  const teleopPoints = teleopFuelPoints;
   const endgamePoints = climbPoints(parseClimbLevel(entry.climb_level));
 
   return {

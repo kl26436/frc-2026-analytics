@@ -151,16 +151,17 @@ export function getMetricValue(
   allEntries: ScoutEntry[],
   teamFuelStats?: TeamFuelStats[],
 ): number {
-  // Fuel attribution metric — read from TeamFuelStats
-  if (column.fuelField && teamFuelStats) {
+  // Fuel attribution metric — read from TeamFuelStats (fall through if unavailable)
+  if (column.fuelField && teamFuelStats && teamFuelStats.length > 0) {
     const fuelStats = teamFuelStats.find(t => t.teamNumber === team.teamNumber);
-    if (!fuelStats) return 0;
-    const value = (fuelStats as unknown as Record<string, number>)[column.fuelField];
-    // scoringAccuracy is 0–1, display as percentage (×100)
-    if (column.fuelField === 'scoringAccuracy' && column.format === 'percentage') {
-      return (value || 0) * 100;
+    if (fuelStats) {
+      const value = (fuelStats as unknown as Record<string, number>)[column.fuelField];
+      // scoringAccuracy is 0–1, display as percentage (×100)
+      if (column.fuelField === 'scoringAccuracy' && column.format === 'percentage') {
+        return (value || 0) * 100;
+      }
+      return value || 0;
     }
-    return value || 0;
   }
   // Dynamic metric — compute from raw entries
   if (column.rawMetric) {

@@ -9,8 +9,9 @@
     "lint": "eslint .",
     "test": "vitest run",
     "preview": "vite preview",
-    "deploy": "npm run build && gh-pages -d dist",
-    "deploy:firebase": "tsc -b && vite build --base / && firebase deploy --only hosting"
+    "deploy": "tsc -b && vite build --base=/ && firebase deploy --only hosting",
+    "deploy:ghpages": "npm run build && gh-pages -d dist",
+    "deploy:all": "npm run deploy && npm run deploy:ghpages"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
