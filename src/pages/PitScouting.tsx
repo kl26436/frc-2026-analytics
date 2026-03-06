@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Camera, Upload, Save, Loader2, CheckCircle, ChevronLeft, Trash2, Star } from 'lucide-react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { usePitScoutStore } from '../store/usePitScoutStore';
+import type { RobotPicture } from '../types/scouting';
 import { useFirebaseAuth } from '../hooks/useFirebaseAuth';
 import { createEmptyPitScoutEntry } from '../types/pitScouting';
 import type { PitScoutEntry, DriveType, ClimbLevel, VibeCheck, ProgrammingLanguage, DriverExperience, DriveTeamRole } from '../types/pitScouting';
@@ -9,6 +10,7 @@ import type { PitScoutEntry, DriveType, ClimbLevel, VibeCheck, ProgrammingLangua
 function PitScouting() {
   const eventCode = useAnalyticsStore(state => state.eventCode);
   const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
+  const robotPictures = useAnalyticsStore(state => state.robotPictures);
   const { entries, error, lastScoutName, setLastScoutName, addEntry, uploadPhoto, deletePhoto, loadEntriesFromFirestore } = usePitScoutStore();
   const { user, loading: authLoading, signIn } = useFirebaseAuth();
 
@@ -322,6 +324,33 @@ function PitScouting() {
             ))}
           </div>
         )}
+
+        {/* Database robot pictures (read-only reference) */}
+        {(() => {
+          const dbPics = robotPictures.filter(p => p.team_number === selectedTeam);
+          const seen = new Set<string>();
+          const uniquePics = dbPics.filter(p => {
+            if (seen.has(p.robot_image_link)) return false;
+            seen.add(p.robot_image_link);
+            return true;
+          });
+          if (uniquePics.length === 0) return null;
+          return (
+            <div className="mb-3">
+              <p className="text-xs text-textSecondary font-semibold uppercase tracking-wide mb-2">Database Photos</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {uniquePics.map((pic, idx) => (
+                  <img
+                    key={idx}
+                    src={pic.robot_image_link}
+                    alt={`Team ${selectedTeam} robot ${idx + 1}`}
+                    className="w-full h-32 object-cover rounded-lg bg-card border border-border"
+                  />
+                ))}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Add photo buttons */}
         {totalPhotos < 5 && (

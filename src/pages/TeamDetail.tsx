@@ -54,15 +54,30 @@ function TeamDetail() {
   const [selectedMatch, setSelectedMatch] = useState<ScoutEntry | null>(null);
   const [photoExpanded, setPhotoExpanded] = useState(false);
 
-  // Derive primary photo URL from photos array with legacy fallback
+  // Robot pictures from Postgres (synced via Cloud Function)
+  const robotPictures = useAnalyticsStore(s => s.robotPictures);
+  const teamRobotPics = useMemo(() => {
+    const pics = robotPictures.filter(p => p.team_number === teamNum);
+    // Deduplicate by URL
+    const seen = new Set<string>();
+    return pics.filter(p => {
+      if (seen.has(p.robot_image_link)) return false;
+      seen.add(p.robot_image_link);
+      return true;
+    });
+  }, [robotPictures, teamNum]);
+
+  // Derive primary photo URL: pit scout photos → robot pictures from DB → null
   const primaryPhotoUrl = useMemo(() => {
-    if (!pitScoutEntry) return null;
-    if (pitScoutEntry.photos?.length) {
+    if (pitScoutEntry?.photos?.length) {
       const primary = pitScoutEntry.photos.find(p => p.isPrimary) ?? pitScoutEntry.photos[0];
       return primary?.url ?? null;
     }
-    return pitScoutEntry.photoUrl ?? null;
-  }, [pitScoutEntry]);
+    if (pitScoutEntry?.photoUrl) return pitScoutEntry.photoUrl;
+    if (teamRobotPics.length > 0) return teamRobotPics[0].robot_image_link;
+    return null;
+  }, [pitScoutEntry, teamRobotPics]);
+
   const teamStats = teamStatistics.find(t => t.teamNumber === teamNum);
 
   // Get real scout entries for this team
@@ -816,7 +831,7 @@ function TeamDetail() {
         </div>
       )}
       {/* Robot Photo Gallery Modal */}
-      {photoExpanded && pitScoutEntry && (primaryPhotoUrl || pitScoutEntry.photos?.length > 0) && (
+      {photoExpanded && (primaryPhotoUrl || teamRobotPics.length > 0) && (
         <div
           className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
           onClick={() => setPhotoExpanded(false)}
@@ -835,13 +850,14 @@ function TeamDetail() {
               </button>
             </div>
             <div className="p-4 space-y-4 overflow-y-auto">
-              {(pitScoutEntry.photos?.length
+              {/* Pit scout photos */}
+              {(pitScoutEntry?.photos?.length
                 ? pitScoutEntry.photos
-                : pitScoutEntry.photoUrl
+                : pitScoutEntry?.photoUrl
                   ? [{ url: pitScoutEntry.photoUrl, path: '', caption: '', isPrimary: true }]
                   : []
               ).map((photo, idx) => (
-                <div key={idx}>
+                <div key={`pit-${idx}`}>
                   <img
                     src={photo.url}
                     alt={photo.caption || `Team ${teamNum} photo ${idx + 1}`}
@@ -852,6 +868,23 @@ function TeamDetail() {
                   )}
                 </div>
               ))}
+              {/* Robot pictures from database */}
+              {teamRobotPics.length > 0 && (
+                <>
+                  {pitScoutEntry?.photos?.length ? (
+                    <p className="text-xs text-textSecondary font-semibold uppercase tracking-wide pt-2 border-t border-border">Scouting Database Photos</p>
+                  ) : null}
+                  {teamRobotPics.map((pic, idx) => (
+                    <div key={`db-${idx}`}>
+                      <img
+                        src={pic.robot_image_link}
+                        alt={`Team ${teamNum} robot ${idx + 1}`}
+                        className="w-full h-auto max-h-[50vh] object-contain rounded"
+                      />
+                    </div>
+                  ))}
+                </>
+              )}
             </div>
           </div>
         </div>

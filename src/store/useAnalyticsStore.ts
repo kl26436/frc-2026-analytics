@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 import { collection, doc, onSnapshot, setDoc, deleteDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { db, functions, auth } from '../lib/firebase';
-import type { ScoutEntry, TeamStatistics, PgTBAMatch, SyncMeta, RobotActions, ExcludedEntry } from '../types/scouting';
+import type { ScoutEntry, TeamStatistics, PgTBAMatch, SyncMeta, RobotActions, ExcludedEntry, RobotPicture } from '../types/scouting';
 import type { TBAEventData } from '../types/tba';
 import { calculateAllTeamStatistics, calculateTeamStatistics } from '../utils/statistics';
 import { computeMatchFuelAttribution, aggregateTeamFuel, DEFAULT_BETA } from '../utils/fuelAttribution';
@@ -34,6 +34,7 @@ interface AnalyticsState {
   teamFuelStats: TeamFuelStats[];
   predictionInputs: PredictionTeamInput[];
   teamTrends: TeamTrend[];
+  robotPictures: RobotPicture[];
   syncMeta: SyncMeta | null;
   dataLoading: boolean;
   dataError: string | null;
@@ -81,6 +82,7 @@ let _unsubTbaMatches: (() => void) | null = null;
 let _unsubActions: (() => void) | null = null;
 let _unsubExcluded: (() => void) | null = null;
 let _unsubAttrModel: (() => void) | null = null;
+let _unsubPictures: (() => void) | null = null;
 let _subscribedEventKey: string | null = null;
 
 export const useAnalyticsStore = create<AnalyticsState>()(
@@ -96,6 +98,7 @@ export const useAnalyticsStore = create<AnalyticsState>()(
       teamFuelStats: [],
       predictionInputs: [],
       teamTrends: [],
+      robotPictures: [],
       syncMeta: null,
       dataLoading: false,
       dataError: null,
@@ -134,6 +137,7 @@ export const useAnalyticsStore = create<AnalyticsState>()(
           teamFuelStats: [],
           predictionInputs: [],
           teamTrends: [],
+          robotPictures: [],
           localOPR: null,
         });
 
@@ -202,7 +206,18 @@ export const useAnalyticsStore = create<AnalyticsState>()(
           () => {}
         );
 
-        // 6. Subscribe to shared attribution model: config/attributionModel
+        // 6. Subscribe to robot pictures: robotPictures/2026/pictures
+        const picturesRef = collection(db, 'robotPictures', '2026', 'pictures');
+        _unsubPictures = onSnapshot(
+          picturesRef,
+          (snapshot) => {
+            const pics: RobotPicture[] = snapshot.docs.map(d => d.data() as RobotPicture);
+            set({ robotPictures: pics });
+          },
+          () => {}
+        );
+
+        // 7. Subscribe to shared attribution model: config/attributionModel
         const attrModelRef = doc(db, 'config', 'attributionModel');
         _unsubAttrModel = onSnapshot(
           attrModelRef,
@@ -227,6 +242,7 @@ export const useAnalyticsStore = create<AnalyticsState>()(
         if (_unsubTbaMatches) { _unsubTbaMatches(); _unsubTbaMatches = null; }
         if (_unsubActions) { _unsubActions(); _unsubActions = null; }
         if (_unsubExcluded) { _unsubExcluded(); _unsubExcluded = null; }
+        if (_unsubPictures) { _unsubPictures(); _unsubPictures = null; }
         if (_unsubAttrModel) { _unsubAttrModel(); _unsubAttrModel = null; }
         _subscribedEventKey = null;
       },

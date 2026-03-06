@@ -429,6 +429,27 @@ function groupActionsByRobot(autoRows, teleopRows) {
   return Array.from(map.values());
 }
 
+// ── Robot Pictures Query ────────────────────────────────────────────────────
+
+async function fetchRobotPictures(client) {
+  const result = await client.query(
+    `SELECT team_number, year, robot_image_link, timestamp
+     FROM public.robot_pictures
+     WHERE year = '2026'
+     ORDER BY team_number, timestamp`
+  );
+  return result.rows;
+}
+
+function transformRobotPicture(row) {
+  return {
+    team_number: coalesceNum(row.team_number),
+    year: row.year || "2026",
+    robot_image_link: row.robot_image_link || "",
+    timestamp: row.timestamp || "",
+  };
+}
+
 // ── Core Sync Logic ─────────────────────────────────────────────────────────
 
 async function performSync(eventKey, triggeredBy) {
@@ -444,12 +465,14 @@ async function performSync(eventKey, triggeredBy) {
     const rankingRows = await fetchTBARankings(pgClient, eventKey);
     const autoActionRows = await fetchAutoActions(pgClient, eventKey);
     const teleopActionRows = await fetchTeleopActions(pgClient, eventKey);
+    const pictureRows = await fetchRobotPictures(pgClient);
 
     // Transform
     const scoutEntries = scoutRows.map(transformScoutRow);
     const tbaMatches = tbaRows.map(transformTBAMatch);
     const rankings = rankingRows.map(transformRanking);
     const actionDocs = groupActionsByRobot(autoActionRows, teleopActionRows);
+    const pictures = pictureRows.map(transformRobotPicture);
 
     // Write to Firestore
     const scoutWritten = await batchWrite(
@@ -464,6 +487,10 @@ async function performSync(eventKey, triggeredBy) {
     const actionsWritten = await batchWrite(
       `scoutActions/${eventKey}/actions`, actionDocs, "id"
     );
+    const picturesWritten = await batchWrite(
+      `robotPictures/2026/pictures`, pictures,
+      (doc) => `${doc.team_number}_${doc.timestamp}`
+    );
 
     // Update sync metadata
     const durationMs = Date.now() - startTime;
@@ -474,6 +501,7 @@ async function performSync(eventKey, triggeredBy) {
       tbaMatchesCount: matchesWritten,
       tbaRankingsCount: rankingsWritten,
       scoutActionsCount: actionsWritten,
+      robotPicturesCount: picturesWritten,
       eventKey,
       syncDurationMs: durationMs,
     };
@@ -513,6 +541,7 @@ exports.syncScoutData = onCall(
       "https://data-wrangler-2026.firebaseapp.com",
       "https://analytics.bigsurf.fit",
       "https://team.148.wtf",
+      "https://148.ninja",
       "http://localhost:5173",
     ],
   },

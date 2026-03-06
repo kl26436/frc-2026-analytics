@@ -268,6 +268,17 @@ export function computeRobotFuelFromActions(robotActions: RobotActions): {
 }
 
 // ============================================================================
+// Robot Pictures (from Postgres public.robot_pictures)
+// ============================================================================
+
+export interface RobotPicture {
+  team_number: number;
+  year: string;
+  robot_image_link: string;
+  timestamp: string;
+}
+
+// ============================================================================
 // Excluded Entries (Data Quality exclusions)
 // ============================================================================
 
