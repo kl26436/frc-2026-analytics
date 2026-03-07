@@ -9,8 +9,8 @@
     "lint": "eslint .",
     "test": "vitest run",
     "preview": "vite preview",
-    "deploy": "tsc -b && vite build --base=/ && firebase deploy --only hosting",
-    "deploy:ghpages": "npm run build && gh-pages -d dist",
+    "deploy": "tsc -b && vite build && firebase deploy --only hosting",
+    "deploy:ghpages": "tsc -b && vite build --base=/frc-2026-analytics/ && gh-pages -d dist",
     "deploy:all": "npm run deploy && npm run deploy:ghpages"
   },
   "dependencies": {
