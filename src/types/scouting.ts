@@ -339,6 +339,7 @@ export interface TeamStatistics {
   poorAccuracyCount: number;
   lostConnectionCount: number;
   noRobotCount: number;
+  unreliableMatchCount: number; // matches where lost_connection OR no_robot_on_field
   secondReviewCount: number;
 
   // ── Fuel Scoring Totals (sum of raw DB fields across all matches) ──
@@ -407,6 +408,7 @@ export interface TeamStatistics {
   poorAccuracyRate: number;
   lostConnectionRate: number;
   noRobotRate: number;
+  overallUnreliabilityRate: number; // % of matches with lost_connection OR no_robot_on_field
 
   // ── Bonus Bucket Averages (avg count per match) ──
   avgAutoPlus1: number;

@@ -568,6 +568,11 @@ exports.syncScoutData = onCall(
   }
 );
 
+// ── Claude AI Proxy ─────────────────────────────────────────────────────────
+
+const { claudeProxy } = require("./claude");
+exports.claudeProxy = claudeProxy;
+
 // ── Scheduled Function: scheduledSync ───────────────────────────────────────
 
 exports.scheduledSync = onSchedule(

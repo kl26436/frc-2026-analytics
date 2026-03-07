@@ -8,7 +8,7 @@ import type { TBAEventData } from '../types/tba';
 import { calculateAllTeamStatistics, calculateTeamStatistics } from '../utils/statistics';
 import { computeMatchFuelAttribution, aggregateTeamFuel, DEFAULT_BETA } from '../utils/fuelAttribution';
 import type { RobotMatchFuel, TeamFuelStats, AttributionFn } from '../utils/fuelAttribution';
-import { logCurveAttribution, equalAttribution, rankBasedAttribution } from '../utils/modelComparison';
+import { logCurveAttribution, equalAttribution, rankBasedAttribution, reattributeWithBayesian } from '../utils/modelComparison';
 import { buildPredictionInputs } from '../utils/predictions';
 import type { PredictionTeamInput } from '../utils/predictions';
 import { computeAllTeamTrends } from '../utils/trendAnalysis';
@@ -19,7 +19,7 @@ import type { OPRResults } from '../utils/opr';
 import type { TBAOPRs } from '../types/tba';
 
 export interface AttributionModelConfig {
-  family: 'power' | 'log' | 'equal' | 'rank';
+  family: 'power' | 'log' | 'equal' | 'rank' | 'bayesian';
   beta: number; // only used for power family
 }
 
@@ -285,6 +285,7 @@ export const useAnalyticsStore = create<AnalyticsState>()(
 
         // Build attribution function from selected model config
         let attribFn: AttributionFn | undefined;
+        const isBayesian = attributionModel.family === 'bayesian';
         switch (attributionModel.family) {
           case 'log':
             attribFn = logCurveAttribution;
@@ -295,15 +296,25 @@ export const useAnalyticsStore = create<AnalyticsState>()(
           case 'rank':
             attribFn = (shots, total) => rankBasedAttribution(shots, total, shots.map(s => s === 0));
             break;
+          case 'bayesian':
+            // Bayesian runs in two passes: first power curve for initial data, then sequential Bayesian
+            break;
           case 'power':
           default:
             // Use beta param — undefined attribFn falls back to powerCurveAttribution(beta)
             break;
         }
 
-        const matchFuelAttribution = computeMatchFuelAttribution(
+        // First pass: always compute with power curve (or selected fn) to get base data
+        let matchFuelAttribution = computeMatchFuelAttribution(
           filteredEntries, scoutActions, pgTbaMatches, attributionModel.beta, attribFn
         );
+
+        // Second pass for Bayesian: re-attribute using sequential priors
+        if (isBayesian) {
+          matchFuelAttribution = reattributeWithBayesian(matchFuelAttribution);
+        }
+
         const teamFuelStats = aggregateTeamFuel(matchFuelAttribution);
         set({ matchFuelAttribution, teamFuelStats });
         get().calculateLocalOPR();

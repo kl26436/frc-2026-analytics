@@ -244,23 +244,26 @@ const MIN_MATCHES_FOR_BAYESIAN = 3;
 
 export function computeModelComparison(
   matchFuelAttribution: RobotMatchFuel[],
+  activeModelId?: string,
 ): ModelComparisonResult {
   const groups = groupByAlliance(matchFuelAttribution);
+  // Default to power_DEFAULT_BETA if no active model specified
+  const currentId = activeModelId ?? `power_${DEFAULT_BETA}`;
 
   // Define all model variants
   const variants: ModelVariant[] = [
-    { id: 'equal', label: 'Equal', family: 'equal', isCurrent: false, isActive: true },
-    { id: 'rank', label: 'Rank', family: 'rank', isCurrent: false, isActive: true },
+    { id: 'equal', label: 'Equal', family: 'equal', isCurrent: currentId === 'equal', isActive: true },
+    { id: 'rank', label: 'Rank', family: 'rank', isCurrent: currentId === 'rank', isActive: true },
     ...BETA_VALUES.map(beta => ({
       id: `power_${beta}`,
       label: beta === 1.0 ? 'Linear (β=1.0)' : `Power β=${beta}`,
       family: 'power' as const,
       beta,
-      isCurrent: beta === DEFAULT_BETA,
+      isCurrent: currentId === `power_${beta}`,
       isActive: true,
     })),
-    { id: 'log', label: 'Log', family: 'log', isCurrent: false, isActive: true },
-    { id: 'bayesian', label: 'Bayesian', family: 'bayesian', isCurrent: false, isActive: false },
+    { id: 'log', label: 'Log', family: 'log', isCurrent: currentId === 'log', isActive: true },
+    { id: 'bayesian', label: 'Bayesian', family: 'bayesian', isCurrent: currentId === 'bayesian', isActive: false },
   ];
 
   // Check if bayesian can run (need teams with 3+ matches)
@@ -365,4 +368,100 @@ export function computeModelComparison(
     actionDataPct: matchFuelAttribution.length > 0 ? actionDataCount / matchFuelAttribution.length : 0,
     flaggedPct: matchFuelAttribution.length > 0 ? flaggedCount / matchFuelAttribution.length : 0,
   };
+}
+
+// ── Bayesian Active-Model Re-attribution ─────────────────────────────────────
+
+/**
+ * Re-attribute match fuel using a sequential Bayesian model.
+ * Processes alliance groups in match order, building per-team accuracy priors
+ * from all previously seen matches. Falls back to power curve β=DEFAULT_BETA
+ * for any group where no team has enough prior data (< 5 shots).
+ */
+export function reattributeWithBayesian(rows: RobotMatchFuel[]): RobotMatchFuel[] {
+  if (rows.length === 0) return rows;
+
+  // Group by match + alliance
+  const groupMap = new Map<string, RobotMatchFuel[]>();
+  for (const r of rows) {
+    const key = `${r.matchNumber}_${r.alliance}`;
+    if (!groupMap.has(key)) groupMap.set(key, []);
+    groupMap.get(key)!.push(r);
+  }
+
+  // Sort groups by match number then alliance
+  const sortedGroups = Array.from(groupMap.values()).sort((a, b) =>
+    a[0].matchNumber - b[0].matchNumber || a[0].alliance.localeCompare(b[0].alliance)
+  );
+
+  // Running priors: team → { shots, scored }
+  const priors = new Map<number, { shots: number; scored: number }>();
+  const result: RobotMatchFuel[] = [];
+
+  for (const group of sortedGroups) {
+    const shots = group.map(r => r.isZeroWeight ? 0 : r.shots);
+    const isZeroWeight = group.map(r => r.isZeroWeight);
+    const fmsTotal = group[0].fmsAllianceTotal;
+
+    // Build prior accuracies (null = not enough history)
+    const priorAccuracies = group.map(r => {
+      const p = priors.get(r.teamNumber);
+      if (!p || p.shots < 5) return null;
+      return p.scored / p.shots;
+    });
+
+    // Total scored balls: Bayesian or fall back to power curve
+    const attributed = bayesianAttribution(shots, fmsTotal, priorAccuracies, isZeroWeight)
+      ?? powerCurveAttribution(shots, fmsTotal, DEFAULT_BETA);
+
+    // Per-phase totals reconstructed from current per-robot attribution sums
+    const allianceFmsAutoScored = group.reduce((s, r) => s + r.autoScored, 0);
+    const allianceFmsTeleopScored = group.reduce((s, r) => s + r.teleopScored, 0);
+    const allianceFmsAutoPoints = group.reduce((s, r) => s + r.autoPointsScored, 0);
+    const allianceFmsTeleopPoints = group.reduce((s, r) => s + r.teleopPointsScored, 0);
+
+    const autoShots = group.map(r => r.isZeroWeight ? 0 : r.autoShots);
+    const teleopShots = group.map(r => r.isZeroWeight ? 0 : r.teleopShots);
+
+    const autoAttributed = bayesianAttribution(autoShots, allianceFmsAutoScored, priorAccuracies, isZeroWeight)
+      ?? powerCurveAttribution(autoShots, allianceFmsAutoScored, DEFAULT_BETA);
+    const teleopAttributed = bayesianAttribution(teleopShots, allianceFmsTeleopScored, priorAccuracies, isZeroWeight)
+      ?? powerCurveAttribution(teleopShots, allianceFmsTeleopScored, DEFAULT_BETA);
+    const autoPointsAttributed = bayesianAttribution(autoShots, allianceFmsAutoPoints, priorAccuracies, isZeroWeight)
+      ?? powerCurveAttribution(autoShots, allianceFmsAutoPoints, DEFAULT_BETA);
+    const teleopPointsAttributed = bayesianAttribution(teleopShots, allianceFmsTeleopPoints, priorAccuracies, isZeroWeight)
+      ?? powerCurveAttribution(teleopShots, allianceFmsTeleopPoints, DEFAULT_BETA);
+
+    for (let i = 0; i < group.length; i++) {
+      const r = group[i];
+      const newScored = attributed[i];
+      const newAutoPoints = autoPointsAttributed[i];
+      const newTeleopPoints = teleopPointsAttributed[i];
+
+      result.push({
+        ...r,
+        shotsScored: newScored,
+        autoScored: autoAttributed[i],
+        teleopScored: teleopAttributed[i],
+        scoringAccuracy: r.shots > 0 ? newScored / r.shots : 0,
+        autoPointsScored: newAutoPoints,
+        teleopPointsScored: newTeleopPoints,
+        totalPointsScored: newAutoPoints + newTeleopPoints,
+      });
+
+      // Update running priors for next matches
+      if (!r.isZeroWeight && r.shots > 0) {
+        const prior = priors.get(r.teamNumber) ?? { shots: 0, scored: 0 };
+        prior.shots += r.shots;
+        prior.scored += newScored;
+        priors.set(r.teamNumber, prior);
+      }
+    }
+  }
+
+  return result.sort((a, b) =>
+    a.matchNumber - b.matchNumber ||
+    a.alliance.localeCompare(b.alliance) ||
+    a.teamNumber - b.teamNumber
+  );
 }

@@ -21,7 +21,14 @@ export function doesTeamPassFilter(
   filter: FilterConfig,
 ): boolean {
   const value = (stats as unknown as Record<string, number>)[filter.field];
-  return evaluateFilter(value, filter.operator, filter.threshold);
+  if (!evaluateFilter(value, filter.operator, filter.threshold)) return false;
+  if (filter.additionalConditions) {
+    for (const cond of filter.additionalConditions) {
+      const v = (stats as unknown as Record<string, number>)[cond.field];
+      if (!evaluateFilter(v, cond.operator, cond.threshold)) return false;
+    }
+  }
+  return true;
 }
 
 /** Check if a team passes ALL active filters. Returns true if no filters are active. */

@@ -249,7 +249,7 @@ function AdminSettings() {
         </h2>
         <p className="text-xs text-textSecondary mb-4">
           Pulls latest match results, rankings, and alliance selections from The Blue Alliance.
-          Auto-refresh runs every 10 minutes in the background for all users.
+          Auto-refresh runs every 5 minutes in the background for all users (TBA + scouting DB).
         </p>
         <div className="flex items-center gap-4 flex-wrap">
           <button
@@ -269,7 +269,7 @@ function AdminSettings() {
             ) : (
               <ToggleLeft size={24} className="text-textMuted" />
             )}
-            Auto-refresh {autoRefreshEnabled ? 'on (10 min)' : 'off'}
+            Auto-refresh {autoRefreshEnabled ? 'on (5 min)' : 'off'}
           </button>
         </div>
       </div>

@@ -1,11 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
-import { BarChart3, Users, ClipboardList, Menu, X, Calendar, Swords, Handshake, ClipboardCheck, ChevronDown, Search, Target, Shield, LogOut, AlertTriangle, LineChart, PlayCircle, Eye, FlaskConical } from 'lucide-react';
+import { BarChart3, Users, ClipboardList, Menu, X, Calendar, Swords, Handshake, ClipboardCheck, ChevronDown, Search, Target, Shield, LogOut, AlertTriangle, LineChart, PlayCircle, Eye, FlaskConical, Sparkles } from 'lucide-react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { useAuth } from '../contexts/AuthContext';
 import ActiveSessionBanner from './ActiveSessionBanner';
 
-const AUTO_REFRESH_INTERVAL = 10 * 60 * 1000; // 10 minutes
+const AUTO_REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
 
 interface NavDropdownProps {
   label: string;
@@ -65,10 +65,12 @@ const analysisItems = [
   { to: '/teams', icon: Users, label: 'Teams' },
   { to: '/event', icon: Calendar, label: 'Event' },
   { to: '/replay/1', icon: PlayCircle, label: 'Match Replay' },
+  { to: '/insights', icon: Sparkles, label: 'AI Insights' },
 ];
 
 const scoutingItems = [
   { to: '/pit-scouting', icon: ClipboardCheck, label: 'Pit Scout' },
+  { to: '/pit-analysis', icon: BarChart3, label: 'Pit Analysis' },
   { to: '/ninja', icon: Eye, label: 'Ninja' },
   { to: '/data-quality', icon: AlertTriangle, label: 'Data Quality' },
 ];
@@ -151,18 +153,22 @@ function AppLayout() {
   const eventCode = useAnalyticsStore(state => state.eventCode);
   const autoRefreshEnabled = useAnalyticsStore(state => state.autoRefreshEnabled);
   const fetchTBAData = useAnalyticsStore(state => state.fetchTBAData);
+  const triggerSync = useAnalyticsStore(state => state.triggerSync);
   const { user, isAdmin, signOut } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
 
   const closeMobileMenu = () => setMobileMenuOpen(false);
 
-  // TBA auto-refresh — runs app-wide when enabled by admin
+  // Auto-refresh TBA + scouting DB every 5 minutes when enabled
   useEffect(() => {
     if (!autoRefreshEnabled) return;
-    const id = setInterval(() => fetchTBAData(), AUTO_REFRESH_INTERVAL);
+    const id = setInterval(() => {
+      fetchTBAData();
+      if (eventCode) triggerSync(eventCode).catch(() => {});
+    }, AUTO_REFRESH_INTERVAL);
     return () => clearInterval(id);
-  }, [autoRefreshEnabled, fetchTBAData]);
+  }, [autoRefreshEnabled, fetchTBAData, triggerSync, eventCode]);
 
   const isScoutingActive = scoutingItems.some(item => location.pathname === item.to || location.pathname.startsWith(item.to + '/'));
   const isAnalysisActive = analysisItems.some(item => location.pathname === item.to || location.pathname.startsWith(item.to + '/'));

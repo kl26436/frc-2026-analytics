@@ -13,6 +13,7 @@ export function buildCalibrationPrompt(
   eventCode: string,
 ): string {
   const sections: string[] = [];
+  const currentModel = modelComparison.models.find(m => m.variant.isCurrent);
 
   // ── System Context ─────────────────────────────────────────────────────────
   sections.push(`# Fuel Attribution Model Calibration — ${eventCode}
@@ -23,8 +24,18 @@ You are helping calibrate a fuel attribution model for FRC (FIRST Robotics Compe
 
 **The problem:** Scouts track per-robot shot attempts, but we only know the alliance total scored from FMS. We need to distribute the FMS total back to individual robots to get per-robot scoring metrics.
 
-**Current model:** Power Curve with β=0.7
-  robotScored = (robotShots^0.7 / Σ(allRobotShots^0.7)) × fmsAllianceTotal
+**Current model:** ${currentModel?.variant.label ?? 'Power β=0.7'}
+  ${currentModel?.variant.family === 'power'
+    ? `robotScored = (robotShots^${currentModel.variant.beta} / Σ(allRobotShots^${currentModel.variant.beta})) × fmsAllianceTotal`
+    : currentModel?.variant.family === 'log'
+    ? 'robotScored = (ln(shots+1) / Σln(shots+1)) × fmsAllianceTotal'
+    : currentModel?.variant.family === 'equal'
+    ? 'robotScored = fmsAllianceTotal / numActiveRobots'
+    : currentModel?.variant.family === 'rank'
+    ? 'robotScored = rankWeight[1st=3,2nd=2,3rd=1] / ΣrankWeights × fmsAllianceTotal'
+    : currentModel?.variant.family === 'bayesian'
+    ? 'robotScored = (shots × historicalAccuracy / Σ(shots × historicalAccuracy)) × fmsAllianceTotal'
+    : 'robotScored = (robotShots^0.7 / Σ(allRobotShots^0.7)) × fmsAllianceTotal'}
 
 This was chosen from Week 0 data (15 matches) as the model with lowest coefficient of variation across teams. We now have ${modelComparison.totalMatches} matches of real event data and need to re-evaluate.
 
@@ -57,13 +68,12 @@ Lower CV = more stable per-team averages across matches.
 Mean Abs Error = average |attributed - shots| per robot (how far attribution deviates from scout estimate).`);
 
   // ── Per-Team Stats (current model) ────────────────────────────────────────
-  const currentModel = modelComparison.models.find(m => m.variant.isCurrent);
   if (currentModel && currentModel.perTeamStats.length > 0) {
     const teamTable = currentModel.perTeamStats.map(t =>
       `| ${String(t.teamNumber).padStart(5)} | ${String(t.matchesPlayed).padStart(7)} | ${t.avgScoredPerMatch.toFixed(1).padStart(10)} | ${(t.accuracy * 100).toFixed(0).padStart(8)}% | ${(t.cv * 100).toFixed(0).padStart(5)}% |`
     ).join('\n');
 
-    sections.push(`## Per-Team Statistics (Current Model: Power β=0.7)
+    sections.push(`## Per-Team Statistics (Current Model: ${currentModel?.variant.label ?? 'Power β=0.7'})
 
 | Team  | Matches | Avg Scored | Accuracy | CV    |
 |-------|---------|------------|----------|-------|
@@ -127,7 +137,7 @@ ${matchSummaryRows.join('\n')}`);
 
 Based on the data above, please analyze:
 
-1. **Optimal Model:** Which model family and parameter gives the best CV? Should we switch from Power β=0.7? If the Bayesian model is active, how does it compare?
+1. **Optimal Model:** Which model family and parameter gives the best CV? Should we switch from ${currentModel?.variant.label ?? 'Power β=0.7'}? If the Bayesian model is active, how does it compare?
 
 2. **Data Quality Red Flags:** Are there matches or teams with suspicious patterns? (e.g., extremely high/low efficiency, potential scout errors, teams with high CV that might indicate inconsistent scouting)
 

@@ -384,10 +384,10 @@ function TeamDetail() {
                           <span className="text-textMuted">-</span>
                         )}
                       </td>
-                      <td className="px-3 py-3 text-right font-semibold">{points.autoPoints}</td>
+                      <td className="px-3 py-3 text-right font-semibold">{Math.round(points.autoPoints)}</td>
                       <td className="hidden md:table-cell px-3 py-3 text-right text-textSecondary">{teleopScored}</td>
                       <td className="hidden md:table-cell px-3 py-3 text-right text-textSecondary">{passes > 0 ? passes : '-'}</td>
-                      <td className="px-3 py-3 text-right font-semibold">{points.teleopPoints}</td>
+                      <td className="px-3 py-3 text-right font-semibold">{Math.round(points.teleopPoints)}</td>
                       <td className="px-3 py-3 text-center">
                         <span className={climbLevel >= 2 ? 'font-semibold text-success' : climbLevel === 1 ? 'font-semibold' : 'text-textMuted'}>
                           {climbLabel(climbLevel)}
@@ -397,7 +397,7 @@ function TeamDetail() {
                         )}
                       </td>
                       <td className="hidden md:table-cell px-3 py-3 text-right font-semibold">{points.endgamePoints}</td>
-                      <td className="px-3 py-3 text-right font-bold">{points.total}</td>
+                      <td className="px-3 py-3 text-right font-bold">{Math.round(points.total)}</td>
                       <td className="px-3 py-3 text-center text-xs space-x-1">
                         {entry.lost_connection && <span className="text-danger">LOST</span>}
                         {entry.no_robot_on_field && <span className="text-danger">NO ROBOT</span>}
@@ -689,13 +689,19 @@ function TeamDetail() {
           <p className="text-xs text-textSecondary mb-4">Flag counts</p>
           <div className="space-y-3">
             <div className="flex justify-between">
-              <span className="text-textSecondary">Lost Connection</span>
+              <span className="text-textSecondary font-medium">Overall Unreliability</span>
+              <span className={`font-bold ${teamStats.overallUnreliabilityRate > 0 ? 'text-danger' : 'text-success'}`}>
+                {teamStats.unreliableMatchCount}/{n} ({teamStats.overallUnreliabilityRate.toFixed(0)}%)
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-textSecondary pl-3">↳ Lost Connection</span>
               <span className={`font-semibold ${teamStats.lostConnectionCount > 0 ? 'text-danger' : ''}`}>
                 {teamStats.lostConnectionCount}/{n} ({teamStats.lostConnectionRate.toFixed(0)}%)
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-textSecondary">No Robot on Field</span>
+              <span className="text-textSecondary pl-3">↳ No Robot on Field</span>
               <span className={`font-semibold ${teamStats.noRobotCount > 0 ? 'text-danger' : ''}`}>
                 {teamStats.noRobotCount}/{n} ({teamStats.noRobotRate.toFixed(0)}%)
               </span>

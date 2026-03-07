@@ -7,6 +7,7 @@ import {
   Shield, FlaskConical, ChevronDown, ArrowUpDown, Copy, Check,
   BarChart3, Table2, Bot, Wifi, WifiOff,
 } from 'lucide-react';
+import ClaudeChat from '../components/ClaudeChat';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid, ReferenceDot, Cell,
@@ -128,8 +129,13 @@ export default function FuelCalibration() {
   );
 
   const modelComparison = useMemo(
-    () => computeModelComparison(matchFuelAttribution),
-    [matchFuelAttribution],
+    () => computeModelComparison(matchFuelAttribution, modelConfigToKey(attributionModel)),
+    [matchFuelAttribution, attributionModel],
+  );
+
+  const bayesianAvailable = useMemo(
+    () => modelComparison.models.find(m => m.variant.id === 'bayesian')?.variant.isActive ?? false,
+    [modelComparison],
   );
 
   const prompt = useMemo(
@@ -254,6 +260,7 @@ export default function FuelCalibration() {
       <ActiveModelSelector
         attributionModel={attributionModel}
         setAttributionModel={setAttributionModel}
+        bayesianAvailable={bayesianAvailable}
       />
 
       {/* Tab Content */}
@@ -750,6 +757,8 @@ function ModelDetailRow({ model, isStriped, bestCV }: { model: ModelResult; isSt
 // ── Active Model Selector ────────────────────────────────────────────────────
 
 const MODEL_OPTIONS: { label: string; family: AttributionModelConfig['family']; beta?: number }[] = [
+  { label: 'Power β=0.3', family: 'power', beta: 0.3 },
+  { label: 'Power β=0.4', family: 'power', beta: 0.4 },
   { label: 'Power β=0.5', family: 'power', beta: 0.5 },
   { label: 'Power β=0.6', family: 'power', beta: 0.6 },
   { label: 'Power β=0.7 (default)', family: 'power', beta: 0.7 },
@@ -759,6 +768,7 @@ const MODEL_OPTIONS: { label: string; family: AttributionModelConfig['family']; 
   { label: 'Log Curve', family: 'log' },
   { label: 'Equal Distribution', family: 'equal' },
   { label: 'Rank-Based', family: 'rank' },
+  { label: 'Bayesian', family: 'bayesian' },
 ];
 
 function modelConfigToKey(config: AttributionModelConfig): string {
@@ -772,47 +782,56 @@ function keyToModelConfig(key: string): AttributionModelConfig {
   return { family: key as AttributionModelConfig['family'], beta: DEFAULT_BETA };
 }
 
-function ActiveModelSelector({ attributionModel, setAttributionModel }: {
+function ActiveModelSelector({ attributionModel, setAttributionModel, bayesianAvailable }: {
   attributionModel: AttributionModelConfig;
   setAttributionModel: (config: AttributionModelConfig) => void;
+  bayesianAvailable: boolean;
 }) {
   const currentKey = modelConfigToKey(attributionModel);
   const isDefault = attributionModel.family === 'power' && attributionModel.beta === DEFAULT_BETA;
+  const activeLabel = MODEL_OPTIONS.find(o => (o.family === 'power' ? `power_${o.beta}` : o.family) === currentKey)?.label ?? currentKey;
 
   return (
-    <div className={`bg-surface rounded-lg border p-4 flex flex-col sm:flex-row sm:items-center gap-3 ${
+    <div className={`bg-surface rounded-lg border p-4 flex flex-col gap-3 ${
       isDefault ? 'border-border' : 'border-warning'
     }`}>
-      <div className="flex-1">
-        <p className="text-sm font-medium flex items-center gap-2">
-          Active Model
-          {!isDefault && (
-            <span className="px-1.5 py-0.5 bg-warning/20 text-warning rounded text-[10px] font-semibold">CHANGED</span>
-          )}
-        </p>
-        <p className="text-xs text-textMuted mt-0.5">
-          Changing this recalculates all attribution data and predictions instantly.
-        </p>
-      </div>
-      <div className="flex items-center gap-2">
-        <select
-          value={currentKey}
-          onChange={e => setAttributionModel(keyToModelConfig(e.target.value))}
-          className="px-3 py-2 bg-card border border-border rounded-lg text-sm text-textPrimary focus:outline-none focus:border-success"
-        >
-          {MODEL_OPTIONS.map(opt => {
-            const key = opt.family === 'power' ? `power_${opt.beta}` : opt.family;
-            return <option key={key} value={key}>{opt.label}</option>;
-          })}
-        </select>
-        {!isDefault && (
-          <button
-            onClick={() => setAttributionModel({ family: 'power', beta: DEFAULT_BETA })}
-            className="px-3 py-2 text-xs text-textSecondary hover:text-textPrimary bg-surfaceElevated rounded-lg transition-colors"
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="flex-1">
+          <p className="text-sm font-medium flex items-center gap-2">
+            Active Model:&nbsp;<span className="text-textPrimary font-bold">{activeLabel}</span>
+            {!isDefault && (
+              <span className="px-1.5 py-0.5 bg-warning/20 text-warning rounded text-[10px] font-semibold">CHANGED</span>
+            )}
+          </p>
+          <p className="text-xs text-textMuted mt-0.5">
+            Changing this recalculates all attribution data and predictions instantly.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <select
+            value={currentKey}
+            onChange={e => setAttributionModel(keyToModelConfig(e.target.value))}
+            className="px-3 py-2 bg-card border border-border rounded-lg text-sm text-textPrimary focus:outline-none focus:border-success"
           >
-            Reset
-          </button>
-        )}
+            {MODEL_OPTIONS.map(opt => {
+              const key = opt.family === 'power' ? `power_${opt.beta}` : opt.family;
+              const isBayesianDisabled = opt.family === 'bayesian' && !bayesianAvailable;
+              return (
+                <option key={key} value={key} disabled={isBayesianDisabled}>
+                  {opt.label}{isBayesianDisabled ? ' (need 3+ matches/team)' : ''}
+                </option>
+              );
+            })}
+          </select>
+          {!isDefault && (
+            <button
+              onClick={() => setAttributionModel({ family: 'power', beta: DEFAULT_BETA })}
+              className="px-3 py-2 text-xs text-textSecondary hover:text-textPrimary bg-surfaceElevated rounded-lg transition-colors"
+            >
+              Reset
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -833,15 +852,21 @@ function AIAnalysisTab({
 
   return (
     <div className="space-y-6">
-      {/* Copy Prompt Section */}
+      {/* Inline Claude Analysis */}
+      <ClaudeChat
+        prompt={prompt}
+        title="Calibration Analysis"
+        description="Analyzes your attribution data, compares models, and recommends the optimal beta parameter."
+      />
+
+      {/* Fallback: Copy Prompt */}
       <div className="bg-surface rounded-lg border border-border p-4 md:p-6">
         <h2 className="text-lg font-bold flex items-center gap-2 mb-2">
-          <Bot size={20} />
-          AI-Assisted Analysis
+          <Copy size={20} />
+          Manual Prompt
         </h2>
         <p className="text-sm text-textSecondary mb-4">
-          Copy the analysis prompt below and paste it into Claude.ai or ChatGPT. It includes all your
-          attribution data, model comparison results, and specific analysis questions.
+          Alternatively, copy the prompt and paste into Claude.ai or ChatGPT.
         </p>
 
         <button
@@ -856,7 +881,6 @@ function AIAnalysisTab({
           {copied ? 'Copied to clipboard!' : 'Copy Analysis Prompt'}
         </button>
 
-        {/* Prompt Preview */}
         <div className="mt-4">
           <button
             onClick={() => setPromptExpanded(!promptExpanded)}
@@ -872,18 +896,6 @@ function AIAnalysisTab({
           </div>
           <p className="text-xs text-textMuted mt-1">{prompt.length.toLocaleString()} characters</p>
         </div>
-      </div>
-
-      {/* Claude API Section (deferred) */}
-      <div className="bg-surface rounded-lg border border-border p-4 md:p-6 opacity-50">
-        <h2 className="text-lg font-bold flex items-center gap-2 mb-2">
-          <Bot size={20} />
-          Inline Claude API
-        </h2>
-        <p className="text-sm text-textSecondary">
-          Coming soon — direct in-app analysis via Claude API. Requires a Firebase Cloud Function proxy
-          to handle CORS. For now, use the copy prompt button above.
-        </p>
       </div>
     </div>
   );

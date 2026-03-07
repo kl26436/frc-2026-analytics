@@ -67,6 +67,7 @@ export function calculateTeamStatistics(
   const poorAccuracyCount = entries.filter(e => e.poor_fuel_scoring_accuracy).length;
   const lostConnectionCount = entries.filter(e => e.lost_connection).length;
   const noRobotCount = entries.filter(e => e.no_robot_on_field).length;
+  const unreliableMatchCount = entries.filter(e => e.lost_connection || e.no_robot_on_field).length;
   const secondReviewCount = entries.filter(e => e.second_review).length;
 
   // ── Fuel scoring totals ──
@@ -135,6 +136,7 @@ export function calculateTeamStatistics(
     poorAccuracyCount,
     lostConnectionCount,
     noRobotCount,
+    unreliableMatchCount,
     secondReviewCount,
     totalAutoFuelScore,
     totalTeleopFuelScore,
@@ -190,6 +192,7 @@ export function calculateTeamStatistics(
     poorAccuracyRate: pct(poorAccuracyCount, n),
     lostConnectionRate: pct(lostConnectionCount, n),
     noRobotRate: pct(noRobotCount, n),
+    overallUnreliabilityRate: pct(unreliableMatchCount, n),
 
     // ── Derived: Bonus Bucket Averages ──
     avgAutoPlus1: totalAutoPlus1 / n,
@@ -253,6 +256,7 @@ function emptyStats(teamNumber: number, teamName?: string): TeamStatistics {
     poorAccuracyCount: 0,
     lostConnectionCount: 0,
     noRobotCount: 0,
+    unreliableMatchCount: 0,
     secondReviewCount: 0,
     totalAutoFuelScore: 0,
     totalTeleopFuelScore: 0,
@@ -300,6 +304,7 @@ function emptyStats(teamNumber: number, teamName?: string): TeamStatistics {
     poorAccuracyRate: 0,
     lostConnectionRate: 0,
     noRobotRate: 0,
+    overallUnreliabilityRate: 0,
     avgAutoPlus1: 0,
     avgAutoPlus2: 0,
     avgAutoPlus3: 0,

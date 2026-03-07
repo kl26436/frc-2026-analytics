@@ -30,6 +30,12 @@ export interface PickList {
 
 // ─── Filter Config (shared for live sync) ────────────────────────────────────
 
+export interface FilterCondition {
+  field: string;
+  operator: '>=' | '<=' | '>' | '<';
+  threshold: number;
+}
+
 export interface FilterConfig {
   id: string;
   label: string;
@@ -38,6 +44,7 @@ export interface FilterConfig {
   operator: '>=' | '<=' | '>' | '<';
   threshold: number;
   active: boolean;
+  additionalConditions?: FilterCondition[];
 }
 
 // ─── Live Pick List (Firestore-backed) ───────────────────────────────────────

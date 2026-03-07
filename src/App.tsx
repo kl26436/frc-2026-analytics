@@ -20,7 +20,9 @@ import MatchReplay from './pages/MatchReplay';
 import NinjaDashboard from './pages/NinjaDashboard';
 import NinjaTeamDetail from './pages/NinjaTeamDetail';
 import FuelCalibration from './pages/FuelCalibration';
+import AIInsights from './pages/AIInsights';
 import RobotPictures from './pages/RobotPictures';
+import PitAnalysis from './pages/PitAnalysis';
 
 function AppContent() {
   const setEventCode = useAnalyticsStore(state => state.setEventCode);
@@ -75,6 +77,7 @@ function AppContent() {
         <Route path="/alliance-selection" element={<AllianceSelection />} />
         <Route path="/alliance-selection/:sessionCode" element={<AllianceSelection />} />
         <Route path="/pit-scouting" element={<PitScouting />} />
+        <Route path="/pit-analysis" element={<PitAnalysis />} />
         <Route path="/data-quality" element={<DataQuality />} />
         <Route path="/replay/:matchNumber" element={<MatchReplay />} />
         <Route path="/event" element={<EventSetup />} />
@@ -83,6 +86,7 @@ function AppContent() {
         <Route path="/ninja/:teamNumber" element={<NinjaTeamDetail />} />
         <Route path="/admin" element={<AdminSettings />} />
         <Route path="/calibration" element={<FuelCalibration />} />
+        <Route path="/insights" element={<AIInsights />} />
         <Route path="/robot-pictures" element={<RobotPictures />} />
       </Route>
     </Routes>

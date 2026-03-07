@@ -155,7 +155,7 @@ const STAT_OPTIONS: { value: keyof TeamStatistics; label: string }[] = [
 const DEFAULT_FILTERS: FilterConfig[] = [
   { id: 'l3Climber', label: 'L3 Climber', icon: 'mountain', field: 'level3ClimbRate', operator: '>=', threshold: 20, active: false },
   { id: 'strongAuto', label: 'Strong Auto', icon: 'zap', field: 'avgAutoPoints', operator: '>=', threshold: 10, active: false },
-  { id: 'reliable', label: 'Reliable', icon: 'shield', field: 'lostConnectionRate', operator: '<=', threshold: 15, active: false },
+  { id: 'reliable', label: 'Reliable', icon: 'shield', field: 'lostConnectionRate', operator: '<=', threshold: 15, active: false, additionalConditions: [{ field: 'noRobotRate', operator: '<=', threshold: 15 }] },
   { id: 'highScorer', label: 'High Scorer', icon: 'trophy', field: 'avgTotalPoints', operator: '>=', threshold: 35, active: false },
 ];
 
