@@ -504,6 +504,39 @@ export function useAllianceSession(userId: string | null) {
     await updateSession({ messages });
   }, [session, userId, updateSession]);
 
+  // Re-order session teams based on updated pick list (live sync)
+  const reorderFromPickList = useCallback(async (pickListTeams: PickListTeam[]) => {
+    if (!session || !isHost) return;
+
+    // Build new global rank order from the pick list
+    const tierOrder: PickListTeam['tier'][] = ['tier1', 'tier2', 'tier3', 'tier4'];
+    const orderedPickTeams = tierOrder.flatMap(tier =>
+      pickListTeams.filter(t => t.tier === tier).sort((a, b) => a.rank - b.rank)
+    );
+    const rankMap = new Map<number, { globalRank: number; tier: string; rank: number }>();
+    orderedPickTeams.forEach((t, i) => {
+      rankMap.set(t.teamNumber, { globalRank: i + 1, tier: t.tier, rank: t.rank });
+    });
+
+    // Update session teams: re-rank from pick list, preserve status/pickedByAlliance
+    let nextGlobalRank = orderedPickTeams.length + 1;
+    const teams = session.teams.map(t => {
+      const pl = rankMap.get(t.teamNumber);
+      if (pl) {
+        return {
+          ...t,
+          globalRank: pl.globalRank,
+          originalTier: pl.tier as SelectionTeam['originalTier'],
+          originalRank: pl.rank,
+        };
+      }
+      // Unranked team — keep at the end
+      return { ...t, globalRank: nextGlobalRank++, originalTier: 'unranked' as const };
+    });
+
+    await updateSession({ teams });
+  }, [session, isHost, updateSession]);
+
   return {
     session,
     loading,
@@ -525,5 +558,6 @@ export function useAllianceSession(userId: string | null) {
     removeParticipant,
     sendMessage,
     startListening,
+    reorderFromPickList,
   };
 }

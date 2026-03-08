@@ -12,6 +12,7 @@ import {
   pointerWithin,
   rectIntersection,
   PointerSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   type DragEndEvent,
@@ -69,6 +70,7 @@ import type { LucideIcon } from 'lucide-react';
 import type { PickListTeam, PickListConfig, FilterConfig } from '../types/pickList';
 import type { LiveComment, LiveSuggestion, LiveLockStatus } from '../types/pickList';
 import type { TeamStatistics } from '../types/scouting';
+import { usePitScoutStore } from '../store/usePitScoutStore';
 import { doesTeamPassAllFilters, countTeamsPassingFilter } from '../utils/filterUtils';
 import { formatRelativeTime } from '../utils/formatting';
 import {
@@ -147,6 +149,7 @@ const STAT_OPTIONS: { value: keyof TeamStatistics; label: string }[] = [
   { value: 'autoClimbRate', label: 'Auto Climb Rate (%)' },
   { value: 'autoDidNothingRate', label: 'Auto Did Nothing (%)' },
   { value: 'dedicatedPasserRate', label: 'Dedicated Passer (%)' },
+  { value: 'overallUnreliabilityRate', label: 'Unreliability (%)' },
   { value: 'lostConnectionRate', label: 'Lost Connection (%)' },
   { value: 'noRobotRate', label: 'No Robot (%)' },
   { value: 'poorAccuracyRate', label: 'Poor Accuracy (%)' },
@@ -155,7 +158,7 @@ const STAT_OPTIONS: { value: keyof TeamStatistics; label: string }[] = [
 const DEFAULT_FILTERS: FilterConfig[] = [
   { id: 'l3Climber', label: 'L3 Climber', icon: 'mountain', field: 'level3ClimbRate', operator: '>=', threshold: 20, active: false },
   { id: 'strongAuto', label: 'Strong Auto', icon: 'zap', field: 'avgAutoPoints', operator: '>=', threshold: 10, active: false },
-  { id: 'reliable', label: 'Reliable', icon: 'shield', field: 'lostConnectionRate', operator: '<=', threshold: 15, active: false, additionalConditions: [{ field: 'noRobotRate', operator: '<=', threshold: 15 }] },
+  { id: 'reliable', label: 'Reliable', icon: 'shield', field: 'overallUnreliabilityRate', operator: '<=', threshold: 15, active: false },
   { id: 'highScorer', label: 'High Scorer', icon: 'trophy', field: 'avgTotalPoints', operator: '>=', threshold: 35, active: false },
 ];
 
@@ -444,7 +447,8 @@ function LivePickListView({
   }, [liveList?.config]);
 
   const liveSensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: canEdit ? 8 : 999999 } })
+    useSensor(PointerSensor, { activationConstraint: { distance: canEdit ? 8 : 999999 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } })
   );
 
   const handleLiveDragStart = (event: DragStartEvent) => {
@@ -1243,7 +1247,7 @@ function SortableWatchlistCard({ id, disabled, children }: { id: string; disable
     opacity: isDragging ? 0.5 : 1,
   };
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="bg-surface border border-border rounded-lg p-3">
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="bg-surface border border-border rounded-lg p-3 select-none touch-none">
       {children}
     </div>
   );
@@ -1302,7 +1306,7 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onT
     <div
       ref={setNodeRef}
       style={style}
-      className={`border rounded-lg p-2 mb-2 transition-all cursor-pointer ${
+      className={`border rounded-lg p-2 mb-2 transition-all cursor-pointer select-none ${
         isSelectedForCompare
           ? 'border-blueAlliance bg-blueAlliance/10 ring-2 ring-blueAlliance'
           : isPickListTeam && team.onWatchlist
@@ -1323,10 +1327,10 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onT
         <div
           {...(disableInteraction ? {} : listeners)}
           {...(disableInteraction ? {} : attributes)}
-          className={`mt-1 touch-none ${disableInteraction ? 'text-textMuted/20 cursor-default' : 'cursor-grab active:cursor-grabbing text-textMuted hover:text-textPrimary'}`}
+          className={`touch-none p-1.5 -m-1.5 md:p-0 md:m-0 md:mt-1 ${disableInteraction ? 'text-textMuted/20 cursor-default' : 'cursor-grab active:cursor-grabbing text-textMuted hover:text-textPrimary'}`}
           onClick={e => e.stopPropagation()}
         >
-          <GripVertical size={16} />
+          <GripVertical size={16} className="md:w-4 md:h-4 w-6 h-6" />
         </div>
 
         {/* Team info */}
@@ -1346,10 +1350,20 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onT
           </div>
 
           {/* Quick stats */}
-          <div className="flex gap-2 text-xs text-textSecondary">
+          <div className="flex flex-wrap gap-2 text-xs text-textSecondary">
             <span>{teamStats?.avgTotalPoints?.toFixed(0) ?? '0'} pts</span>
             <span>L3: {teamStats?.level3ClimbRate?.toFixed(0) ?? '0'}%</span>
             <span>A: {teamStats?.avgAutoPoints?.toFixed(0) ?? '0'}</span>
+            {(() => {
+              const pit = usePitScoutStore.getState().getEntryByTeam(team.teamNumber);
+              if (!pit) return null;
+              return (
+                <>
+                  {pit.driveType && <span className="text-blueAlliance font-medium">{pit.driveType}</span>}
+                  {pit.canGoUnderTrench && <span className="text-success font-medium">trench</span>}
+                </>
+              );
+            })()}
           </div>
           {teamTrend && teamTrend.trend !== 'stable' && (
             <div className={`text-xs font-semibold ${
@@ -1699,6 +1713,11 @@ function PickList() {
   const [filterConfigs, setFilterConfigs] = useState<FilterConfig[]>(DEFAULT_FILTERS);
   const [showFilterSettings, setShowFilterSettings] = useState(false);
 
+  // Pit scouting filters (boolean toggles)
+  const pitEntries = usePitScoutStore(state => state.entries);
+  const [pitFilterTrench, setPitFilterTrench] = useState(false);
+  const [pitFilterSwerve, setPitFilterSwerve] = useState(false);
+
   // Toggle a filter's active state
   const toggleFilter = (id: string) => {
     setFilterConfigs(prev => prev.map(f => f.id === id ? { ...f, active: !f.active } : f));
@@ -1734,11 +1753,21 @@ function PickList() {
     return countTeamsPassingFilter(filter, pickList.teams, teamStatistics);
   };
 
-  // Check if a team passes all active filters
-  const teamPassesFilters = (teamNumber: number): boolean =>
-    doesTeamPassAllFilters(teamNumber, filterConfigs, teamStatistics);
+  // Check if a team passes all active filters (stats + pit scouting)
+  const teamPassesFilters = (teamNumber: number): boolean => {
+    if (!doesTeamPassAllFilters(teamNumber, filterConfigs, teamStatistics)) return false;
+    if (pitFilterTrench) {
+      const pit = pitEntries.find(e => e.teamNumber === teamNumber);
+      if (!pit?.canGoUnderTrench) return false;
+    }
+    if (pitFilterSwerve) {
+      const pit = pitEntries.find(e => e.teamNumber === teamNumber);
+      if (pit?.driveType !== 'swerve') return false;
+    }
+    return true;
+  };
 
-  const hasActiveFilters = filterConfigs.some(f => f.active);
+  const hasActiveFilters = filterConfigs.some(f => f.active) || pitFilterTrench || pitFilterSwerve;
 
   // Count picked teams in tier1 + tier2
   const tier1And2Count = pickList?.teams.filter(t =>
@@ -1763,6 +1792,12 @@ function PickList() {
     useSensor(PointerSensor, {
       activationConstraint: {
         distance: 8,
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 200,
+        tolerance: 5,
       },
     })
   );
@@ -1922,6 +1957,25 @@ function PickList() {
               <> • Live</>
             )}
           </p>
+          {(() => {
+            const source = mode === 'live' ? liveSync.liveList?.teams : pickList?.teams;
+            if (!source) return null;
+            const t1 = source.filter(t => t.tier === 'tier1').length;
+            const t2 = source.filter(t => t.tier === 'tier2').length;
+            const t3 = source.filter(t => t.tier === 'tier3').length;
+            const total = t1 + t2 + t3;
+            return (
+              <p className="text-xs text-textMuted mt-0.5">
+                <span className="text-success font-semibold">{t1}</span> {tier1Name}
+                {' + '}
+                <span className="text-warning font-semibold">{t2}</span> {tier2Name}
+                {' + '}
+                <span className="text-blueAlliance font-semibold">{t3}</span> {tier3Name}
+                {' = '}
+                <span className="text-textPrimary font-semibold">{total}</span> ranked
+              </p>
+            );
+          })()}
         </div>
         <div className="flex flex-wrap gap-2">
           {/* Mode toggle */}
@@ -2273,9 +2327,47 @@ function PickList() {
               </button>
             );
           })}
-          {filterConfigs.some(f => f.active) && (
+          {/* Pit scouting filters */}
+          {pitEntries.length > 0 && (
+            <>
+              <span className="text-textMuted text-xs mx-1">|</span>
+              <button
+                onClick={() => setPitFilterTrench(!pitFilterTrench)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-colors ${
+                  pitFilterTrench ? 'bg-success text-background' : 'bg-surfaceElevated hover:bg-interactive'
+                }`}
+              >
+                <ArrowDown size={14} />
+                Under Trench
+                {pitFilterTrench && (
+                  <span className="ml-1 font-bold">
+                    ({pitEntries.filter(e => e.canGoUnderTrench).length})
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setPitFilterSwerve(!pitFilterSwerve)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-colors ${
+                  pitFilterSwerve ? 'bg-success text-background' : 'bg-surfaceElevated hover:bg-interactive'
+                }`}
+              >
+                <Wrench size={14} />
+                Swerve
+                {pitFilterSwerve && (
+                  <span className="ml-1 font-bold">
+                    ({pitEntries.filter(e => e.driveType === 'swerve').length})
+                  </span>
+                )}
+              </button>
+            </>
+          )}
+          {(filterConfigs.some(f => f.active) || pitFilterTrench || pitFilterSwerve) && (
             <button
-              onClick={() => setFilterConfigs(prev => prev.map(f => ({ ...f, active: false })))}
+              onClick={() => {
+                setFilterConfigs(prev => prev.map(f => ({ ...f, active: false })));
+                setPitFilterTrench(false);
+                setPitFilterSwerve(false);
+              }}
               className="text-xs text-textMuted hover:text-danger ml-2"
             >
               Clear all

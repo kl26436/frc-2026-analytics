@@ -1,7 +1,7 @@
 // Customizable Metrics Configuration
 
 export type MetricAggregation = 'avg' | 'max' | 'min' | 'median' | 'sum' | 'rate' | 'percentile';
-export type MetricCategory = 'overall' | 'auto' | 'teleop' | 'endgame' | 'fuel' | 'quality' | 'reliability';
+export type MetricCategory = 'overall' | 'auto' | 'teleop' | 'endgame' | 'fuel' | 'passing' | 'quality' | 'reliability';
 
 export interface MetricColumn {
   id: string;
@@ -441,7 +441,7 @@ export const DEFAULT_METRICS: MetricColumn[] = [
     category: 'endgame',
   },
 
-  // ========== QUALITY ==========
+  // ========== PASSING ==========
   {
     id: 'dedicatedPasserRate',
     label: 'Ded. Passer %',
@@ -451,7 +451,7 @@ export const DEFAULT_METRICS: MetricColumn[] = [
     decimals: 0,
     enabled: false,
     description: 'Percentage of matches marked as dedicated passer',
-    category: 'quality',
+    category: 'passing',
   },
   {
     id: 'bulldozedFuelRate',
@@ -462,18 +462,7 @@ export const DEFAULT_METRICS: MetricColumn[] = [
     decimals: 0,
     enabled: false,
     description: 'Percentage of matches where robot bulldozed fuel',
-    category: 'quality',
-  },
-  {
-    id: 'poorAccuracyRate',
-    label: 'Poor Accuracy %',
-    field: 'poorAccuracyRate',
-    aggregation: 'rate',
-    format: 'percentage',
-    decimals: 0,
-    enabled: false,
-    description: 'Percentage of matches flagged for poor fuel scoring accuracy',
-    category: 'quality',
+    category: 'passing',
   },
   {
     id: 'dedicatedPasserCount',
@@ -484,6 +473,19 @@ export const DEFAULT_METRICS: MetricColumn[] = [
     decimals: 0,
     enabled: false,
     description: 'Number of matches marked as dedicated passer (shown as X/N)',
+    category: 'passing',
+  },
+
+  // ========== QUALITY ==========
+  {
+    id: 'poorAccuracyRate',
+    label: 'Poor Accuracy %',
+    field: 'poorAccuracyRate',
+    aggregation: 'rate',
+    format: 'percentage',
+    decimals: 0,
+    enabled: false,
+    description: 'Percentage of matches flagged for poor fuel scoring accuracy',
     category: 'quality',
   },
 
@@ -532,6 +534,28 @@ export const DEFAULT_METRICS: MetricColumn[] = [
     description: 'Number of matches with no robot on field (shown as X/N)',
     category: 'reliability',
   },
+  {
+    id: 'overallUnreliabilityRate',
+    label: 'Unreliability %',
+    field: 'overallUnreliabilityRate',
+    aggregation: 'rate',
+    format: 'percentage',
+    decimals: 0,
+    enabled: false,
+    description: 'Percentage of matches with lost connection OR no robot on field',
+    category: 'reliability',
+  },
+  {
+    id: 'unreliableMatchCount',
+    label: 'Unreliable Matches',
+    field: 'unreliableMatchCount',
+    aggregation: 'sum',
+    format: 'count',
+    decimals: 0,
+    enabled: false,
+    description: 'Number of matches with lost connection OR no robot on field (shown as X/N)',
+    category: 'reliability',
+  },
 ];
 
 // Category labels for display
@@ -541,6 +565,7 @@ export const CATEGORY_LABELS: Record<MetricCategory, string> = {
   teleop: 'Teleop',
   endgame: 'Endgame & Climbing',
   fuel: 'Fuel Scoring',
+  passing: 'Passing',
   quality: 'Quality Flags',
   reliability: 'Reliability',
 };

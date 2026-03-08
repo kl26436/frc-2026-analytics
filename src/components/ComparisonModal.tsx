@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { X, ArrowUp, Sliders, Play } from 'lucide-react';
+import { X, ArrowUp, Sliders, Play, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import type { TBAMatch } from '../types/tba';
 import type { ScoutEntry } from '../types/scouting';
 import { estimateMatchPoints, estimateMatchFuel } from '../types/scouting';
@@ -17,7 +17,7 @@ import { formatMetricValue } from '../utils/formatting';
 // Fields where lower is better (for coloring)
 const LOWER_IS_BETTER_FIELDS = [
   'lostConnectionRate', 'noRobotRate', 'climbNoneRate', 'climbFailedRate',
-  'bulldozedFuelRate', 'poorAccuracyRate', 'autoDidNothingRate',
+  'poorAccuracyRate', 'autoDidNothingRate',
 ];
 
 // Map pre-computed TeamStatistics field → per-entry extractor
@@ -68,6 +68,7 @@ function ComparisonModal({ teams, onPickTeam, onClose }: ComparisonModalProps) {
   const tbaApiKey = useAnalyticsStore(state => state.tbaApiKey);
   const teamFuelStats = useAnalyticsStore(state => state.teamFuelStats);
   const matchFuelAttribution = useAnalyticsStore(state => state.matchFuelAttribution);
+  const teamTrends = useAnalyticsStore(state => state.teamTrends);
 
   const [teamVideos, setTeamVideos] = useState<Record<number, TBAMatch[]>>({});
   const [expandedVideoTeam, setExpandedVideoTeam] = useState<number | null>(null);
@@ -482,6 +483,91 @@ function ComparisonModal({ teams, onPickTeam, onClose }: ComparisonModalProps) {
               to customize which metrics to display.
             </div>
           )}
+
+          {/* Recent Form / Trend Section */}
+          {(() => {
+            const trends = teams.map(t => teamTrends.find(tr => tr.teamNumber === t.teamNumber));
+            if (trends.every(t => !t || t.matchResults.length < 2)) return null;
+            return (
+              <div>
+                <div className="bg-surfaceElevated px-3 py-1.5 font-bold text-xs mt-3">
+                  Recent Form
+                </div>
+                {/* Overall vs Last 3 — Total Points */}
+                <div className={`grid ${isTwoTeam ? 'grid-cols-[1fr_1fr_1fr]' : `grid-cols-[1fr_repeat(${teamCount},1fr)]`} text-xs border-b border-border`}>
+                  <div className="px-3 py-2 text-textSecondary">Total Pts</div>
+                  {trends.map((trend, i) => (
+                    <div key={teams[i].teamNumber} className="px-2 py-2 text-center">
+                      {trend ? (
+                        <div className="flex items-center justify-center gap-1.5">
+                          <span className="text-textSecondary">{trend.overallAvg.total.toFixed(0)}</span>
+                          <span className="text-textMuted">→</span>
+                          <span className="font-semibold">{trend.last3Avg.total.toFixed(0)}</span>
+                          {trend.trend === 'improving' && <TrendingUp size={12} className="text-success" />}
+                          {trend.trend === 'declining' && <TrendingDown size={12} className="text-danger" />}
+                          {trend.trend === 'stable' && <Minus size={12} className="text-textMuted" />}
+                          <span className={`text-[10px] font-semibold ${
+                            trend.delta > 0 ? 'text-success' : trend.delta < 0 ? 'text-danger' : 'text-textMuted'
+                          }`}>
+                            {trend.delta > 0 ? '+' : ''}{trend.delta.toFixed(0)}%
+                          </span>
+                        </div>
+                      ) : <span className="text-textMuted">—</span>}
+                    </div>
+                  ))}
+                </div>
+                {/* Overall vs Last 3 — Auto Points */}
+                <div className={`grid ${isTwoTeam ? 'grid-cols-[1fr_1fr_1fr]' : `grid-cols-[1fr_repeat(${teamCount},1fr)]`} text-xs border-b border-border`}>
+                  <div className="px-3 py-2 text-textSecondary">Auto Pts</div>
+                  {trends.map((trend, i) => (
+                    <div key={teams[i].teamNumber} className="px-2 py-2 text-center">
+                      {trend ? (
+                        <div className="flex items-center justify-center gap-1.5">
+                          <span className="text-textSecondary">{trend.overallAvg.auto.toFixed(0)}</span>
+                          <span className="text-textMuted">→</span>
+                          <span className="font-semibold">{trend.last3Avg.auto.toFixed(0)}</span>
+                        </div>
+                      ) : <span className="text-textMuted">—</span>}
+                    </div>
+                  ))}
+                </div>
+                {/* Overall vs Last 3 — L3 Climb Rate */}
+                <div className={`grid ${isTwoTeam ? 'grid-cols-[1fr_1fr_1fr]' : `grid-cols-[1fr_repeat(${teamCount},1fr)]`} text-xs border-b border-border`}>
+                  <div className="px-3 py-2 text-textSecondary">L3 Climb</div>
+                  {trends.map((trend, i) => (
+                    <div key={teams[i].teamNumber} className="px-2 py-2 text-center">
+                      {trend ? (
+                        <div className="flex items-center justify-center gap-1.5">
+                          <span className="text-textSecondary">{trend.overallAvg.l3ClimbRate.toFixed(0)}%</span>
+                          <span className="text-textMuted">→</span>
+                          <span className="font-semibold">{trend.last3Avg.l3ClimbRate.toFixed(0)}%</span>
+                        </div>
+                      ) : <span className="text-textMuted">—</span>}
+                    </div>
+                  ))}
+                </div>
+                {/* Last 3 match-by-match results */}
+                {isTwoTeam && (
+                  <div className={`grid grid-cols-[1fr_1fr_1fr] text-xs border-b border-border`}>
+                    <div className="px-3 py-2 text-textSecondary">Last 3</div>
+                    {trends.map((trend, i) => (
+                      <div key={teams[i].teamNumber} className="px-2 py-2 text-center">
+                        {trend && trend.matchResults.length > 0 ? (
+                          <div className="flex items-center justify-center gap-1">
+                            {trend.matchResults.slice(-3).map((m, mi) => (
+                              <span key={mi} className="px-1.5 py-0.5 bg-surface rounded text-[10px] font-mono border border-border">
+                                {m.matchLabel}: {m.total.toFixed(0)}
+                              </span>
+                            ))}
+                          </div>
+                        ) : <span className="text-textMuted">—</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
         {/* Legend */}

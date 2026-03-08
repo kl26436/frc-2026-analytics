@@ -5,6 +5,7 @@ import { useFirebaseAuth } from '../hooks/useFirebaseAuth';
 import { useAllianceSession } from '../hooks/useAllianceSession';
 import { useAllianceSelectionStore } from '../store/useAllianceSelectionStore';
 import { usePickListStore } from '../store/usePickListStore';
+import { usePickListSync } from '../hooks/usePickListSync';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { useAuth } from '../contexts/AuthContext';
 import AllianceSelectionLobby from '../components/allianceSelection/AllianceSelectionLobby';
@@ -16,7 +17,9 @@ function AllianceSelection() {
   const { user, loading: authLoading, signIn } = useFirebaseAuth();
   const { isAdmin, liveSession, setLiveSession, clearLiveSession } = useAuth();
   const pickList = usePickListStore(state => state.pickList);
+  const eventCode = useAnalyticsStore(state => state.eventCode);
   const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
+  const { liveList } = usePickListSync(eventCode, user?.uid ?? null, user?.email ?? null, user?.displayName ?? null, isAdmin);
   const setLastSessionCode = useAllianceSelectionStore(state => state.setLastSessionCode);
   const setLastDisplayName = useAllianceSelectionStore(state => state.setLastDisplayName);
   const setLastTeamNumber = useAllianceSelectionStore(state => state.setLastTeamNumber);
@@ -55,6 +58,7 @@ function AllianceSelection() {
     removeParticipant,
     sendMessage,
     startListening,
+    reorderFromPickList,
   } = useAllianceSession(user?.uid ?? null);
 
   // Auto sign-in on mount
@@ -68,14 +72,16 @@ function AllianceSelection() {
     if (!user) {
       await signIn();
     }
-    if (!pickList) return;
+    // Prefer live (collaborative) list over personal list
+    const teamsSource = liveList ?? pickList;
+    if (!teamsSource) return;
 
     // Get all event team numbers from teamStatistics
     const allEventTeamNumbers = teamStatistics.map(t => t.teamNumber);
 
     const result = await createSession({
       eventKey,
-      teams: pickList.teams,
+      teams: teamsSource.teams,
       allEventTeamNumbers,
       displayName,
       teamNumber,
@@ -98,7 +104,7 @@ function AllianceSelection() {
     }
 
     navigate(`/alliance-selection/${result.sessionCode}`);
-  }, [user, signIn, pickList, teamStatistics, createSession, setLastSessionCode, setActiveSessionId, setLiveSession, navigate]);
+  }, [user, signIn, liveList, pickList, teamStatistics, createSession, setLastSessionCode, setActiveSessionId, setLiveSession, navigate]);
 
   const handleJoinSession = useCallback(async (code: string, displayName: string, teamNumber?: number) => {
     if (!user) {
@@ -150,6 +156,17 @@ function AllianceSelection() {
       setNeedsJoinPrompt(true);
     }
   }, [sessionCode, user, session, sessionLoading, activeSessionId, startListening, handleJoinSession]);
+
+  // Live sync: when the live pick list changes, re-order teams in the active alliance session
+  const liveListTeamsRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!session || !isHost || !liveList || session.status !== 'active') return;
+    // Serialize to detect actual changes (avoid spurious updates)
+    const key = liveList.teams.map(t => `${t.teamNumber}:${t.tier}:${t.rank}`).join(',');
+    if (liveListTeamsRef.current === key) return;
+    liveListTeamsRef.current = key;
+    reorderFromPickList(liveList.teams);
+  }, [session, isHost, liveList, reorderFromPickList]);
 
   // Handle the join prompt submission (when session code is in URL)
   const handleJoinPromptSubmit = useCallback(async () => {
@@ -206,6 +223,7 @@ function AllianceSelection() {
         isAdmin={isAdmin}
         userDisplayName={user?.displayName ?? undefined}
         liveSession={liveSession}
+        livePickList={liveList}
       />
     );
   }

@@ -14,7 +14,7 @@ import { formatMetricValue } from '../utils/formatting';
 // Fields where lower is better (for coloring)
 const LOWER_IS_BETTER_FIELDS = [
   'lostConnectionRate', 'noRobotRate', 'climbNoneRate', 'climbFailedRate',
-  'autoDidNothingRate', 'bulldozedFuelRate', 'poorAccuracyRate',
+  'autoDidNothingRate', 'poorAccuracyRate',
 ];
 
 function TeamComparison() {

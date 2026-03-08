@@ -4,6 +4,7 @@ import { usePickListStore } from '../../store/usePickListStore';
 import { useAnalyticsStore } from '../../store/useAnalyticsStore';
 import { useAllianceSelectionStore } from '../../store/useAllianceSelectionStore';
 import type { LiveSession } from '../../contexts/AuthContext';
+import type { PickList } from '../../types/pickList';
 
 interface AllianceSelectionLobbyProps {
   onCreateSession: (eventKey: string, displayName: string, teamNumber?: number) => Promise<void>;
@@ -14,10 +15,13 @@ interface AllianceSelectionLobbyProps {
   isAdmin: boolean;
   userDisplayName?: string;
   liveSession: LiveSession | null;
+  livePickList?: PickList | null;
 }
 
-function AllianceSelectionLobby({ onCreateSession, onJoinSession, onClearLiveSession, loading, error, isAdmin, userDisplayName, liveSession }: AllianceSelectionLobbyProps) {
-  const pickList = usePickListStore(state => state.pickList);
+function AllianceSelectionLobby({ onCreateSession, onJoinSession, onClearLiveSession, loading, error, isAdmin, userDisplayName, liveSession, livePickList }: AllianceSelectionLobbyProps) {
+  const personalPickList = usePickListStore(state => state.pickList);
+  // Prefer the live (collaborative) list over the personal list
+  const pickList = livePickList ?? personalPickList;
   const eventCode = useAnalyticsStore(state => state.eventCode);
   const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
   const activeSessionId = useAllianceSelectionStore(state => state.activeSessionId);
