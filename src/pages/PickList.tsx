@@ -135,7 +135,6 @@ const FILTER_ICONS: Record<string, LucideIcon> = {
   target: Target,
   arrowDown: ArrowDown,
   wrench: Wrench,
-  wrench: Wrench,
 };
 
 const STAT_OPTIONS: { value: keyof TeamStatistics; label: string }[] = [
@@ -1490,8 +1489,16 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onT
 
         <span className="flex-1" />
 
-        {/* Flag */}
-        {isPickListTeam && (team as PickListTeam).flagged && <Flag size={12} className="text-danger flex-shrink-0" />}
+        {/* Watchlist indicator / toggle */}
+        {isPickListTeam && !disableInteraction && (
+          <button
+            onClick={e => { e.stopPropagation(); onToggleWatchlist?.(); }}
+            className={`p-0.5 flex-shrink-0 transition-colors ${(team as PickListTeam).onWatchlist ? 'text-warning' : 'text-textMuted/30 hover:text-warning'}`}
+            title={(team as PickListTeam).onWatchlist ? 'Remove from watchlist' : 'Add to watchlist'}
+          >
+            <Eye size={13} />
+          </button>
+        )}
 
         {/* Trend arrow */}
         {teamTrend && teamTrend.trend !== 'stable' && (
@@ -1513,8 +1520,8 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onT
       {/* Expanded detail */}
       {isExpanded && (
         <div className="px-3 pb-2 pt-1 border-t border-border/50 space-y-1.5">
-          {/* Stats row */}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+          {/* Row 1: Points + Rank */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5 text-xs">
             {tbaRanking && (
               <span className="text-textSecondary">
                 Rank <span className="font-semibold text-textPrimary">#{tbaRanking.rank}</span>
@@ -1524,154 +1531,127 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onT
               </span>
             )}
             <span className="text-textSecondary">
-              Total <span className="font-semibold text-textPrimary">{teamStats?.avgTotalPoints?.toFixed(1) ?? '?'}</span>
+              Total Pts <span className="font-semibold text-textPrimary">{teamStats?.avgTotalPoints?.toFixed(1) ?? '?'}</span>
             </span>
             <span className="text-textSecondary">
-              Auto <span className="font-medium text-textPrimary">{teamStats?.avgAutoPoints?.toFixed(1) ?? '?'}</span>
+              Auto Pts <span className="font-medium text-textPrimary">{teamStats?.avgAutoPoints?.toFixed(1) ?? '?'}</span>
             </span>
-            <span className="text-textSecondary">
-              Teleop <span className="font-medium text-textPrimary">{teamStats?.avgTeleopPoints?.toFixed(1) ?? '?'}</span>
-            </span>
-            <span className="text-textSecondary">
-              Fuel <span className="font-medium text-textPrimary">{teamStats?.avgTotalFuelEstimate?.toFixed(1) ?? '?'}</span>
-            </span>
-            {teamTrend && teamTrend.trend !== 'stable' && (
-              <span className={`font-semibold ${teamTrend.trend === 'improving' ? 'text-success' : 'text-danger'}`}>
-                Last 3 avg: {teamTrend.last3Avg.total.toFixed(0)} pts {teamTrend.trend === 'improving' ? '\u2191' : '\u2193'}
-              </span>
-            )}
             {teamStats && (
               <span className="text-textMuted ml-auto">{teamStats.matchesPlayed} matches</span>
             )}
           </div>
 
-          {/* Badges row */}
-          <div className="flex flex-wrap items-center gap-1.5">
-            {/* Climb badge — rates are already 0–100 */}
-            {teamStats && teamStats.level3ClimbRate > 10 && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-success/20 text-success">
-                Level 3 Climb {teamStats.level3ClimbRate.toFixed(0)}%
+          {/* Row 2: Fuel */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5 text-xs">
+            <span className="text-textSecondary">
+              Total Fuel <span className="font-medium text-textPrimary">{teamStats?.avgTotalFuelEstimate?.toFixed(1) ?? '?'}</span>
+            </span>
+            <span className="text-textSecondary">
+              Auto Fuel <span className="font-medium text-textPrimary">{teamStats?.avgAutoFuelEstimate?.toFixed(1) ?? '?'}</span>
+            </span>
+            <span className="text-textSecondary">
+              Teleop Fuel <span className="font-medium text-textPrimary">{teamStats?.avgTeleopFuelEstimate?.toFixed(1) ?? '?'}</span>
+            </span>
+          </div>
+
+          {/* Row 3: Climb + badges */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5 text-xs">
+            <span className="text-textSecondary">
+              Endgame Climb{' '}
+              <span className="font-medium text-textPrimary">
+                {teamStats?.level3ClimbCount ? 'Level 3' : teamStats?.level2ClimbCount ? 'Level 2' : teamStats?.level1ClimbCount ? 'Level 1' : 'None'}
               </span>
-            )}
-            {teamStats && teamStats.level3ClimbRate <= 10 && teamStats.level2ClimbRate > 10 && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-warning/20 text-warning">
-                Level 2 Climb {teamStats.level2ClimbRate.toFixed(0)}%
+            </span>
+            <span className="text-textSecondary">
+              Auto Climb{' '}
+              <span className="font-medium text-textPrimary">
+                {teamStats?.autoClimbCount ? 'Yes' : 'No'}
               </span>
-            )}
-            {teamStats && teamStats.level3ClimbRate <= 10 && teamStats.level2ClimbRate <= 10 && teamStats.level1ClimbRate > 10 && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-surfaceElevated text-textSecondary">
-                Level 1 Climb
-              </span>
-            )}
-            {/* Auto climb */}
-            {teamStats && teamStats.autoClimbRate > 10 && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-blueAlliance/20 text-blueAlliance">
-                Auto Climb {teamStats.autoClimbRate.toFixed(0)}%
-              </span>
-            )}
-            {/* Trench */}
+            </span>
             {pit?.canGoUnderTrench && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-success/20 text-success">Trench</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-surfaceElevated text-textSecondary border border-border">Trench</span>
             )}
-            {/* Drive type */}
-            {pit?.driveType && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-blueAlliance/20 text-blueAlliance capitalize">{pit.driveType}</span>
-            )}
-            {/* Passer */}
             {teamStats && teamStats.dedicatedPasserRate > 30 && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-warning/20 text-warning">
-                Dedicated Passer {teamStats.dedicatedPasserRate.toFixed(0)}%
-              </span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-surfaceElevated text-textSecondary border border-border">Dedicated Passer</span>
             )}
-            {/* Vibe check */}
             {pit?.vibeCheck === 'bad' && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-danger/20 text-danger">Bad Vibe</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-surfaceElevated text-danger border border-border">Bad Vibe</span>
             )}
           </div>
 
-          {/* Notes */}
-          {currentTier && isPickListTeam && isEditingNotes ? (
-            <input
-              type="text"
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              onClick={e => e.stopPropagation()}
-              onBlur={() => {
-                setIsEditingNotes(false);
-                onUpdateNotes?.(notes);
-              }}
-              onKeyDown={e => {
-                if (e.key === 'Enter') {
-                  setIsEditingNotes(false);
-                  onUpdateNotes?.(notes);
-                }
-              }}
-              className="w-full bg-background border border-border rounded px-2 py-1 text-xs"
-              autoFocus
-            />
-          ) : (
-            currentTier && isPickListTeam && (team as PickListTeam).notes && (
-              <p
-                className="text-xs text-textSecondary italic truncate cursor-text hover:text-textPrimary transition-colors"
-                title="Click to edit note"
-                onClick={e => { e.stopPropagation(); if (!disableInteraction) setIsEditingNotes(true); }}
-              >{(team as PickListTeam).notes}</p>
-            )
+          {/* Trend */}
+          {teamTrend && teamTrend.trend !== 'stable' && (
+            <div className={`text-xs font-semibold ${teamTrend.trend === 'improving' ? 'text-success' : 'text-danger'}`}>
+              Last 3 avg: {teamTrend.last3Avg.total.toFixed(0)} pts {teamTrend.trend === 'improving' ? '\u2191' : '\u2193'}
+            </div>
           )}
 
-          {/* Actions row */}
+          {/* Tier move buttons */}
           <div className="flex items-center gap-2 flex-wrap" onClick={e => e.stopPropagation()}>
-            {/* Tier move buttons */}
             {currentTier && tierNames && onMoveTier && (
               <>
                 {currentTier !== 'tier1' && (
                   <button onClick={() => onMoveTier('tier1')} className="flex items-center gap-1 px-2 py-1 text-xs bg-surfaceElevated hover:bg-interactive rounded transition-colors" title={`Move to ${tierNames.tier1}`}>
-                    <ChevronsUp size={12} /> <span className="truncate max-w-[50px]">{tierNames.tier1}</span>
+                    <ChevronsUp size={12} /> {tierNames.tier1}
                   </button>
                 )}
                 {currentTier !== 'tier2' && currentTier !== 'tier1' && (
                   <button onClick={() => onMoveTier('tier2')} className="flex items-center gap-1 px-2 py-1 text-xs bg-surfaceElevated hover:bg-interactive rounded transition-colors" title={`Move to ${tierNames.tier2}`}>
-                    <ArrowUp size={12} /> <span className="truncate max-w-[50px]">{tierNames.tier2}</span>
+                    <ArrowUp size={12} /> {tierNames.tier2}
                   </button>
                 )}
                 {currentTier === 'tier1' && (
                   <button onClick={() => onMoveTier('tier2')} className="flex items-center gap-1 px-2 py-1 text-xs bg-surfaceElevated hover:bg-interactive rounded transition-colors" title={`Move to ${tierNames.tier2}`}>
-                    <ArrowDown size={12} /> <span className="truncate max-w-[50px]">{tierNames.tier2}</span>
+                    <ArrowDown size={12} /> {tierNames.tier2}
                   </button>
                 )}
                 {currentTier !== 'tier3' && currentTier !== 'tier4' && (
                   <button onClick={() => onMoveTier('tier3')} className="flex items-center gap-1 px-2 py-1 text-xs bg-surfaceElevated hover:bg-interactive rounded transition-colors" title={`Move to ${tierNames.tier3}`}>
-                    <ArrowDown size={12} /> <span className="truncate max-w-[50px]">{tierNames.tier3}</span>
-                  </button>
-                )}
-                {currentTier !== 'tier4' && (
-                  <button onClick={() => onMoveTier('tier4')} className="flex items-center gap-1 px-2 py-1 text-xs bg-danger/20 text-danger hover:bg-danger/30 rounded transition-colors" title={`Move to ${tierNames.tier4}`}>
-                    <Ban size={12} /> DNP
+                    <ArrowDown size={12} /> {tierNames.tier3}
                   </button>
                 )}
                 {currentTier === 'tier4' && (
                   <button onClick={() => onMoveTier('tier3')} className="flex items-center gap-1 px-2 py-1 text-xs bg-surfaceElevated hover:bg-interactive rounded transition-colors" title={`Move to ${tierNames.tier3}`}>
-                    <ArrowUp size={12} /> <span className="truncate max-w-[50px]">{tierNames.tier3}</span>
+                    <ArrowUp size={12} /> {tierNames.tier3}
                   </button>
                 )}
               </>
             )}
-
-            {/* Flag / Watchlist / Note actions */}
-            {currentTier && !disableInteraction && (
-              <div className="flex items-center gap-1 ml-auto">
-                <button onClick={() => onToggleWatchlist?.()} className={`p-1.5 rounded transition-colors ${isPickListTeam && (team as PickListTeam).onWatchlist ? 'text-warning' : 'text-textMuted hover:text-warning'}`} title="Watch">
-                  <Bookmark size={14} />
-                </button>
-                <button onClick={() => onToggleFlag?.()} className={`p-1.5 rounded transition-colors ${isPickListTeam && (team as PickListTeam).flagged ? 'text-danger' : 'text-textMuted hover:text-danger'}`} title="Flag">
-                  <Flag size={14} />
-                </button>
-                <button onClick={() => setIsEditingNotes(true)} className="p-1.5 text-textMuted hover:text-textPrimary rounded transition-colors" title="Edit notes">
-                  <StickyNote size={14} />
-                </button>
-              </div>
-            )}
           </div>
+
+          {/* Watch / Do Not Pick */}
+          {currentTier && !disableInteraction && onMoveTier && (
+            <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+              <button
+                onClick={() => onToggleWatchlist?.()}
+                className={`flex items-center gap-1.5 flex-1 justify-center px-2 py-1.5 text-xs font-medium rounded transition-colors ${
+                  isPickListTeam && (team as PickListTeam).onWatchlist
+                    ? 'bg-warning/20 text-warning border border-warning/40'
+                    : 'bg-warning/10 text-warning border border-warning/30 hover:bg-warning/20'
+                }`}
+              >
+                <Eye size={13} />
+                {isPickListTeam && (team as PickListTeam).onWatchlist ? 'Watching' : 'Watch'}
+              </button>
+              {currentTier !== 'tier4' ? (
+                <button
+                  onClick={() => onMoveTier('tier4')}
+                  className="flex items-center gap-1.5 flex-1 justify-center px-2 py-1.5 text-xs font-medium rounded transition-colors bg-danger/10 text-danger border border-danger/30 hover:bg-danger/20"
+                >
+                  <Ban size={13} />
+                  Do Not Pick
+                </button>
+              ) : (
+                <button
+                  onClick={() => onMoveTier('tier3')}
+                  className="flex items-center gap-1.5 flex-1 justify-center px-2 py-1.5 text-xs font-medium rounded transition-colors bg-success/10 text-success border border-success/40 hover:bg-success/20"
+                >
+                  <ArrowUp size={13} />
+                  Restore
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

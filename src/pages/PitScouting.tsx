@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Camera, Save, Loader2, CheckCircle, ChevronLeft, Trash2, Download, Printer, ClipboardCheck, MessageSquare, UserPlus, X, Clipboard } from 'lucide-react';
+import { Camera, Save, Loader2, CheckCircle, ChevronLeft, Download, Printer, ClipboardCheck, MessageSquare, UserPlus, X, Clipboard } from 'lucide-react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { usePitScoutStore } from '../store/usePitScoutStore';
 import { useFirebaseAuth } from '../hooks/useFirebaseAuth';
@@ -15,7 +15,7 @@ function PitScouting() {
   const eventCode = useAnalyticsStore(state => state.eventCode);
   const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
   const robotPictures = useAnalyticsStore(state => state.robotPictures);
-  const { entries, error, lastScoutName, setLastScoutName, addEntry, uploadPhoto, deletePhoto, loadEntriesFromFirestore } = usePitScoutStore();
+  const { entries, error, lastScoutName, setLastScoutName, addEntry, uploadPhoto, loadEntriesFromFirestore } = usePitScoutStore();
   const { user, loading: authLoading, signIn } = useFirebaseAuth();
   const { isAdmin, accessConfig, userProfiles } = useAuth();
 
