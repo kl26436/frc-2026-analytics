@@ -42,7 +42,7 @@ function MatchDetailModal({ match, teamStats, robotActions, onClose }: MatchDeta
   const startZoneLabel = activeZone >= 0 ? `Zone ${activeZone + 1}` : '-';
 
   const hasIssues = match.lost_connection || match.no_robot_on_field || match.teleop_climb_failed ||
-    match.eff_rep_bulldozed_fuel || match.poor_fuel_scoring_accuracy;
+    match.poor_fuel_scoring_accuracy;
 
   const BooleanBadge = ({ value, label, teamContext }: { value: boolean; label: string; teamContext?: string }) => (
     <div className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${
@@ -115,7 +115,6 @@ function MatchDetailModal({ match, teamStats, robotActions, onClose }: MatchDeta
                 {match.lost_connection && <span className="px-2 py-1 bg-danger/20 text-danger text-xs rounded font-medium">LOST CONNECTION</span>}
                 {match.no_robot_on_field && <span className="px-2 py-1 bg-danger/20 text-danger text-xs rounded font-medium">NO ROBOT</span>}
                 {match.teleop_climb_failed && <span className="px-2 py-1 bg-warning/20 text-warning text-xs rounded font-medium">CLIMB FAILED</span>}
-                {match.eff_rep_bulldozed_fuel && <span className="px-2 py-1 bg-warning/20 text-warning text-xs rounded font-medium">BULLDOZED FUEL</span>}
                 {match.poor_fuel_scoring_accuracy && <span className="px-2 py-1 bg-warning/20 text-warning text-xs rounded font-medium">POOR ACCURACY</span>}
               </div>
             </div>
@@ -322,12 +321,19 @@ function MatchDetailModal({ match, teamStats, robotActions, onClose }: MatchDeta
             </div>
           </div>
 
+          {/* Passing */}
+          <div>
+            <SectionHeader title="Passing" />
+            <div className="flex flex-wrap gap-2 mb-3">
+              <BooleanBadge value={match.eff_rep_bulldozed_fuel} label="Bulldozed Fuel"
+                teamContext={teamStats ? `${teamStats.bulldozedFuelCount}/${n}` : undefined} />
+            </div>
+          </div>
+
           {/* Quality Flags */}
           <div>
             <SectionHeader title="Quality Flags" />
             <div className="flex flex-wrap gap-2 mb-3">
-              <BooleanBadge value={match.eff_rep_bulldozed_fuel} label="Bulldozed Fuel"
-                teamContext={teamStats ? `${teamStats.bulldozedFuelCount}/${n}` : undefined} />
               <BooleanBadge value={match.poor_fuel_scoring_accuracy} label="Poor Accuracy"
                 teamContext={teamStats ? `${teamStats.poorAccuracyCount}/${n}` : undefined} />
               <BooleanBadge value={match.lost_connection} label="Lost Connection"

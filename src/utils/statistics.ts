@@ -184,6 +184,8 @@ export function calculateTeamStatistics(
     // ── Derived: Auto Rates ──
     autoClimbRate: pct(autoClimbCount, n),
     autoDidNothingRate: pct(autoDidNothingCount, n),
+    centerFieldAutoRate: 0, // TODO: populate when auto path data is available from data wrangler
+    centerFieldAutoCount: 0,
     startZoneDistribution: startZoneCounts.map(c => pct(c, n)),
 
     // ── Derived: Flag Rates ──
@@ -298,6 +300,8 @@ function emptyStats(teamNumber: number, teamName?: string): TeamStatistics {
     climbFailedRate: 0,
     autoClimbRate: 0,
     autoDidNothingRate: 0,
+    centerFieldAutoRate: 0,
+    centerFieldAutoCount: 0,
     startZoneDistribution: [0, 0, 0, 0, 0, 0],
     dedicatedPasserRate: 0,
     bulldozedFuelRate: 0,

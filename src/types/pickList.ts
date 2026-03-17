@@ -12,6 +12,7 @@ export interface PickListTeam {
   onWatchlist: boolean; // Track during final matches
   watchlistRank?: number | null; // Rank within watchlist (1 = best)
   watchlistNotes?: string | null; // Notes from watching final matches
+  reviewed?: boolean; // Has this team been manually moved or edited?
 }
 
 export interface PickListConfig {
@@ -45,6 +46,12 @@ export interface FilterConfig {
   threshold: number;
   active: boolean;
   additionalConditions?: FilterCondition[];
+  /** Filter data source. */
+  filterType?: 'stats' | 'pit-boolean' | 'pit-select' | 'pit-number';
+  /** For pit-select filters: which categorical values to match (any of). */
+  pitValues?: string[];
+  /** For pit filters: which pit field to read from PitScoutEntry. */
+  pitField?: string;
 }
 
 // ─── Live Pick List (Firestore-backed) ───────────────────────────────────────

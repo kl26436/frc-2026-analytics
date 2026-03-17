@@ -149,7 +149,7 @@ export const usePickListStore = create<PickListState>()(
 
         const updatedTeams = pickList.teams.map(team => {
           if (team.teamNumber === teamNumber) {
-            return { ...team, tier: newTier, rank: newRank };
+            return { ...team, tier: newTier, rank: newRank, reviewed: true };
           }
           // Adjust ranks of other teams in the same tier
           if (team.tier === newTier && team.rank >= newRank) {
@@ -245,7 +245,7 @@ export const usePickListStore = create<PickListState>()(
           pickList: {
             ...pickList,
             teams: pickList.teams.map(t =>
-              t.teamNumber === teamNumber ? { ...t, notes } : t
+              t.teamNumber === teamNumber ? { ...t, notes, reviewed: true } : t
             ),
           },
         });

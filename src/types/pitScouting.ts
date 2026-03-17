@@ -52,6 +52,23 @@ export interface PitScoutEntry {
   specialFeatures: string;
   concerns: string;
   notes: string;
+
+  // Ninja Inspection Checklist — ASK
+  wheelsType: string;
+  batteryStrappedDown: boolean | null;
+  mainBreakerProtected: boolean | null;
+  functionChecksBetweenMatches: boolean | null;
+  unusedPortsCovered: boolean | null;
+  wireConnectorType: string; // WAGOs preferred
+  ferrulesAndHotGlue: boolean | null;
+  fragileMechanisms: string;
+
+  // Ninja Inspection Checklist — OBSERVE (1-5 scale)
+  buildQuality: number | null;
+  wiringQuality: number | null;
+  wiringPhotoUrl: string | null;
+  robotComplexity: number | null;
+  complexityPhotoUrl: string | null;
 }
 
 // Default empty entry for form initialization
@@ -76,6 +93,20 @@ export const createEmptyPitScoutEntry = (eventCode: string, scoutName: string): 
   specialFeatures: '',
   concerns: '',
   notes: '',
+  // Ninja inspection defaults
+  wheelsType: '',
+  batteryStrappedDown: null,
+  mainBreakerProtected: null,
+  functionChecksBetweenMatches: null,
+  unusedPortsCovered: null,
+  wireConnectorType: '',
+  ferrulesAndHotGlue: null,
+  fragileMechanisms: '',
+  buildQuality: null,
+  wiringQuality: null,
+  wiringPhotoUrl: null,
+  robotComplexity: null,
+  complexityPhotoUrl: null,
 });
 
 /** Normalize a PitScoutEntry loaded from Firestore or localStorage.
@@ -94,6 +125,21 @@ export function normalizePitScoutEntry(raw: Record<string, unknown>): PitScoutEn
   if (!entry.rotatingRoles || !Array.isArray(entry.rotatingRoles)) {
     entry.rotatingRoles = [];
   }
+
+  // Normalize ninja inspection fields for legacy entries
+  if (entry.wheelsType === undefined) entry.wheelsType = '';
+  if (entry.batteryStrappedDown === undefined) entry.batteryStrappedDown = null;
+  if (entry.mainBreakerProtected === undefined) entry.mainBreakerProtected = null;
+  if (entry.functionChecksBetweenMatches === undefined) entry.functionChecksBetweenMatches = null;
+  if (entry.unusedPortsCovered === undefined) entry.unusedPortsCovered = null;
+  if (entry.wireConnectorType === undefined) entry.wireConnectorType = '';
+  if (entry.ferrulesAndHotGlue === undefined) entry.ferrulesAndHotGlue = null;
+  if (entry.fragileMechanisms === undefined) entry.fragileMechanisms = '';
+  if (entry.buildQuality === undefined) entry.buildQuality = null;
+  if (entry.wiringQuality === undefined) entry.wiringQuality = null;
+  if (entry.wiringPhotoUrl === undefined) entry.wiringPhotoUrl = null;
+  if (entry.robotComplexity === undefined) entry.robotComplexity = null;
+  if (entry.complexityPhotoUrl === undefined) entry.complexityPhotoUrl = null;
 
   const primary = entry.photos.find(p => p.isPrimary) ?? entry.photos[0];
   entry.photoUrl = primary?.url ?? null;

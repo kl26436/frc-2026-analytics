@@ -94,8 +94,8 @@ function SelectionTeamCard({
         {teamStats && !isUnavailable && (
           <div className="flex gap-3 text-xs text-textSecondary mt-0.5">
             <span>{teamStats.avgTotalPoints.toFixed(1)} pts</span>
-            <span>L3: {teamStats.level3ClimbRate.toFixed(0)}%</span>
             <span>Auto: {teamStats.avgAutoPoints.toFixed(1)}</span>
+            <span>Fuel: {(teamStats.avgTeleopFuelEstimate ?? 0).toFixed(1)}</span>
           </div>
         )}
 

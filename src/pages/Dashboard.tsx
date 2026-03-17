@@ -770,7 +770,7 @@ function Dashboard() {
         <div className={card}>
           <h2 className={cardHeader}>
             <TrendingUp className="text-blueAlliance" size={18} />
-            Top Climbers
+            Top Endgame
           </h2>
           <div className="space-y-1">
             {topClimbers.map((team, i) => {

@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import { useAnalyticsStore } from './store/useAnalyticsStore';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -17,12 +17,12 @@ import PitScouting from './pages/PitScouting';
 import AdminSettings from './pages/AdminSettings';
 import DataQuality from './pages/DataQuality';
 import MatchReplay from './pages/MatchReplay';
-import NinjaDashboard from './pages/NinjaDashboard';
-import NinjaTeamDetail from './pages/NinjaTeamDetail';
+
 import FuelCalibration from './pages/FuelCalibration';
 import AIInsights from './pages/AIInsights';
 import RobotPictures from './pages/RobotPictures';
 import PitAnalysis from './pages/PitAnalysis';
+import MatchSchedule from './pages/MatchSchedule';
 
 function AppContent() {
   const setEventCode = useAnalyticsStore(state => state.setEventCode);
@@ -82,8 +82,9 @@ function AppContent() {
         <Route path="/replay/:matchNumber" element={<MatchReplay />} />
         <Route path="/event" element={<EventSetup />} />
         <Route path="/metrics" element={<MetricsSettings />} />
-        <Route path="/ninja" element={<NinjaDashboard />} />
-        <Route path="/ninja/:teamNumber" element={<NinjaTeamDetail />} />
+        <Route path="/schedule" element={<MatchSchedule />} />
+        <Route path="/ninja" element={<Navigate to="/pit-scouting" replace />} />
+        <Route path="/ninja/:teamNumber" element={<Navigate to="/pit-scouting" replace />} />
         <Route path="/admin" element={<AdminSettings />} />
         <Route path="/calibration" element={<FuelCalibration />} />
         <Route path="/insights" element={<AIInsights />} />

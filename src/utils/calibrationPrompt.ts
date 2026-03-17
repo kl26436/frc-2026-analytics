@@ -128,7 +128,7 @@ ${matchSummaryRows.join('\n')}`);
 
 - Total robot entries: ${modelComparison.totalRobots}
 - With action data: ${(modelComparison.actionDataPct * 100).toFixed(0)}%
-- Flagged (no-show/lost-connection/bulldozed): ${(modelComparison.flaggedPct * 100).toFixed(0)}%
+- Flagged (no-show/lost-connection): ${(modelComparison.flaggedPct * 100).toFixed(0)}%
 - Alliance-match groups: ${modelComparison.totalAllianceGroups}
 - Bayesian model active: ${modelComparison.models.find(m => m.variant.id === 'bayesian')?.variant.isActive ? 'Yes' : 'No (insufficient match history)'}`);
 

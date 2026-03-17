@@ -510,132 +510,7 @@ function DataQuality() {
         </div>
       </div>
 
-      {/* Section 2: OPR vs Scout Comparison */}
-      <div className={card}>
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <h2 className={`${cardHeader} mb-0`}>
-            <BarChart3 className="text-blueAlliance" size={18} />
-            OPR vs Scout Averages
-            <span className="text-xs text-textMuted font-normal ml-1">Component OPR (from FMS scores) vs scouted averages per team</span>
-          </h2>
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-textMuted" />
-              <input
-                type="text"
-                placeholder="Search team..."
-                value={oprSearch}
-                onChange={e => setOprSearch(e.target.value)}
-                className="pl-7 pr-3 py-1.5 text-xs rounded-lg bg-surfaceAlt border border-border focus:border-accent focus:outline-none w-32"
-              />
-            </div>
-            <button
-              onClick={() => {
-                if (oprSortField === 'delta') {
-                  setOprSortField('team');
-                  setOprSortDir('asc');
-                } else {
-                  setOprSortField('delta');
-                  setOprSortDir('desc');
-                }
-              }}
-              className="flex items-center gap-1 text-xs text-textSecondary hover:text-textPrimary transition-colors"
-            >
-              <ArrowUpDown size={14} />
-              {oprSortField === 'delta' ? '|Delta|' : 'Team #'}
-            </button>
-          </div>
-        </div>
-
-        {/* Summary banner */}
-        {oprComparison.length > 0 && (
-          <div className="flex gap-3 mt-3 text-xs">
-            <span className="px-2 py-1 rounded-full bg-success/15 text-success font-bold">{oprSummary.close} within ±5</span>
-            <span className="px-2 py-1 rounded-full bg-warning/15 text-warning font-bold">{oprSummary.moderate} off 5–15</span>
-            <span className="px-2 py-1 rounded-full bg-danger/15 text-danger font-bold">{oprSummary.far} off 15+</span>
-          </div>
-        )}
-
-        {filteredOprRows.length > 0 ? (
-          <div className="overflow-x-auto -mx-4 md:-mx-6 mt-4">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-xs text-textMuted">
-                  <th className="text-left py-2 px-3 font-medium">Team</th>
-                  {tbaOPRs && <th className="text-center py-2 px-3 font-medium">TBA OPR</th>}
-                  <th className="text-center py-2 px-3 font-medium">Local OPR</th>
-                  <th className="text-center py-2 px-3 font-medium">Scout Avg</th>
-                  <th className="text-center py-2 px-3 font-medium">Delta</th>
-                  <th className="hidden md:table-cell text-center py-2 px-3 font-medium">Auto OPR</th>
-                  <th className="hidden md:table-cell text-center py-2 px-3 font-medium">Auto Scout</th>
-                  <th className="hidden md:table-cell text-center py-2 px-3 font-medium">Auto Δ</th>
-                  <th className="hidden lg:table-cell text-center py-2 px-3 font-medium">Teleop OPR</th>
-                  <th className="hidden lg:table-cell text-center py-2 px-3 font-medium">Teleop Scout</th>
-                  <th className="hidden lg:table-cell text-center py-2 px-3 font-medium">Teleop Δ</th>
-                  <th className="hidden lg:table-cell text-center py-2 px-3 font-medium">Endgame OPR</th>
-                  <th className="hidden lg:table-cell text-center py-2 px-3 font-medium">Endgame Scout</th>
-                  <th className="hidden lg:table-cell text-center py-2 px-3 font-medium">Endgame Δ</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredOprRows.map((row, i) => {
-                  const deltaColor = (d: number) => {
-                    const abs = Math.abs(d);
-                    if (abs < 5) return 'text-success';
-                    if (abs < 15) return 'text-warning';
-                    return 'text-danger';
-                  };
-                  const fmt = (n: number) => n.toFixed(1);
-                  const fmtDelta = (d: number) => (d >= 0 ? '+' : '') + d.toFixed(1);
-                  return (
-                    <tr
-                      key={row.teamNumber}
-                      className={`border-b border-border/50 ${
-                        Math.abs(row.totalDelta) >= 15
-                          ? 'bg-danger/5 hover:bg-danger/10'
-                          : i % 2 === 0 ? 'bg-surfaceAlt hover:bg-surfaceElevated' : 'hover:bg-surfaceElevated'
-                      }`}
-                    >
-                      <td className="py-2.5 px-3">
-                        <Link to={`/teams/${row.teamNumber}`} className="font-bold hover:text-accent transition-colors">
-                          {row.teamNumber}
-                        </Link>
-                        <span className="text-textMuted text-xs ml-1.5 hidden sm:inline">{row.teamName}</span>
-                        <span className="text-textMuted text-xs ml-1.5">({row.matchCount}m)</span>
-                      </td>
-                      {tbaOPRs && (
-                        <td className="py-2.5 px-3 text-center font-mono text-textSecondary">
-                          {row.tbaOpr !== null ? fmt(row.tbaOpr) : '—'}
-                        </td>
-                      )}
-                      <td className="py-2.5 px-3 text-center font-mono font-semibold">{fmt(row.localOpr)}</td>
-                      <td className="py-2.5 px-3 text-center font-mono">{fmt(row.scoutAvg)}</td>
-                      <td className={`py-2.5 px-3 text-center font-mono font-bold ${deltaColor(row.totalDelta)}`}>
-                        {fmtDelta(row.totalDelta)}
-                      </td>
-                      <td className="hidden md:table-cell py-2.5 px-3 text-center font-mono text-textSecondary">{fmt(row.autoOpr)}</td>
-                      <td className="hidden md:table-cell py-2.5 px-3 text-center font-mono text-textSecondary">{fmt(row.scoutAutoAvg)}</td>
-                      <td className={`hidden md:table-cell py-2.5 px-3 text-center font-mono ${deltaColor(row.autoDelta)}`}>{fmtDelta(row.autoDelta)}</td>
-                      <td className="hidden lg:table-cell py-2.5 px-3 text-center font-mono text-textSecondary">{fmt(row.teleopOpr)}</td>
-                      <td className="hidden lg:table-cell py-2.5 px-3 text-center font-mono text-textSecondary">{fmt(row.scoutTeleopAvg)}</td>
-                      <td className={`hidden lg:table-cell py-2.5 px-3 text-center font-mono ${deltaColor(row.teleopDelta)}`}>{fmtDelta(row.teleopDelta)}</td>
-                      <td className="hidden lg:table-cell py-2.5 px-3 text-center font-mono text-textSecondary">{fmt(row.endgameOpr)}</td>
-                      <td className="hidden lg:table-cell py-2.5 px-3 text-center font-mono text-textSecondary">{fmt(row.scoutEndgameAvg)}</td>
-                      <td className={`hidden lg:table-cell py-2.5 px-3 text-center font-mono ${deltaColor(row.endgameDelta)}`}>{fmtDelta(row.endgameDelta)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <p className="text-center text-textMuted py-8 text-sm mt-4">
-            No OPR data available — need FMS match results
-          </p>
-        )}
-      </div>
-
-      {/* Section 2b: Rank Comparison — Scout Avg vs OPR */}
+      {/* Rank Comparison — Scout Avg vs OPR */}
       {localOPR && localOPR.totalOpr.size > 0 && teamStatistics.length > 0 && (() => {
         // Build scouting rank (by avgTotalPoints desc)
         const scoutRanked = [...teamStatistics]
@@ -667,8 +542,8 @@ function DataQuality() {
           });
 
         const outliers = rows.filter(r => Math.abs(r.diff) >= 5);
-        const overRanked = outliers.filter(r => r.diff < 0).sort((a, b) => a.diff - b.diff); // scout ranks them higher than OPR
-        const underRanked = outliers.filter(r => r.diff > 0).sort((a, b) => b.diff - a.diff); // OPR ranks them higher than scout
+        const overRanked = outliers.filter(r => r.diff < 0).sort((a, b) => a.diff - b.diff);
+        const underRanked = outliers.filter(r => r.diff > 0).sort((a, b) => b.diff - a.diff);
 
         return (
           <div className={card}>
@@ -803,6 +678,131 @@ function DataQuality() {
           </div>
         );
       })()}
+
+      {/* Section 2: OPR vs Scout Comparison */}
+      <div className={card}>
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <h2 className={`${cardHeader} mb-0`}>
+            <BarChart3 className="text-blueAlliance" size={18} />
+            OPR vs Scout Averages
+            <span className="text-xs text-textMuted font-normal ml-1">Component OPR (from FMS scores) vs scouted averages per team</span>
+          </h2>
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-textMuted" />
+              <input
+                type="text"
+                placeholder="Search team..."
+                value={oprSearch}
+                onChange={e => setOprSearch(e.target.value)}
+                className="pl-7 pr-3 py-1.5 text-xs rounded-lg bg-surfaceAlt border border-border focus:border-accent focus:outline-none w-32"
+              />
+            </div>
+            <button
+              onClick={() => {
+                if (oprSortField === 'delta') {
+                  setOprSortField('team');
+                  setOprSortDir('asc');
+                } else {
+                  setOprSortField('delta');
+                  setOprSortDir('desc');
+                }
+              }}
+              className="flex items-center gap-1 text-xs text-textSecondary hover:text-textPrimary transition-colors"
+            >
+              <ArrowUpDown size={14} />
+              {oprSortField === 'delta' ? '|Delta|' : 'Team #'}
+            </button>
+          </div>
+        </div>
+
+        {/* Summary banner */}
+        {oprComparison.length > 0 && (
+          <div className="flex gap-3 mt-3 text-xs">
+            <span className="px-2 py-1 rounded-full bg-success/15 text-success font-bold">{oprSummary.close} within ±5</span>
+            <span className="px-2 py-1 rounded-full bg-warning/15 text-warning font-bold">{oprSummary.moderate} off 5–15</span>
+            <span className="px-2 py-1 rounded-full bg-danger/15 text-danger font-bold">{oprSummary.far} off 15+</span>
+          </div>
+        )}
+
+        {filteredOprRows.length > 0 ? (
+          <div className="overflow-x-auto -mx-4 md:-mx-6 mt-4">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-xs text-textMuted">
+                  <th className="text-left py-2 px-3 font-medium">Team</th>
+                  {tbaOPRs && <th className="text-center py-2 px-3 font-medium">TBA OPR</th>}
+                  <th className="text-center py-2 px-3 font-medium">Local OPR</th>
+                  <th className="text-center py-2 px-3 font-medium">Scout Avg</th>
+                  <th className="text-center py-2 px-3 font-medium">Delta</th>
+                  <th className="hidden md:table-cell text-center py-2 px-3 font-medium">Auto OPR</th>
+                  <th className="hidden md:table-cell text-center py-2 px-3 font-medium">Auto Scout</th>
+                  <th className="hidden md:table-cell text-center py-2 px-3 font-medium">Auto Δ</th>
+                  <th className="hidden lg:table-cell text-center py-2 px-3 font-medium">Teleop OPR</th>
+                  <th className="hidden lg:table-cell text-center py-2 px-3 font-medium">Teleop Scout</th>
+                  <th className="hidden lg:table-cell text-center py-2 px-3 font-medium">Teleop Δ</th>
+                  <th className="hidden lg:table-cell text-center py-2 px-3 font-medium">Endgame OPR</th>
+                  <th className="hidden lg:table-cell text-center py-2 px-3 font-medium">Endgame Scout</th>
+                  <th className="hidden lg:table-cell text-center py-2 px-3 font-medium">Endgame Δ</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredOprRows.map((row, i) => {
+                  const deltaColor = (d: number) => {
+                    const abs = Math.abs(d);
+                    if (abs < 5) return 'text-success';
+                    if (abs < 15) return 'text-warning';
+                    return 'text-danger';
+                  };
+                  const fmt = (n: number) => n.toFixed(1);
+                  const fmtDelta = (d: number) => (d >= 0 ? '+' : '') + d.toFixed(1);
+                  return (
+                    <tr
+                      key={row.teamNumber}
+                      className={`border-b border-border/50 ${
+                        Math.abs(row.totalDelta) >= 15
+                          ? 'bg-danger/5 hover:bg-danger/10'
+                          : i % 2 === 0 ? 'bg-surfaceAlt hover:bg-surfaceElevated' : 'hover:bg-surfaceElevated'
+                      }`}
+                    >
+                      <td className="py-2.5 px-3">
+                        <Link to={`/teams/${row.teamNumber}`} className="font-bold hover:text-accent transition-colors">
+                          {row.teamNumber}
+                        </Link>
+                        <span className="text-textMuted text-xs ml-1.5 hidden sm:inline">{row.teamName}</span>
+                        <span className="text-textMuted text-xs ml-1.5">({row.matchCount}m)</span>
+                      </td>
+                      {tbaOPRs && (
+                        <td className="py-2.5 px-3 text-center font-mono text-textSecondary">
+                          {row.tbaOpr !== null ? fmt(row.tbaOpr) : '—'}
+                        </td>
+                      )}
+                      <td className="py-2.5 px-3 text-center font-mono font-semibold">{fmt(row.localOpr)}</td>
+                      <td className="py-2.5 px-3 text-center font-mono">{fmt(row.scoutAvg)}</td>
+                      <td className={`py-2.5 px-3 text-center font-mono font-bold ${deltaColor(row.totalDelta)}`}>
+                        {fmtDelta(row.totalDelta)}
+                      </td>
+                      <td className="hidden md:table-cell py-2.5 px-3 text-center font-mono text-textSecondary">{fmt(row.autoOpr)}</td>
+                      <td className="hidden md:table-cell py-2.5 px-3 text-center font-mono text-textSecondary">{fmt(row.scoutAutoAvg)}</td>
+                      <td className={`hidden md:table-cell py-2.5 px-3 text-center font-mono ${deltaColor(row.autoDelta)}`}>{fmtDelta(row.autoDelta)}</td>
+                      <td className="hidden lg:table-cell py-2.5 px-3 text-center font-mono text-textSecondary">{fmt(row.teleopOpr)}</td>
+                      <td className="hidden lg:table-cell py-2.5 px-3 text-center font-mono text-textSecondary">{fmt(row.scoutTeleopAvg)}</td>
+                      <td className={`hidden lg:table-cell py-2.5 px-3 text-center font-mono ${deltaColor(row.teleopDelta)}`}>{fmtDelta(row.teleopDelta)}</td>
+                      <td className="hidden lg:table-cell py-2.5 px-3 text-center font-mono text-textSecondary">{fmt(row.endgameOpr)}</td>
+                      <td className="hidden lg:table-cell py-2.5 px-3 text-center font-mono text-textSecondary">{fmt(row.scoutEndgameAvg)}</td>
+                      <td className={`hidden lg:table-cell py-2.5 px-3 text-center font-mono ${deltaColor(row.endgameDelta)}`}>{fmtDelta(row.endgameDelta)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-center text-textMuted py-8 text-sm mt-4">
+            No OPR data available — need FMS match results
+          </p>
+        )}
+      </div>
 
       {/* Section 3: Fuel Comparison Table */}
       <div className={card}>

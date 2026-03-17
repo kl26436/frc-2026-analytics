@@ -402,7 +402,7 @@ function TeamDetail() {
                         {entry.lost_connection && <span className="text-danger">LOST</span>}
                         {entry.no_robot_on_field && <span className="text-danger">NO ROBOT</span>}
                         {entry.dedicated_passer && <span className="text-blueAlliance">PASSER</span>}
-                        {entry.eff_rep_bulldozed_fuel && <span className="text-warning">BULLDOZE</span>}
+                        {entry.eff_rep_bulldozed_fuel && <span className="text-blueAlliance">BULLDOZE</span>}
                         {entry.auton_did_nothing && <span className="text-textMuted">NO AUTO</span>}
                       </td>
                       <td className="px-3 py-3 text-sm text-textSecondary max-w-[200px] truncate">
@@ -578,7 +578,7 @@ function TeamDetail() {
             <TotalsRow items={[
               { label: 'Lost Conn', value: `${teamStats.lostConnectionCount}/${n}`, color: teamStats.lostConnectionCount > 0 ? 'text-danger' : '' },
               { label: 'No Robot', value: `${teamStats.noRobotCount}/${n}`, color: teamStats.noRobotCount > 0 ? 'text-danger' : '' },
-              { label: 'Bulldozed', value: `${teamStats.bulldozedFuelCount}/${n}`, color: teamStats.bulldozedFuelCount > 0 ? 'text-warning' : '' },
+              { label: 'Bulldozed', value: `${teamStats.bulldozedFuelCount}/${n}`, color: teamStats.bulldozedFuelCount > 0 ? 'text-blueAlliance' : '' },
               { label: 'Poor Accuracy', value: `${teamStats.poorAccuracyCount}/${n}`, color: teamStats.poorAccuracyCount > 0 ? 'text-warning' : '' },
               { label: '2nd Review', value: `${teamStats.secondReviewCount}/${n}`, color: teamStats.secondReviewCount > 0 ? 'text-danger' : '' },
             ]} />
@@ -708,7 +708,7 @@ function TeamDetail() {
             </div>
             <div className="flex justify-between">
               <span className="text-textSecondary">Bulldozed Fuel</span>
-              <span className={`font-semibold ${teamStats.bulldozedFuelCount > 0 ? 'text-warning' : ''}`}>
+              <span className={`font-semibold ${teamStats.bulldozedFuelCount > 0 ? 'text-blueAlliance' : ''}`}>
                 {teamStats.bulldozedFuelCount}/{n} ({teamStats.bulldozedFuelRate.toFixed(0)}%)
               </span>
             </div>

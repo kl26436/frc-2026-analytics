@@ -399,6 +399,9 @@ export interface TeamStatistics {
   // ── Auto Rates (%) ──
   autoClimbRate: number;
   autoDidNothingRate: number;
+  /** % of matches where robot went to center field during auto */
+  centerFieldAutoRate: number;
+  centerFieldAutoCount: number;
   /** % of matches in each start zone [zone1, zone2, ..., zone6] */
   startZoneDistribution: number[];
 

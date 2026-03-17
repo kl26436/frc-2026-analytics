@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
-import { BarChart3, Users, ClipboardList, Menu, X, Calendar, Swords, Handshake, ClipboardCheck, ChevronDown, Search, Target, Shield, LogOut, AlertTriangle, LineChart, PlayCircle, Eye, FlaskConical, Sparkles } from 'lucide-react';
+import { BarChart3, Users, ClipboardList, Menu, X, Calendar, Swords, Handshake, ClipboardCheck, ChevronDown, Search, Target, Shield, LogOut, AlertTriangle, LineChart, PlayCircle, FlaskConical, Sparkles } from 'lucide-react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { useAuth } from '../contexts/AuthContext';
 import ActiveSessionBanner from './ActiveSessionBanner';
@@ -69,13 +69,13 @@ const analysisItems = [
 ];
 
 const scoutingItems = [
-  { to: '/pit-scouting', icon: ClipboardCheck, label: 'Pit Scout' },
+  { to: '/pit-scouting', icon: ClipboardCheck, label: 'Ninja Scouting' },
   { to: '/pit-analysis', icon: BarChart3, label: 'Pit Analysis' },
-  { to: '/ninja', icon: Eye, label: 'Ninja' },
   { to: '/data-quality', icon: AlertTriangle, label: 'Data Quality' },
 ];
 
 const strategyItems = [
+  { to: '/schedule', icon: Calendar, label: 'Match Prep' },
   { to: '/picklist', icon: ClipboardList, label: 'Pick List' },
   { to: '/predict', icon: Swords, label: 'Predict' },
   { to: '/alliance-selection', icon: Handshake, label: 'Alliance Selection' },

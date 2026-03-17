@@ -63,6 +63,8 @@ Key game mechanics:
 - **Auto Climb**: 15 points if robot climbs tower during autonomous.
 - **Ranking Points**: Win=3 RP, Energized (hub>=100)=1 RP, Supercharged (hub>=360)=1 RP, Traversal (tower>=50)=1 RP. Max 6 RP/match.
 
+**IMPORTANT strategic context for 2026:** L3 climbing (30 pts) is extremely rare and strategically a non-factor at most events. The game is primarily about fuel scoring (shooting) and auto performance (including auto climbing). De-emphasize L3 in your analysis — only mention it if a team has a very high L3 rate (>50%). Focus on fuel scoring volume, auto scoring, auto climbing, and reliability.
+
 Be specific with team numbers. Use data to support claims. Keep analysis actionable for strategy meetings.`;
 }
 
@@ -78,14 +80,14 @@ function formatTeamStats(stats: TeamStatistics[]): string {
   const rows = sorted.map(t => {
     const autoFuel = t.avgAutoFuelEstimate?.toFixed(1) ?? '0';
     const teleopFuel = t.avgTeleopFuelEstimate?.toFixed(1) ?? '0';
-    const l3Rate = t.level3ClimbRate !== undefined ? `${(t.level3ClimbRate * 100).toFixed(0)}%` : '?';
     const autoClimb = t.autoClimbRate !== undefined ? `${(t.autoClimbRate * 100).toFixed(0)}%` : '?';
+    const avgPts = t.avgTotalPoints?.toFixed(1) ?? '?';
     const reliability = t.lostConnectionRate !== undefined ? `${((1 - t.lostConnectionRate) * 100).toFixed(0)}%` : '?';
-    return `| ${t.teamNumber} | ${t.matchesPlayed} | ${autoFuel} | ${teleopFuel} | ${l3Rate} | ${autoClimb} | ${reliability} |`;
+    return `| ${t.teamNumber} | ${t.matchesPlayed} | ${autoFuel} | ${teleopFuel} | ${avgPts} | ${autoClimb} | ${reliability} |`;
   });
 
-  return `| Team | Matches | Avg Auto Fuel | Avg Teleop Fuel | L3 Climb% | Auto Climb% | Reliability |
-|------|---------|---------------|-----------------|-----------|-------------|-------------|
+  return `| Team | Matches | Avg Auto Fuel | Avg Teleop Fuel | Avg Pts | Auto Climb% | Reliability |
+|------|---------|---------------|-----------------|---------|-------------|-------------|
 ${rows.join('\n')}`;
 }
 
@@ -163,9 +165,9 @@ ${formatMatchResults(matches)}
 
 Provide a comprehensive event overview covering:
 
-1. **Top Performers**: Who are the best 5-8 teams overall? Break down by fuel scoring, climbing, and auto.
+1. **Top Performers**: Who are the best 5-8 teams overall? Break down by fuel scoring, auto performance, and auto climbing.
 2. **Scoring Patterns**: What's the typical match score? How often are Energized/Supercharged/Traversal RPs being achieved?
-3. **Climbing Landscape**: How many teams can reliably L3? L2? Who auto-climbs?
+3. **Climbing Landscape**: Who auto-climbs reliably? How many teams can L2? (L3 is rare — only mention if a team actually does it consistently.)
 4. **Hot & Cold Teams**: Who is trending up vs down based on recent matches?
 5. **Reliability Concerns**: Which teams have reliability issues (disconnects, no-shows)?
 6. **Key Insights**: What non-obvious patterns do you see? Anything that would affect pick list strategy?
@@ -213,8 +215,8 @@ export function buildTeamDeepDivePrompt(
 ${stat ? `- Matches played: ${stat.matchesPlayed}
 - Avg auto fuel: ${stat.avgAutoFuelEstimate?.toFixed(1)}
 - Avg teleop fuel: ${stat.avgTeleopFuelEstimate?.toFixed(1)}
-- L3 climb rate: ${stat.level3ClimbRate !== undefined ? (stat.level3ClimbRate * 100).toFixed(0) + '%' : '?'}
 - Auto climb rate: ${stat.autoClimbRate !== undefined ? (stat.autoClimbRate * 100).toFixed(0) + '%' : '?'}
+- L3 climb rate (low priority): ${stat.level3ClimbRate !== undefined ? (stat.level3ClimbRate * 100).toFixed(0) + '%' : '?'}
 - Reliability: ${stat.lostConnectionRate !== undefined ? ((1 - stat.lostConnectionRate) * 100).toFixed(0) + '%' : '?'}
 - Climb failed count: ${stat.climbFailedCount || 0}
 - Lost connection count: ${stat.lostConnectionCount || 0}` : 'No statistics available.'}
@@ -283,7 +285,7 @@ ${(() => {
   const fuel = fuelStats.find(t => t.teamNumber === homeTeamNumber);
   if (!stat) return 'No data for home team.';
   return `- Avg auto fuel: ${stat.avgAutoFuelEstimate?.toFixed(1)}, Avg teleop fuel: ${stat.avgTeleopFuelEstimate?.toFixed(1)}
-- L3 climb rate: ${stat.level3ClimbRate !== undefined ? (stat.level3ClimbRate * 100).toFixed(0) + '%' : '?'}
+- Auto climb rate: ${stat.autoClimbRate !== undefined ? (stat.autoClimbRate * 100).toFixed(0) + '%' : '?'}
 - Fuel scored/match (FMS): ${fuel?.avgShotsScored.toFixed(1) || '?'}
 - Reliability: ${stat.lostConnectionRate !== undefined ? ((1 - stat.lostConnectionRate) * 100).toFixed(0) + '%' : '?'}`;
 })()}
@@ -312,6 +314,9 @@ You are helping Team ${homeTeamNumber} prepare their alliance selection pick lis
 
 5. **Sleeper Picks**: Any underrated teams that the data suggests are better than their ranking shows?
 
+**Alliance Selection Format — Snake Draft:**
+Alliance selection uses a snake draft. Round 1: Alliances 1-8 pick in order (1, 2, 3, 4, 5, 6, 7, 8). Round 2: Alliances pick in reverse order (8, 7, 6, 5, 4, 3, 2, 1). Round 3 (if needed): Back to 1-8 order. This means Alliance 1 picks first but then picks last in Round 2, while Alliance 8 picks last in Round 1 but first in Round 2 (back-to-back picks). Your tier and pairing recommendations MUST be feasible given the snake draft — do not suggest alliances that could not form based on the teams' rankings and likely draft positions.
+
 Be decisive. Give clear rankings, not hedged recommendations.`;
 }
 
@@ -329,7 +334,7 @@ export function buildMatchPreviewPrompt(
       const fuel = fuelStats.find(t => t.teamNumber === num);
       const pred = predictions.find(p => p.teamNumber === num);
       return `### ${color} ${num}
-- Scout: Auto=${stat?.avgAutoFuelEstimate?.toFixed(1) ?? '?'}, Teleop=${stat?.avgTeleopFuelEstimate?.toFixed(1) ?? '?'}, L3=${stat?.level3ClimbRate !== undefined ? (stat.level3ClimbRate * 100).toFixed(0) + '%' : '?'}
+- Scout: Auto=${stat?.avgAutoFuelEstimate?.toFixed(1) ?? '?'}, Teleop=${stat?.avgTeleopFuelEstimate?.toFixed(1) ?? '?'}, AutoClimb=${stat?.autoClimbRate !== undefined ? (stat.autoClimbRate * 100).toFixed(0) + '%' : '?'}
 - FMS attributed: ${fuel?.avgShotsScored.toFixed(1) ?? '?'} balls/match, accuracy=${fuel && fuel.totalShots > 0 ? ((fuel.totalShotsScored / fuel.totalShots) * 100).toFixed(0) + '%' : '?'}
 - Reliability: ${stat?.lostConnectionRate !== undefined ? ((1 - stat.lostConnectionRate) * 100).toFixed(0) + '%' : '?'}
 - Prediction input: ${pred ? `auto=${pred.avgAutoHubPoints.toFixed(1)}, teleop=${pred.avgTeleopHubPoints.toFixed(1)}, endgame=${pred.avgEndgameTowerPoints.toFixed(1)}` : 'N/A'}`;

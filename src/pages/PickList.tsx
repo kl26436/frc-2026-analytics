@@ -38,7 +38,7 @@ import {
   ArrowUp,
   ArrowDown,
   ChevronsUp,
-  ChevronsDown,
+
   Ban,
   Filter,
   Mountain,
@@ -65,6 +65,8 @@ import {
   Loader,
   X,
   TrendingUp,
+  Square,
+  SquareCheckBig,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { PickListTeam, PickListConfig, FilterConfig } from '../types/pickList';
@@ -131,6 +133,8 @@ const FILTER_ICONS: Record<string, LucideIcon> = {
   shield: Shield,
   trophy: Trophy,
   target: Target,
+  arrowDown: ArrowDown,
+  wrench: Wrench,
   wrench: Wrench,
 };
 
@@ -156,11 +160,39 @@ const STAT_OPTIONS: { value: keyof TeamStatistics; label: string }[] = [
 ];
 
 const DEFAULT_FILTERS: FilterConfig[] = [
-  { id: 'l3Climber', label: 'L3 Climber', icon: 'mountain', field: 'level3ClimbRate', operator: '>=', threshold: 20, active: false },
+  { id: 'autoClimber', label: 'Auto Climber', icon: 'zap', field: 'autoClimbRate', operator: '>=', threshold: 0.5, active: false },
   { id: 'strongAuto', label: 'Strong Auto', icon: 'zap', field: 'avgAutoPoints', operator: '>=', threshold: 10, active: false },
   { id: 'reliable', label: 'Reliable', icon: 'shield', field: 'overallUnreliabilityRate', operator: '<=', threshold: 15, active: false },
   { id: 'highScorer', label: 'High Scorer', icon: 'trophy', field: 'avgTotalPoints', operator: '>=', threshold: 35, active: false },
+  { id: 'pitTrench', label: 'Trench', icon: 'arrowDown', field: 'canGoUnderTrench', operator: '>=', threshold: 0, active: false, filterType: 'pit-boolean', pitField: 'canGoUnderTrench' },
+  { id: 'pitDriveType', label: 'Drive Type', icon: 'wrench', field: '', operator: '>=', threshold: 0, active: false, filterType: 'pit-select', pitField: 'driveType', pitValues: [] },
 ];
+
+// All pit scouting fields in one list — UI adapts based on `kind`
+const PIT_FIELDS: { value: string; label: string; kind: 'boolean' | 'select' | 'number'; options?: string[] }[] = [
+  { value: 'canGoUnderTrench', label: 'Can Go Under Trench', kind: 'boolean' },
+  { value: 'driveType', label: 'Drive Type', kind: 'select', options: ['swerve', 'tank', 'mecanum', 'other'] },
+  { value: 'climbLevel', label: 'Climb Level', kind: 'select', options: ['level1', 'level2', 'level3', 'none'] },
+  { value: 'programmingLanguage', label: 'Language', kind: 'select', options: ['java', 'cpp', 'python', 'labview', 'other'] },
+  { value: 'driverExperience', label: 'Driver Experience', kind: 'select', options: ['1stYear', '2ndYear', '3plusYears'] },
+  { value: 'vibeCheck', label: 'Vibe Check', kind: 'select', options: ['good', 'bad'] },
+  { value: 'buildQuality', label: 'Build Quality (1-5)', kind: 'number' },
+  { value: 'wiringQuality', label: 'Wiring Quality (1-5)', kind: 'number' },
+  { value: 'robotComplexity', label: 'Robot Complexity (1-5)', kind: 'number' },
+  { value: 'batteryCount', label: 'Battery Count', kind: 'number' },
+  { value: 'batteryStrappedDown', label: 'Battery Strapped Down', kind: 'boolean' },
+  { value: 'mainBreakerProtected', label: 'Main Breaker Protected', kind: 'boolean' },
+  { value: 'functionChecksBetweenMatches', label: 'Function Checks', kind: 'boolean' },
+  { value: 'unusedPortsCovered', label: 'Unused Ports Covered', kind: 'boolean' },
+  { value: 'ferrulesAndHotGlue', label: 'Ferrules & Hot Glue', kind: 'boolean' },
+];
+
+/** Look up the pit field definition and return the filterType it maps to. */
+function pitFieldToFilterType(pitFieldValue: string): 'pit-boolean' | 'pit-select' | 'pit-number' {
+  const def = PIT_FIELDS.find(f => f.value === pitFieldValue);
+  if (!def) return 'pit-boolean';
+  return def.kind === 'select' ? 'pit-select' : def.kind === 'number' ? 'pit-number' : 'pit-boolean';
+}
 
 // ── LiveTeamExtras ─────────────────────────────────────────────────────────────
 // Renders comments + suggestions panel below each live mode team card
@@ -393,7 +425,7 @@ interface LivePickListViewProps {
   filterConfigs: FilterConfig[];
   toggleFilter: (id: string) => void;
   updateFilter: (id: string, updates: Partial<FilterConfig>) => void;
-  addFilter: () => void;
+  addFilter: (source?: 'stats' | 'pit') => void;
   removeFilter: (id: string) => void;
   hasActiveFilters: boolean;
   teamPassesFilters: (teamNumber: number) => boolean;
@@ -426,6 +458,7 @@ function LivePickListView({
   const [initializing, setInitializing] = useState(false);
   const [showLiveSettings, setShowLiveSettings] = useState(false);
   const [showFilterSettings, setShowFilterSettings] = useState(false);
+  const [filtersCollapsed, setFiltersCollapsed] = useState(false);
   const [liveTier1Name, setLiveTier1Name] = useState('');
   const [liveTier2Name, setLiveTier2Name] = useState('');
   const [liveTier3Name, setLiveTier3Name] = useState('');
@@ -436,6 +469,7 @@ function LivePickListView({
   const [showWatchlist, setShowWatchlist] = useState(true);
   const [insertAtLiveRank, setInsertAtLiveRank] = useState(1);
   const [showTrendGlow, setShowTrendGlow] = useState(false);
+  const [liveExpandedTeam, setLiveExpandedTeam] = useState<number | null>(null);
 
   useEffect(() => {
     if (liveList?.config) {
@@ -513,17 +547,21 @@ function LivePickListView({
     setShowLiveSettings(false);
   };
 
+  // Pit scouting data for pit-type filters
+  const livePitEntries = usePitScoutStore(state => state.entries);
+
   const countLivePassingTeams = (filter: FilterConfig): number => {
     if (!liveList) return 0;
-    return countTeamsPassingFilter(filter, liveList.teams, teamStatistics);
+    return countTeamsPassingFilter(filter, liveList.teams, teamStatistics, livePitEntries);
   };
 
   // Use Firestore-synced filter configs when available; fall back to local defaults
   const effectiveFilterConfigs = liveFilterConfigs ?? filterConfigs;
   const liveHasActiveFilters = effectiveFilterConfigs.some(f => f.active);
 
-  const liveTeamPassesFilters = (teamNumber: number): boolean =>
-    doesTeamPassAllFilters(teamNumber, effectiveFilterConfigs, teamStatistics);
+  const liveTeamPassesFilters = (teamNumber: number): boolean => {
+    return doesTeamPassAllFilters(teamNumber, effectiveFilterConfigs, teamStatistics, livePitEntries);
+  };
 
   // When admin toggles a filter, update locally AND push to Firestore
   const handleLiveToggleFilter = (id: string) => {
@@ -538,10 +576,16 @@ function LivePickListView({
     if (canEdit) pushLiveFilterConfigs(updated);
   };
 
-  const handleLiveAddFilter = () => {
+  const handleLiveAddFilter = (source: 'stats' | 'pit' = 'stats') => {
     const newId = `custom-${Date.now()}`;
-    const newFilter: FilterConfig = { id: newId, label: 'New Filter', icon: 'target', field: 'avgTotalPoints', operator: '>=', threshold: 0, active: false };
-    addFilter();
+    let newFilter: FilterConfig;
+    if (source === 'pit') {
+      const firstPit = PIT_FIELDS[0];
+      newFilter = { id: newId, label: firstPit.label, icon: 'wrench', field: '', operator: '>=', threshold: 0, active: false, filterType: pitFieldToFilterType(firstPit.value), pitField: firstPit.value, pitValues: [] };
+    } else {
+      newFilter = { id: newId, label: 'New Filter', icon: 'target', field: 'avgTotalPoints', operator: '>=', threshold: 0, active: false };
+    }
+    addFilter(source);
     if (canEdit) pushLiveFilterConfigs([...effectiveFilterConfigs, newFilter]);
   };
 
@@ -659,111 +703,106 @@ function LivePickListView({
         </div>
       )}
 
-      {/* Snapshot header */}
-      {snapshotTakenAt && (
-        <div className="flex items-center gap-2 px-3 py-2 bg-surface border border-border rounded-lg text-xs text-textSecondary">
-          <Lock size={12} className="flex-shrink-0" />
-          <span>
-            Rankings locked as of {new Date(snapshotTakenAt).toLocaleString()}
-            {snapshotTakenBy && <> by {snapshotTakenBy}</>}
-          </span>
-        </div>
-      )}
-
-      {/* Admin lock bar */}
-      {isAdmin && (
-        <div className={`flex items-center gap-3 px-4 py-2.5 rounded-lg border ${isLockHolder ? 'bg-success/10 border-success/40' : 'bg-surface border-border'}`}>
-          {isLockHolder ? (
+      {/* Combined status bar: snapshot + control + admin actions */}
+      {(snapshotTakenAt || isAdmin) && (
+        <div className={`flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2 rounded-lg border ${isLockHolder ? 'bg-success/10 border-success/40' : 'bg-surface border-border'}`}>
+          {/* Snapshot info */}
+          {snapshotTakenAt && (
+            <span className="flex items-center gap-1.5 text-xs text-textSecondary">
+              <Lock size={11} className="flex-shrink-0" />
+              Locked {new Date(snapshotTakenAt).toLocaleDateString()}{snapshotTakenBy && <> by {snapshotTakenBy.split('@')[0]}</>}
+            </span>
+          )}
+          {snapshotTakenAt && isAdmin && <span className="text-border">|</span>}
+          {/* Control status */}
+          {isAdmin && (
             <>
-              <UserCheck size={16} className="text-success flex-shrink-0" />
-              <span className="text-sm font-medium text-success flex-1">You have control</span>
-              <div className="flex items-center gap-2">
-                {allowedUsers.length > 1 && (
-                  <div className="relative">
-                    <button
-                      onClick={() => setShowPassControl(!showPassControl)}
-                      className="flex items-center gap-1.5 px-3 py-1 text-xs text-textSecondary hover:text-textPrimary border border-border rounded transition-colors"
-                    >
-                      <Handshake size={12} />
-                      Pass Control
-                    </button>
-                    {showPassControl && (
-                      <div className="absolute right-0 top-full mt-1 z-20 bg-surface border border-border rounded-lg shadow-lg min-w-[200px] max-h-48 overflow-y-auto">
-                        {allowedUsers.filter(u => u.email !== userEmail?.toLowerCase()).map(u => (
-                          <button
-                            key={u.email}
-                            onClick={() => { passControl(u.email, u.displayName); setShowPassControl(false); }}
-                            className="w-full text-left px-3 py-2 text-xs hover:bg-interactive transition-colors"
-                          >
-                            <div className="font-medium">{u.displayName}</div>
-                            <div className="text-textMuted">{u.email}</div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-                <button
-                  onClick={releaseControl}
-                  className="flex items-center gap-1.5 px-3 py-1 text-xs text-textSecondary hover:text-danger border border-border hover:border-danger rounded transition-colors"
-                >
-                  <Unlock size={12} />
-                  Release
-                </button>
-              </div>
-            </>
-          ) : lockStatus ? (
-            <>
-              <Lock size={16} className="text-textMuted flex-shrink-0" />
-              <span className="text-sm text-textSecondary flex-1">
-                Controlled by <span className="font-medium text-textPrimary">{lockStatus.displayName || lockStatus.email}</span>
-                {isLockStale && <span className="text-warning ml-2">(lock expired)</span>}
-              </span>
-              <button
-                onClick={takeControl}
-                className="flex items-center gap-1.5 px-3 py-1 text-xs font-medium bg-interactive hover:bg-interactive/80 border border-border rounded transition-colors"
-              >
-                <UserCheck size={12} />
-                Take Control
-              </button>
-            </>
-          ) : (
-            <>
-              <Unlock size={16} className="text-textMuted flex-shrink-0" />
-              <span className="text-sm text-textSecondary flex-1">No one has control</span>
-              <button
-                onClick={takeControl}
-                className="flex items-center gap-1.5 px-3 py-1 text-xs font-medium bg-success/20 text-success hover:bg-success/30 border border-success/40 rounded transition-colors"
-              >
-                <UserCheck size={12} />
-                Take Control
-              </button>
+              {isLockHolder ? (
+                <span className="flex items-center gap-1.5 text-xs font-medium text-success">
+                  <UserCheck size={12} />
+                  You have control
+                </span>
+              ) : lockStatus ? (
+                <span className="flex items-center gap-1.5 text-xs text-textSecondary">
+                  <Lock size={11} />
+                  Controlled by <span className="font-medium text-textPrimary">{lockStatus.displayName || lockStatus.email}</span>
+                  {isLockStale && <span className="text-warning ml-1">(expired)</span>}
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5 text-xs text-textMuted">
+                  <Unlock size={11} />
+                  No one has control
+                </span>
+              )}
             </>
           )}
-        </div>
-      )}
-
-      {/* Admin toolbar */}
-      {isAdmin && (
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => setShowLiveSettings(!showLiveSettings)}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors border ${showLiveSettings ? 'bg-interactive border-interactive text-textPrimary' : 'bg-surface hover:bg-interactive border-border'}`}
-          >
-            <Settings size={15} />
-            Settings
-          </button>
-          <button
-            onClick={() => {
-              if (confirm('⚠️ Delete the live pick list?\n\nThis will clear all teams, tiers, and comments for everyone. This CANNOT be undone.')) {
-                deleteLiveList();
-              }
-            }}
-            className="flex items-center gap-2 px-3 py-1.5 bg-danger/10 text-danger border border-danger/40 hover:bg-danger hover:text-white rounded-lg text-sm transition-colors font-medium"
-          >
-            <Trash2 size={15} />
-            Reset Live List
-          </button>
+          {/* Action buttons — pushed to right */}
+          <div className="flex items-center gap-2 ml-auto">
+            {isAdmin && isLockHolder && allowedUsers.length > 1 && (
+              <div className="relative">
+                <button
+                  onClick={() => setShowPassControl(!showPassControl)}
+                  className="flex items-center gap-1 px-2 py-0.5 text-xs text-textSecondary hover:text-textPrimary border border-border rounded transition-colors"
+                >
+                  <Handshake size={11} />
+                  Pass
+                </button>
+                {showPassControl && (
+                  <div className="absolute right-0 top-full mt-1 z-20 bg-surface border border-border rounded-lg shadow-lg min-w-[200px] max-h-48 overflow-y-auto">
+                    {allowedUsers.filter(u => u.email !== userEmail?.toLowerCase()).map(u => (
+                      <button
+                        key={u.email}
+                        onClick={() => { passControl(u.email, u.displayName); setShowPassControl(false); }}
+                        className="w-full text-left px-3 py-2 text-xs hover:bg-interactive transition-colors"
+                      >
+                        <div className="font-medium">{u.displayName}</div>
+                        <div className="text-textMuted">{u.email}</div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {isAdmin && isLockHolder && (
+              <button
+                onClick={releaseControl}
+                className="flex items-center gap-1 px-2 py-0.5 text-xs text-textSecondary hover:text-danger border border-border hover:border-danger rounded transition-colors"
+              >
+                <Unlock size={11} />
+                Release
+              </button>
+            )}
+            {isAdmin && !isLockHolder && (
+              <button
+                onClick={takeControl}
+                className={`flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded transition-colors ${lockStatus ? 'bg-interactive hover:bg-interactive/80 border border-border' : 'bg-success/20 text-success hover:bg-success/30 border border-success/40'}`}
+              >
+                <UserCheck size={11} />
+                Take Control
+              </button>
+            )}
+            {isAdmin && (
+              <>
+                <span className="text-border">|</span>
+                <button
+                  onClick={() => setShowLiveSettings(!showLiveSettings)}
+                  className={`flex items-center gap-1 px-2 py-0.5 text-xs rounded transition-colors border ${showLiveSettings ? 'bg-interactive border-interactive text-textPrimary' : 'text-textSecondary hover:text-textPrimary border-border'}`}
+                >
+                  <Settings size={11} />
+                  Settings
+                </button>
+                <button
+                  onClick={() => {
+                    if (confirm('Delete the live pick list? This CANNOT be undone.')) deleteLiveList();
+                  }}
+                  className="flex items-center gap-1 px-2 py-0.5 text-xs text-danger border border-danger/40 hover:bg-danger hover:text-white rounded transition-colors"
+                >
+                  <Trash2 size={11} />
+                  Reset
+                </button>
+              </>
+            )}
+          </div>
         </div>
       )}
 
@@ -846,23 +885,44 @@ function LivePickListView({
       )}
 
       {/* Pick list tracker + Filters */}
-      <div className="bg-surface p-4 rounded-lg border border-border space-y-3">
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Trophy size={20} className="text-warning" />
-            <span className="font-semibold">Live List:</span>
-            <span className="text-2xl font-bold text-success">{liveTeamCount}</span>
-            <span className="text-textSecondary">teams</span>
-          </div>
+      <div className="bg-surface rounded-lg border border-border">
+        {/* Collapsed bar */}
+        <div className={`flex flex-wrap items-center gap-3 px-4 ${filtersCollapsed ? 'py-2' : 'pt-3 px-4'}`}>
+          <button
+            onClick={() => setFiltersCollapsed(!filtersCollapsed)}
+            className="p-1 rounded transition-colors text-textMuted hover:text-textPrimary"
+            title={filtersCollapsed ? 'Show filters' : 'Hide filters'}
+          >
+            {filtersCollapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+          </button>
+          <Trophy size={18} className="text-warning" />
+          <span className="font-semibold text-sm">Live List:</span>
+          <span className="text-xl font-bold text-success">{liveTeamCount}</span>
+          <span className="text-textSecondary text-sm">teams</span>
           {!canEdit && (
-            <span className="text-xs text-textMuted bg-surfaceElevated border border-border px-2 py-1 rounded">
-              View only — edits locked
+            <span className="text-xs text-textMuted bg-surfaceElevated border border-border px-2 py-0.5 rounded">
+              View only
             </span>
           )}
-          <span className="text-xs text-textMuted hidden md:inline">
-            Tip: click any two teams to compare
-          </span>
+          {filtersCollapsed && liveHasActiveFilters && (
+            <span className="text-xs text-success bg-success/10 px-2 py-0.5 rounded-full">
+              {effectiveFilterConfigs.filter(f => f.active).length} filter{effectiveFilterConfigs.filter(f => f.active).length !== 1 ? 's' : ''} active
+            </span>
+          )}
+          {filtersCollapsed && (
+            <button
+              onClick={() => setShowTrendGlow(!showTrendGlow)}
+              className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs transition-colors ml-auto ${showTrendGlow ? 'bg-success text-background' : 'bg-surfaceElevated hover:bg-interactive'}`}
+            >
+              <TrendingUp size={12} />
+              Trends
+            </button>
+          )}
         </div>
+
+        {/* Expanded content */}
+        {!filtersCollapsed && (
+          <div className="px-4 pb-3 pt-2 space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-2 mr-2">
             <Filter size={16} className="text-textSecondary" />
@@ -894,8 +954,9 @@ function LivePickListView({
           })}
           {liveHasActiveFilters && (
             <button
-              onClick={canEdit ? handleLiveClearAllFilters : undefined}
-              disabled={!canEdit}
+              onClick={() => {
+                if (canEdit) handleLiveClearAllFilters();
+              }}
               className="text-xs text-textMuted hover:text-danger ml-2"
             >
               Clear all
@@ -916,36 +977,85 @@ function LivePickListView({
         {showFilterSettings && canEdit && (
           <div className="bg-surfaceElevated rounded-lg border border-border p-4 space-y-3">
             <h3 className="text-sm font-bold text-textSecondary uppercase tracking-wider">Filter Settings</h3>
-            {effectiveFilterConfigs.map(filter => (
-              <div key={filter.id} className="flex flex-wrap items-center gap-2">
-                <select value={filter.icon} onChange={e => handleLiveUpdateFilter(filter.id, { icon: e.target.value })}
-                  className="w-20 px-2 py-1.5 bg-background border border-border rounded text-sm">
-                  {Object.keys(FILTER_ICONS).map(k => <option key={k} value={k}>{k}</option>)}
-                </select>
-                <input type="text" value={filter.label} onChange={e => handleLiveUpdateFilter(filter.id, { label: e.target.value })}
-                  className="w-28 px-2 py-1.5 bg-background border border-border rounded text-sm" placeholder="Filter name" />
-                <select value={filter.field} onChange={e => handleLiveUpdateFilter(filter.id, { field: e.target.value })}
-                  className="flex-1 min-w-[140px] px-2 py-1.5 bg-background border border-border rounded text-sm">
-                  {STAT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-                <select value={filter.operator} onChange={e => handleLiveUpdateFilter(filter.id, { operator: e.target.value as FilterConfig['operator'] })}
-                  className="w-16 px-2 py-1.5 bg-background border border-border rounded text-sm">
-                  <option value=">=">&gt;=</option>
-                  <option value="<=">&lt;=</option>
-                  <option value=">">&gt;</option>
-                  <option value="<">&lt;</option>
-                </select>
-                <input type="number" value={filter.threshold} onChange={e => handleLiveUpdateFilter(filter.id, { threshold: parseFloat(e.target.value) || 0 })}
-                  className="w-20 px-2 py-1.5 bg-background border border-border rounded text-sm" />
-                <button onClick={() => handleLiveRemoveFilter(filter.id)} className="p-1.5 text-textMuted hover:text-danger rounded transition-colors">
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            ))}
-            <button onClick={handleLiveAddFilter} className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-success hover:bg-interactive rounded transition-colors">
-              <Plus size={14} />
-              Add Filter
-            </button>
+            {effectiveFilterConfigs.map(filter => {
+              const isPit = filter.filterType?.startsWith('pit');
+              const pitDef = isPit ? PIT_FIELDS.find(f => f.value === filter.pitField) : null;
+              return (
+                <div key={filter.id} className="flex flex-wrap items-center gap-2">
+                  <input type="text" value={filter.label} onChange={e => handleLiveUpdateFilter(filter.id, { label: e.target.value })}
+                    className="w-28 px-2 py-1.5 bg-background border border-border rounded text-sm" placeholder="Name" />
+                  {isPit ? (
+                    <>
+                      <select value={filter.pitField || ''} onChange={e => {
+                        const newPitField = e.target.value;
+                        const newDef = PIT_FIELDS.find(f => f.value === newPitField);
+                        handleLiveUpdateFilter(filter.id, {
+                          pitField: newPitField, label: newDef?.label || newPitField,
+                          filterType: pitFieldToFilterType(newPitField), pitValues: [],
+                        });
+                      }} className="min-w-[140px] px-2 py-1.5 bg-background border border-border rounded text-sm">
+                        {PIT_FIELDS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                      </select>
+                      {pitDef?.kind === 'select' && (
+                        <div className="flex flex-wrap gap-1">
+                          {pitDef.options!.map(opt => {
+                            const selected = filter.pitValues?.includes(opt);
+                            return (
+                              <button key={opt} onClick={() => {
+                                const current = filter.pitValues || [];
+                                const updated = selected ? current.filter(v => v !== opt) : [...current, opt];
+                                handleLiveUpdateFilter(filter.id, { pitValues: updated });
+                              }} className={`px-2 py-0.5 rounded text-xs transition-colors ${
+                                selected ? 'bg-blueAlliance text-white' : 'bg-background border border-border hover:bg-interactive'
+                              }`}>{opt}</button>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {pitDef?.kind === 'number' && (
+                        <>
+                          <select value={filter.operator} onChange={e => handleLiveUpdateFilter(filter.id, { operator: e.target.value as FilterConfig['operator'] })}
+                            className="w-16 px-2 py-1.5 bg-background border border-border rounded text-sm">
+                            <option value=">=">&gt;=</option><option value="<=">&lt;=</option>
+                            <option value=">">&gt;</option><option value="<">&lt;</option>
+                          </select>
+                          <input type="number" value={filter.threshold} onChange={e => handleLiveUpdateFilter(filter.id, { threshold: parseFloat(e.target.value) || 0 })}
+                            className="w-20 px-2 py-1.5 bg-background border border-border rounded text-sm" />
+                        </>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <select value={filter.field} onChange={e => handleLiveUpdateFilter(filter.id, { field: e.target.value })}
+                        className="flex-1 min-w-[140px] px-2 py-1.5 bg-background border border-border rounded text-sm">
+                        {STAT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                      <select value={filter.operator} onChange={e => handleLiveUpdateFilter(filter.id, { operator: e.target.value as FilterConfig['operator'] })}
+                        className="w-16 px-2 py-1.5 bg-background border border-border rounded text-sm">
+                        <option value=">=">&gt;=</option><option value="<=">&lt;=</option>
+                        <option value=">">&gt;</option><option value="<">&lt;</option>
+                      </select>
+                      <input type="number" value={filter.threshold} onChange={e => handleLiveUpdateFilter(filter.id, { threshold: parseFloat(e.target.value) || 0 })}
+                        className="w-20 px-2 py-1.5 bg-background border border-border rounded text-sm" />
+                    </>
+                  )}
+                  <button onClick={() => handleLiveRemoveFilter(filter.id)} className="p-1.5 text-textMuted hover:text-danger rounded transition-colors">
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              );
+            })}
+            <div className="flex items-center gap-2 pt-1">
+              <span className="text-xs text-textMuted">Add:</span>
+              <button onClick={() => handleLiveAddFilter('stats')} className="flex items-center gap-1 px-2.5 py-1 text-xs text-success bg-background border border-border rounded hover:bg-interactive transition-colors">
+                <Plus size={12} /> Stats
+              </button>
+              <button onClick={() => handleLiveAddFilter('pit')} className="flex items-center gap-1 px-2.5 py-1 text-xs text-success bg-background border border-border rounded hover:bg-interactive transition-colors">
+                <Plus size={12} /> Pit Data
+              </button>
+            </div>
+          </div>
+        )}
           </div>
         )}
       </div>
@@ -1164,6 +1274,8 @@ function LivePickListView({
             hasActiveFilters={liveHasActiveFilters}
             renderTeamExtra={renderTeamExtra}
             showTrendGlow={showTrendGlow}
+            expandedTeam={liveExpandedTeam}
+            onToggleExpand={(num) => setLiveExpandedTeam(prev => prev === num ? null : num)}
           />
           <DroppableColumn
             id="live-tier2-column"
@@ -1182,6 +1294,8 @@ function LivePickListView({
             hasActiveFilters={liveHasActiveFilters}
             renderTeamExtra={renderTeamExtra}
             showTrendGlow={showTrendGlow}
+            expandedTeam={liveExpandedTeam}
+            onToggleExpand={(num) => setLiveExpandedTeam(prev => prev === num ? null : num)}
           />
           <DroppableColumn
             id="live-tier3-column"
@@ -1200,6 +1314,8 @@ function LivePickListView({
             hasActiveFilters={liveHasActiveFilters}
             renderTeamExtra={renderTeamExtra}
             showTrendGlow={showTrendGlow}
+            expandedTeam={liveExpandedTeam}
+            onToggleExpand={(num) => setLiveExpandedTeam(prev => prev === num ? null : num)}
           />
           {tier4Teams.length > 0 && (
             <DroppableColumn
@@ -1219,6 +1335,8 @@ function LivePickListView({
               hasActiveFilters={liveHasActiveFilters}
               renderTeamExtra={renderTeamExtra}
               showTrendGlow={showTrendGlow}
+              expandedTeam={liveExpandedTeam}
+              onToggleExpand={(num) => setLiveExpandedTeam(prev => prev === num ? null : num)}
             />
           )}
         </div>
@@ -1254,7 +1372,7 @@ function SortableWatchlistCard({ id, disabled, children }: { id: string; disable
 }
 
 // Sortable team card component
-function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onToggleFlag, onToggleWatchlist, isSelectedForCompare, onToggleCompare, passesFilters, hasActiveFilters, disableInteraction, showTrendGlow }: {
+function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onToggleFlag, onToggleWatchlist, isSelectedForCompare, onToggleCompare, passesFilters, hasActiveFilters, disableInteraction, showTrendGlow, isExpanded, onToggleExpand }: {
   team: PickListTeam | { teamNumber: number; teamName?: string; avgTotalPoints: number; level3ClimbRate: number; avgAutoPoints: number };
   currentTier?: 'tier1' | 'tier2' | 'tier3' | 'tier4';
   tierNames?: { tier1: string; tier2: string; tier3: string; tier4: string };
@@ -1268,6 +1386,8 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onT
   hasActiveFilters?: boolean;
   disableInteraction?: boolean;
   showTrendGlow?: boolean;
+  isExpanded?: boolean;
+  onToggleExpand?: () => void;
 }) {
   const {
     attributes,
@@ -1285,6 +1405,7 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onT
   };
 
   const isPickListTeam = 'tier' in team;
+  const isReviewed = isPickListTeam ? (team as PickListTeam).reviewed !== false : true;
   const teamStats = useAnalyticsStore(state =>
     state.teamStatistics.find(t => t.teamNumber === team.teamNumber)
   );
@@ -1302,11 +1423,19 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onT
     }
   }, [isPickListTeam ? (team as PickListTeam).notes : '']); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const pit = usePitScoutStore.getState().getEntryByTeam(team.teamNumber);
+  const tbaRankings = useAnalyticsStore(state => state.tbaData?.rankings);
+  const tbaRanking = tbaRankings?.rankings?.find(
+    r => r.team_key === `frc${team.teamNumber}`
+  );
+
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`border rounded-lg p-2 mb-2 transition-all cursor-pointer select-none ${
+      className={`border rounded-lg transition-all cursor-pointer select-none ${
+        !isReviewed && isPickListTeam ? 'border-l-4 border-l-blueAlliance/40' : ''
+      } ${
         isSelectedForCompare
           ? 'border-blueAlliance bg-blueAlliance/10 ring-2 ring-blueAlliance'
           : isPickListTeam && team.onWatchlist
@@ -1320,60 +1449,147 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onT
         showTrendGlow && teamTrend?.trend === 'improving' ? 'shadow-[0_0_8px_rgba(34,197,94,0.4)] border-success/50' :
         showTrendGlow && teamTrend?.trend === 'declining' ? 'shadow-[0_0_8px_rgba(239,68,68,0.4)] border-danger/50' : ''
       }`}
-      onClick={() => onToggleCompare?.()}
     >
-      <div className="flex items-start gap-2">
+      {/* Compact row — always visible */}
+      <div
+        className="flex items-center gap-2 px-2 py-1.5"
+        onClick={e => {
+          // If clicking the row (not a button), toggle expand
+          if (!(e.target as HTMLElement).closest('button, a, input')) {
+            onToggleExpand?.();
+          }
+        }}
+      >
         {/* Drag handle */}
         <div
           {...(disableInteraction ? {} : listeners)}
           {...(disableInteraction ? {} : attributes)}
-          className={`touch-none p-1.5 -m-1.5 md:p-0 md:m-0 md:mt-1 ${disableInteraction ? 'text-textMuted/20 cursor-default' : 'cursor-grab active:cursor-grabbing text-textMuted hover:text-textPrimary'}`}
+          className={`touch-none flex-shrink-0 ${disableInteraction ? 'text-textMuted/20 cursor-default' : 'cursor-grab active:cursor-grabbing text-textMuted hover:text-textPrimary'}`}
           onClick={e => e.stopPropagation()}
         >
-          <GripVertical size={16} className="md:w-4 md:h-4 w-6 h-6" />
+          <GripVertical size={14} />
         </div>
 
-        {/* Team info */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <Link
-              to={`/teams/${team.teamNumber}`}
-              className="font-bold text-sm text-textPrimary hover:text-blueAlliance transition-colors"
-              title="View team details"
-              onClick={e => e.stopPropagation()}
-            >
-              {team.teamNumber}
-            </Link>
-            {teamStats?.teamName && (
-              <span className="text-xs text-textSecondary truncate">{teamStats.teamName}</span>
+        {/* Team number */}
+        <Link
+          to={`/teams/${team.teamNumber}`}
+          className="font-bold text-sm text-textPrimary hover:text-blueAlliance transition-colors flex-shrink-0"
+          title="View team details"
+          onClick={e => e.stopPropagation()}
+        >
+          {team.teamNumber}
+        </Link>
+
+        {/* Total points */}
+        <span className="text-xs text-textSecondary flex-shrink-0">{teamStats?.avgTotalPoints?.toFixed(0) ?? '0'} pts</span>
+
+        {/* Drive type badge */}
+        {pit?.driveType && (
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-blueAlliance/20 text-blueAlliance font-medium flex-shrink-0">{pit.driveType}</span>
+        )}
+
+        <span className="flex-1" />
+
+        {/* Flag */}
+        {isPickListTeam && (team as PickListTeam).flagged && <Flag size={12} className="text-danger flex-shrink-0" />}
+
+        {/* Trend arrow */}
+        {teamTrend && teamTrend.trend !== 'stable' && (
+          <span className={`text-xs font-bold flex-shrink-0 ${teamTrend.trend === 'improving' ? 'text-success' : 'text-danger'}`}>
+            {teamTrend.trend === 'improving' ? '\u2191' : '\u2193'}
+          </span>
+        )}
+
+        {/* Compare checkbox */}
+        <button
+          onClick={e => { e.stopPropagation(); onToggleCompare?.(); }}
+          className={`p-0.5 flex-shrink-0 ${isSelectedForCompare ? 'text-blueAlliance' : 'text-textMuted hover:text-textSecondary'}`}
+          title="Compare"
+        >
+          {isSelectedForCompare ? <SquareCheckBig size={14} /> : <Square size={14} />}
+        </button>
+      </div>
+
+      {/* Expanded detail */}
+      {isExpanded && (
+        <div className="px-3 pb-2 pt-1 border-t border-border/50 space-y-1.5">
+          {/* Stats row */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+            {tbaRanking && (
+              <span className="text-textSecondary">
+                Rank <span className="font-semibold text-textPrimary">#{tbaRanking.rank}</span>
+                {tbaRanking.sort_orders?.[0] != null && (
+                  <span className="text-textMuted ml-1">({tbaRanking.sort_orders[0].toFixed(1)} RP)</span>
+                )}
+              </span>
+            )}
+            <span className="text-textSecondary">
+              Total <span className="font-semibold text-textPrimary">{teamStats?.avgTotalPoints?.toFixed(1) ?? '?'}</span>
+            </span>
+            <span className="text-textSecondary">
+              Auto <span className="font-medium text-textPrimary">{teamStats?.avgAutoPoints?.toFixed(1) ?? '?'}</span>
+            </span>
+            <span className="text-textSecondary">
+              Teleop <span className="font-medium text-textPrimary">{teamStats?.avgTeleopPoints?.toFixed(1) ?? '?'}</span>
+            </span>
+            <span className="text-textSecondary">
+              Fuel <span className="font-medium text-textPrimary">{teamStats?.avgTotalFuelEstimate?.toFixed(1) ?? '?'}</span>
+            </span>
+            {teamTrend && teamTrend.trend !== 'stable' && (
+              <span className={`font-semibold ${teamTrend.trend === 'improving' ? 'text-success' : 'text-danger'}`}>
+                Last 3 avg: {teamTrend.last3Avg.total.toFixed(0)} pts {teamTrend.trend === 'improving' ? '\u2191' : '\u2193'}
+              </span>
+            )}
+            {teamStats && (
+              <span className="text-textMuted ml-auto">{teamStats.matchesPlayed} matches</span>
             )}
           </div>
 
-          {/* Quick stats */}
-          <div className="flex flex-wrap gap-2 text-xs text-textSecondary">
-            <span>{teamStats?.avgTotalPoints?.toFixed(0) ?? '0'} pts</span>
-            <span>L3: {teamStats?.level3ClimbRate?.toFixed(0) ?? '0'}%</span>
-            <span>A: {teamStats?.avgAutoPoints?.toFixed(0) ?? '0'}</span>
-            {(() => {
-              const pit = usePitScoutStore.getState().getEntryByTeam(team.teamNumber);
-              if (!pit) return null;
-              return (
-                <>
-                  {pit.driveType && <span className="text-blueAlliance font-medium">{pit.driveType}</span>}
-                  {pit.canGoUnderTrench && <span className="text-success font-medium">trench</span>}
-                </>
-              );
-            })()}
+          {/* Badges row */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            {/* Climb badge — rates are already 0–100 */}
+            {teamStats && teamStats.level3ClimbRate > 10 && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-success/20 text-success">
+                Level 3 Climb {teamStats.level3ClimbRate.toFixed(0)}%
+              </span>
+            )}
+            {teamStats && teamStats.level3ClimbRate <= 10 && teamStats.level2ClimbRate > 10 && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-warning/20 text-warning">
+                Level 2 Climb {teamStats.level2ClimbRate.toFixed(0)}%
+              </span>
+            )}
+            {teamStats && teamStats.level3ClimbRate <= 10 && teamStats.level2ClimbRate <= 10 && teamStats.level1ClimbRate > 10 && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-surfaceElevated text-textSecondary">
+                Level 1 Climb
+              </span>
+            )}
+            {/* Auto climb */}
+            {teamStats && teamStats.autoClimbRate > 10 && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-blueAlliance/20 text-blueAlliance">
+                Auto Climb {teamStats.autoClimbRate.toFixed(0)}%
+              </span>
+            )}
+            {/* Trench */}
+            {pit?.canGoUnderTrench && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-success/20 text-success">Trench</span>
+            )}
+            {/* Drive type */}
+            {pit?.driveType && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-blueAlliance/20 text-blueAlliance capitalize">{pit.driveType}</span>
+            )}
+            {/* Passer */}
+            {teamStats && teamStats.dedicatedPasserRate > 30 && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-warning/20 text-warning">
+                Dedicated Passer {teamStats.dedicatedPasserRate.toFixed(0)}%
+              </span>
+            )}
+            {/* Vibe check */}
+            {pit?.vibeCheck === 'bad' && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-danger/20 text-danger">Bad Vibe</span>
+            )}
           </div>
-          {teamTrend && teamTrend.trend !== 'stable' && (
-            <div className={`text-xs font-semibold ${
-              teamTrend.trend === 'improving' ? 'text-success' : 'text-danger'
-            }`}>
-              Last 3: {teamTrend.last3Avg.total.toFixed(0)} pts {teamTrend.trend === 'improving' ? '\u2191' : '\u2193'}
-            </div>
-          )}
 
-          {/* Notes for teams in tiers */}
+          {/* Notes */}
           {currentTier && isPickListTeam && isEditingNotes ? (
             <input
               type="text"
@@ -1390,176 +1606,74 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onT
                   onUpdateNotes?.(notes);
                 }
               }}
-              className="w-full mt-1 bg-background border border-border rounded px-2 py-1 text-xs"
+              className="w-full bg-background border border-border rounded px-2 py-1 text-xs"
               autoFocus
             />
           ) : (
             currentTier && isPickListTeam && (team as PickListTeam).notes && (
               <p
-                className="text-xs text-textSecondary italic mt-1 truncate cursor-text hover:text-textPrimary transition-colors"
+                className="text-xs text-textSecondary italic truncate cursor-text hover:text-textPrimary transition-colors"
                 title="Click to edit note"
                 onClick={e => { e.stopPropagation(); if (!disableInteraction) setIsEditingNotes(true); }}
               >{(team as PickListTeam).notes}</p>
             )
           )}
 
-          {/* Quick tier switcher - mobile friendly */}
-          {currentTier && tierNames && onMoveTier && (
-            <div className="flex gap-1 mt-2 flex-wrap" onClick={e => e.stopPropagation()}>
-              {/* Tier 1 (Steak) - show demote buttons */}
-              {currentTier === 'tier1' && (
-                <>
-                  <button
-                    onClick={() => onMoveTier('tier2')}
-                    className="flex items-center gap-1 px-2 py-1 text-xs bg-surfaceElevated hover:bg-interactive rounded transition-colors"
-                    title={`Demote to ${tierNames.tier2}`}
-                  >
-                    <ArrowDown size={14} />
-                    <span className="truncate max-w-[60px]">{tierNames.tier2}</span>
+          {/* Actions row */}
+          <div className="flex items-center gap-2 flex-wrap" onClick={e => e.stopPropagation()}>
+            {/* Tier move buttons */}
+            {currentTier && tierNames && onMoveTier && (
+              <>
+                {currentTier !== 'tier1' && (
+                  <button onClick={() => onMoveTier('tier1')} className="flex items-center gap-1 px-2 py-1 text-xs bg-surfaceElevated hover:bg-interactive rounded transition-colors" title={`Move to ${tierNames.tier1}`}>
+                    <ChevronsUp size={12} /> <span className="truncate max-w-[50px]">{tierNames.tier1}</span>
                   </button>
-                  <button
-                    onClick={() => onMoveTier('tier3')}
-                    className="flex items-center gap-1 px-2 py-1 text-xs bg-surfaceElevated hover:bg-interactive rounded transition-colors"
-                    title={`Demote to ${tierNames.tier3}`}
-                  >
-                    <ChevronsDown size={14} />
-                    <span className="truncate max-w-[60px]">{tierNames.tier3}</span>
+                )}
+                {currentTier !== 'tier2' && currentTier !== 'tier1' && (
+                  <button onClick={() => onMoveTier('tier2')} className="flex items-center gap-1 px-2 py-1 text-xs bg-surfaceElevated hover:bg-interactive rounded transition-colors" title={`Move to ${tierNames.tier2}`}>
+                    <ArrowUp size={12} /> <span className="truncate max-w-[50px]">{tierNames.tier2}</span>
                   </button>
-                  <button
-                    onClick={() => onMoveTier('tier4')}
-                    className="flex items-center gap-1 px-2 py-1 text-xs bg-danger/20 text-danger hover:bg-danger/30 rounded transition-colors"
-                    title={`Demote to ${tierNames.tier4}`}
-                  >
-                    <Ban size={14} />
-                    <span>DNP</span>
+                )}
+                {currentTier === 'tier1' && (
+                  <button onClick={() => onMoveTier('tier2')} className="flex items-center gap-1 px-2 py-1 text-xs bg-surfaceElevated hover:bg-interactive rounded transition-colors" title={`Move to ${tierNames.tier2}`}>
+                    <ArrowDown size={12} /> <span className="truncate max-w-[50px]">{tierNames.tier2}</span>
                   </button>
-                </>
-              )}
+                )}
+                {currentTier !== 'tier3' && currentTier !== 'tier4' && (
+                  <button onClick={() => onMoveTier('tier3')} className="flex items-center gap-1 px-2 py-1 text-xs bg-surfaceElevated hover:bg-interactive rounded transition-colors" title={`Move to ${tierNames.tier3}`}>
+                    <ArrowDown size={12} /> <span className="truncate max-w-[50px]">{tierNames.tier3}</span>
+                  </button>
+                )}
+                {currentTier !== 'tier4' && (
+                  <button onClick={() => onMoveTier('tier4')} className="flex items-center gap-1 px-2 py-1 text-xs bg-danger/20 text-danger hover:bg-danger/30 rounded transition-colors" title={`Move to ${tierNames.tier4}`}>
+                    <Ban size={12} /> DNP
+                  </button>
+                )}
+                {currentTier === 'tier4' && (
+                  <button onClick={() => onMoveTier('tier3')} className="flex items-center gap-1 px-2 py-1 text-xs bg-surfaceElevated hover:bg-interactive rounded transition-colors" title={`Move to ${tierNames.tier3}`}>
+                    <ArrowUp size={12} /> <span className="truncate max-w-[50px]">{tierNames.tier3}</span>
+                  </button>
+                )}
+              </>
+            )}
 
-              {/* Tier 2 (Potatoes) - show promote and demote buttons */}
-              {currentTier === 'tier2' && (
-                <>
-                  <button
-                    onClick={() => onMoveTier('tier1')}
-                    className="flex items-center gap-1 px-2 py-1 text-xs bg-surfaceElevated hover:bg-interactive rounded transition-colors"
-                    title={`Promote to ${tierNames.tier1}`}
-                  >
-                    <ArrowUp size={14} />
-                    <span className="truncate max-w-[60px]">{tierNames.tier1}</span>
-                  </button>
-                  <button
-                    onClick={() => onMoveTier('tier3')}
-                    className="flex items-center gap-1 px-2 py-1 text-xs bg-surfaceElevated hover:bg-interactive rounded transition-colors"
-                    title={`Demote to ${tierNames.tier3}`}
-                  >
-                    <ArrowDown size={14} />
-                    <span className="truncate max-w-[60px]">{tierNames.tier3}</span>
-                  </button>
-                  <button
-                    onClick={() => onMoveTier('tier4')}
-                    className="flex items-center gap-1 px-2 py-1 text-xs bg-danger/20 text-danger hover:bg-danger/30 rounded transition-colors"
-                    title={`Demote to ${tierNames.tier4}`}
-                  >
-                    <Ban size={14} />
-                    <span>DNP</span>
-                  </button>
-                </>
-              )}
-
-              {/* Tier 3 (Chicken Nuggets) - show promote and demote buttons */}
-              {currentTier === 'tier3' && (
-                <>
-                  <button
-                    onClick={() => onMoveTier('tier2')}
-                    className="flex items-center gap-1 px-2 py-1 text-xs bg-surfaceElevated hover:bg-interactive rounded transition-colors"
-                    title={`Promote to ${tierNames.tier2}`}
-                  >
-                    <ArrowUp size={14} />
-                    <span className="truncate max-w-[60px]">{tierNames.tier2}</span>
-                  </button>
-                  <button
-                    onClick={() => onMoveTier('tier1')}
-                    className="flex items-center gap-1 px-2 py-1 text-xs bg-surfaceElevated hover:bg-interactive rounded transition-colors"
-                    title={`Promote to ${tierNames.tier1}`}
-                  >
-                    <ChevronsUp size={14} />
-                    <span className="truncate max-w-[60px]">{tierNames.tier1}</span>
-                  </button>
-                  <button
-                    onClick={() => onMoveTier('tier4')}
-                    className="flex items-center gap-1 px-2 py-1 text-xs bg-danger/20 text-danger hover:bg-danger/30 rounded transition-colors"
-                    title={`Demote to ${tierNames.tier4}`}
-                  >
-                    <Ban size={14} />
-                    <span>DNP</span>
-                  </button>
-                </>
-              )}
-
-              {/* Tier 4 (All Teams) - show promote buttons only */}
-              {currentTier === 'tier4' && (
-                <>
-                  <button
-                    onClick={() => onMoveTier('tier3')}
-                    className="flex items-center gap-1 px-2 py-1 text-xs bg-surfaceElevated hover:bg-interactive rounded transition-colors"
-                    title={`Promote to ${tierNames.tier3}`}
-                  >
-                    <ArrowUp size={14} />
-                    <span className="truncate max-w-[60px]">{tierNames.tier3}</span>
-                  </button>
-                  <button
-                    onClick={() => onMoveTier('tier2')}
-                    className="flex items-center gap-1 px-2 py-1 text-xs bg-surfaceElevated hover:bg-interactive rounded transition-colors"
-                    title={`Promote to ${tierNames.tier2}`}
-                  >
-                    <ArrowUp size={14} />
-                    <span className="truncate max-w-[60px]">{tierNames.tier2}</span>
-                  </button>
-                  <button
-                    onClick={() => onMoveTier('tier1')}
-                    className="flex items-center gap-1 px-2 py-1 text-xs bg-surfaceElevated hover:bg-interactive rounded transition-colors"
-                    title={`Promote to ${tierNames.tier1}`}
-                  >
-                    <ChevronsUp size={14} />
-                    <span className="truncate max-w-[60px]">{tierNames.tier1}</span>
-                  </button>
-                </>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Actions - only show for teams in tiers and when editing is allowed */}
-        {currentTier && !disableInteraction && (
-          <div className="flex flex-col gap-1" onClick={e => e.stopPropagation()}>
-            <button
-              onClick={() => onToggleWatchlist?.()}
-              className={`p-2 rounded transition-colors ${
-                isPickListTeam && (team as PickListTeam).onWatchlist ? 'text-warning' : 'text-textMuted hover:text-warning'
-              }`}
-              title={isPickListTeam && (team as PickListTeam).onWatchlist ? "Remove from watchlist" : "Watch this team"}
-            >
-              <Bookmark size={16} />
-            </button>
-            <button
-              onClick={() => onToggleFlag?.()}
-              className={`p-2 rounded transition-colors ${
-                isPickListTeam && (team as PickListTeam).flagged ? 'text-danger' : 'text-textMuted hover:text-danger'
-              }`}
-              title={isPickListTeam && (team as PickListTeam).flagged ? "Remove red flag" : "Red flag — reliability concern"}
-            >
-              <Flag size={16} />
-            </button>
-            <button
-              onClick={() => setIsEditingNotes(true)}
-              className="p-2 text-textMuted hover:text-textPrimary rounded transition-colors"
-              title="Edit notes"
-            >
-              <StickyNote size={16} />
-            </button>
+            {/* Flag / Watchlist / Note actions */}
+            {currentTier && !disableInteraction && (
+              <div className="flex items-center gap-1 ml-auto">
+                <button onClick={() => onToggleWatchlist?.()} className={`p-1.5 rounded transition-colors ${isPickListTeam && (team as PickListTeam).onWatchlist ? 'text-warning' : 'text-textMuted hover:text-warning'}`} title="Watch">
+                  <Bookmark size={14} />
+                </button>
+                <button onClick={() => onToggleFlag?.()} className={`p-1.5 rounded transition-colors ${isPickListTeam && (team as PickListTeam).flagged ? 'text-danger' : 'text-textMuted hover:text-danger'}`} title="Flag">
+                  <Flag size={14} />
+                </button>
+                <button onClick={() => setIsEditingNotes(true)} className="p-1.5 text-textMuted hover:text-textPrimary rounded transition-colors" title="Edit notes">
+                  <StickyNote size={14} />
+                </button>
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1571,6 +1685,7 @@ function DroppableColumn({
   disableInteraction,
   compareTeams, onToggleCompare, teamPassesFilters, hasActiveFilters,
   renderTeamExtra, showTrendGlow,
+  expandedTeam, onToggleExpand,
 }: {
   id: string;
   title: string;
@@ -1589,6 +1704,8 @@ function DroppableColumn({
   hasActiveFilters?: boolean;
   renderTeamExtra?: (teamNumber: number) => React.ReactNode;
   showTrendGlow?: boolean;
+  expandedTeam?: number | null;
+  onToggleExpand?: (teamNumber: number) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id });
   const storeUpdateNotes = usePickListStore(state => state.updateNotes);
@@ -1625,8 +1742,10 @@ function DroppableColumn({
                 hasActiveFilters={hasActiveFilters}
                 disableInteraction={disableInteraction}
                 showTrendGlow={showTrendGlow}
+                isExpanded={expandedTeam === team.teamNumber}
+                onToggleExpand={onToggleExpand ? () => onToggleExpand(team.teamNumber) : undefined}
               />
-              {renderTeamExtra?.(team.teamNumber)}
+              {expandedTeam === team.teamNumber && renderTeamExtra?.(team.teamNumber)}
             </div>
           ))}
           {teams.length === 0 && (
@@ -1709,14 +1828,17 @@ function PickList() {
   const [showWatchlist, setShowWatchlist] = useState(true);
   const [insertAtRank, setInsertAtRank] = useState(1);
 
-  // Customizable capability filters
+  // Customizable capability filters (unified: stats + pit scouting)
   const [filterConfigs, setFilterConfigs] = useState<FilterConfig[]>(DEFAULT_FILTERS);
   const [showFilterSettings, setShowFilterSettings] = useState(false);
+  const [filtersCollapsed, setFiltersCollapsed] = useState(false);
 
-  // Pit scouting filters (boolean toggles)
+  // Pit scouting data for pit-type filters
   const pitEntries = usePitScoutStore(state => state.entries);
-  const [pitFilterTrench, setPitFilterTrench] = useState(false);
-  const [pitFilterSwerve, setPitFilterSwerve] = useState(false);
+
+  // Expanded card state
+  const [expandedTeam, setExpandedTeam] = useState<number | null>(null);
+  const [showTrendGlow, setShowTrendGlow] = useState(false);
 
   // Toggle a filter's active state
   const toggleFilter = (id: string) => {
@@ -1728,18 +1850,22 @@ function PickList() {
     setFilterConfigs(prev => prev.map(f => f.id === id ? { ...f, ...updates } : f));
   };
 
-  // Add a new custom filter
-  const addFilter = () => {
+  // Add a new filter (stats or pit)
+  const addFilter = (source: 'stats' | 'pit' = 'stats') => {
     const newId = `custom-${Date.now()}`;
-    setFilterConfigs(prev => [...prev, {
-      id: newId,
-      label: 'New Filter',
-      icon: 'target',
-      field: 'avgTotalPoints',
-      operator: '>=',
-      threshold: 0,
-      active: false,
-    }]);
+    if (source === 'pit') {
+      const firstPit = PIT_FIELDS[0];
+      setFilterConfigs(prev => [...prev, {
+        id: newId, label: firstPit.label, icon: 'wrench', field: '',
+        operator: '>=', threshold: 0, active: false,
+        filterType: pitFieldToFilterType(firstPit.value), pitField: firstPit.value, pitValues: [],
+      }]);
+    } else {
+      setFilterConfigs(prev => [...prev, {
+        id: newId, label: 'New Filter', icon: 'target', field: 'avgTotalPoints',
+        operator: '>=', threshold: 0, active: false,
+      }]);
+    }
   };
 
   // Remove a filter
@@ -1750,24 +1876,15 @@ function PickList() {
   // Count teams passing a specific filter
   const countPassingTeams = (filter: FilterConfig): number => {
     if (!pickList) return 0;
-    return countTeamsPassingFilter(filter, pickList.teams, teamStatistics);
+    return countTeamsPassingFilter(filter, pickList.teams, teamStatistics, pitEntries);
   };
 
-  // Check if a team passes all active filters (stats + pit scouting)
+  // Check if a team passes all active filters (unified stats + pit)
   const teamPassesFilters = (teamNumber: number): boolean => {
-    if (!doesTeamPassAllFilters(teamNumber, filterConfigs, teamStatistics)) return false;
-    if (pitFilterTrench) {
-      const pit = pitEntries.find(e => e.teamNumber === teamNumber);
-      if (!pit?.canGoUnderTrench) return false;
-    }
-    if (pitFilterSwerve) {
-      const pit = pitEntries.find(e => e.teamNumber === teamNumber);
-      if (pit?.driveType !== 'swerve') return false;
-    }
-    return true;
+    return doesTeamPassAllFilters(teamNumber, filterConfigs, teamStatistics, pitEntries);
   };
 
-  const hasActiveFilters = filterConfigs.some(f => f.active) || pitFilterTrench || pitFilterSwerve;
+  const hasActiveFilters = filterConfigs.some(f => f.active);
 
   // Count picked teams in tier1 + tier2
   const tier1And2Count = pickList?.teams.filter(t =>
@@ -2281,19 +2398,39 @@ function PickList() {
       )}
 
       {/* Pick List Tracker & Filters */}
-      <div className="bg-surface p-4 rounded-lg border border-border space-y-4">
-        {/* Tracker Row */}
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Trophy size={20} className="text-warning" />
-            <span className="font-semibold">Pick List:</span>
-            <span className="text-2xl font-bold text-success">{tier1And2Count}</span>
-            <span className="text-textSecondary">teams</span>
-          </div>
-          <span className="text-xs text-textMuted hidden md:inline">
-            Tip: click any two teams to compare them
-          </span>
+      <div className="bg-surface rounded-lg border border-border">
+        {/* Collapsed bar */}
+        <div className={`flex flex-wrap items-center gap-3 px-4 ${filtersCollapsed ? 'py-2' : 'pt-4 px-4'}`}>
+          <button
+            onClick={() => setFiltersCollapsed(!filtersCollapsed)}
+            className="p-1 rounded transition-colors text-textMuted hover:text-textPrimary"
+            title={filtersCollapsed ? 'Show filters' : 'Hide filters'}
+          >
+            {filtersCollapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+          </button>
+          <Trophy size={18} className="text-warning" />
+          <span className="font-semibold text-sm">Pick List:</span>
+          <span className="text-xl font-bold text-success">{tier1And2Count}</span>
+          <span className="text-textSecondary text-sm">teams</span>
+          {filtersCollapsed && hasActiveFilters && (
+            <span className="text-xs text-success bg-success/10 px-2 py-0.5 rounded-full">
+              {filterConfigs.filter(f => f.active).length} filter{filterConfigs.filter(f => f.active).length !== 1 ? 's' : ''} active
+            </span>
+          )}
+          {filtersCollapsed && (
+            <button
+              onClick={() => setShowTrendGlow(!showTrendGlow)}
+              className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs transition-colors ml-auto ${showTrendGlow ? 'bg-success text-background' : 'bg-surfaceElevated hover:bg-interactive'}`}
+            >
+              <TrendingUp size={12} />
+              Trends
+            </button>
+          )}
         </div>
+
+        {/* Expanded content */}
+        {!filtersCollapsed && (
+          <div className="px-4 pb-4 pt-2 space-y-3">
 
         {/* Capability Filters Row */}
         <div className="flex flex-wrap items-center gap-2">
@@ -2327,56 +2464,28 @@ function PickList() {
               </button>
             );
           })}
-          {/* Pit scouting filters */}
-          {pitEntries.length > 0 && (
-            <>
-              <span className="text-textMuted text-xs mx-1">|</span>
-              <button
-                onClick={() => setPitFilterTrench(!pitFilterTrench)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-colors ${
-                  pitFilterTrench ? 'bg-success text-background' : 'bg-surfaceElevated hover:bg-interactive'
-                }`}
-              >
-                <ArrowDown size={14} />
-                Under Trench
-                {pitFilterTrench && (
-                  <span className="ml-1 font-bold">
-                    ({pitEntries.filter(e => e.canGoUnderTrench).length})
-                  </span>
-                )}
-              </button>
-              <button
-                onClick={() => setPitFilterSwerve(!pitFilterSwerve)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-colors ${
-                  pitFilterSwerve ? 'bg-success text-background' : 'bg-surfaceElevated hover:bg-interactive'
-                }`}
-              >
-                <Wrench size={14} />
-                Swerve
-                {pitFilterSwerve && (
-                  <span className="ml-1 font-bold">
-                    ({pitEntries.filter(e => e.driveType === 'swerve').length})
-                  </span>
-                )}
-              </button>
-            </>
-          )}
-          {(filterConfigs.some(f => f.active) || pitFilterTrench || pitFilterSwerve) && (
+          {hasActiveFilters && (
             <button
               onClick={() => {
                 setFilterConfigs(prev => prev.map(f => ({ ...f, active: false })));
-                setPitFilterTrench(false);
-                setPitFilterSwerve(false);
               }}
               className="text-xs text-textMuted hover:text-danger ml-2"
             >
               Clear all
             </button>
           )}
+          <button
+            onClick={() => setShowTrendGlow(!showTrendGlow)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-colors ml-auto ${showTrendGlow ? 'bg-success text-background' : 'bg-surfaceElevated hover:bg-interactive'}`}
+            title="Highlight teams trending up or down based on last 3 matches"
+          >
+            <TrendingUp size={14} />
+            Trends
+          </button>
         </div>
 
         {/* No stats warning */}
-        {filterConfigs.some(f => f.active) && teamStatistics.length === 0 && (
+        {filterConfigs.some(f => f.active && (!f.filterType || f.filterType === 'stats')) && teamStatistics.length === 0 && (
           <div className="flex items-center gap-2 px-3 py-2 bg-warning/10 border border-warning/30 rounded-lg">
             <AlertTriangle size={16} className="text-warning" />
             <span className="text-sm text-warning">No scouting data loaded. Filters require team statistics to work.</span>
@@ -2387,65 +2496,92 @@ function PickList() {
         {showFilterSettings && (
           <div className="bg-surfaceElevated rounded-lg border border-border p-4 space-y-3">
             <h3 className="text-sm font-bold text-textSecondary uppercase tracking-wider">Filter Settings</h3>
-            {filterConfigs.map(filter => (
-              <div key={filter.id} className="flex flex-wrap items-center gap-2">
-                <select
-                  value={filter.icon}
-                  onChange={e => updateFilter(filter.id, { icon: e.target.value })}
-                  className="w-20 px-2 py-1.5 bg-background border border-border rounded text-sm"
-                >
-                  {Object.keys(FILTER_ICONS).map(iconKey => (
-                    <option key={iconKey} value={iconKey}>{iconKey}</option>
-                  ))}
-                </select>
-                <input
-                  type="text"
-                  value={filter.label}
-                  onChange={e => updateFilter(filter.id, { label: e.target.value })}
-                  className="w-28 px-2 py-1.5 bg-background border border-border rounded text-sm"
-                  placeholder="Filter name"
-                />
-                <select
-                  value={filter.field}
-                  onChange={e => updateFilter(filter.id, { field: e.target.value as keyof TeamStatistics })}
-                  className="flex-1 min-w-[140px] px-2 py-1.5 bg-background border border-border rounded text-sm"
-                >
-                  {STAT_OPTIONS.map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
-                <select
-                  value={filter.operator}
-                  onChange={e => updateFilter(filter.id, { operator: e.target.value as FilterConfig['operator'] })}
-                  className="w-16 px-2 py-1.5 bg-background border border-border rounded text-sm"
-                >
-                  <option value=">=">&gt;=</option>
-                  <option value="<=">&lt;=</option>
-                  <option value=">">&gt;</option>
-                  <option value="<">&lt;</option>
-                </select>
-                <input
-                  type="number"
-                  value={filter.threshold}
-                  onChange={e => updateFilter(filter.id, { threshold: parseFloat(e.target.value) || 0 })}
-                  className="w-20 px-2 py-1.5 bg-background border border-border rounded text-sm"
-                />
-                <button
-                  onClick={() => removeFilter(filter.id)}
-                  className="p-1.5 text-textMuted hover:text-danger rounded transition-colors"
-                  title="Remove filter"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            ))}
-            <button
-              onClick={addFilter}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-success hover:bg-interactive rounded transition-colors"
-            >
-              <Plus size={14} />
-              Add Filter
-            </button>
+            {filterConfigs.map(filter => {
+              const isPit = filter.filterType?.startsWith('pit');
+              const pitDef = isPit ? PIT_FIELDS.find(f => f.value === filter.pitField) : null;
+              return (
+                <div key={filter.id} className="flex flex-wrap items-center gap-2">
+                  <input type="text" value={filter.label} onChange={e => updateFilter(filter.id, { label: e.target.value })}
+                    className="w-28 px-2 py-1.5 bg-background border border-border rounded text-sm" placeholder="Name" />
+                  {isPit ? (
+                    <>
+                      <select
+                        value={filter.pitField || ''}
+                        onChange={e => {
+                          const newPitField = e.target.value;
+                          const newDef = PIT_FIELDS.find(f => f.value === newPitField);
+                          const newLabel = newDef?.label || newPitField;
+                          updateFilter(filter.id, {
+                            pitField: newPitField,
+                            label: newLabel,
+                            filterType: pitFieldToFilterType(newPitField),
+                            pitValues: [],
+                          });
+                        }}
+                        className="min-w-[140px] px-2 py-1.5 bg-background border border-border rounded text-sm"
+                      >
+                        {PIT_FIELDS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                      </select>
+                      {pitDef?.kind === 'select' && (
+                        <div className="flex flex-wrap gap-1">
+                          {pitDef.options!.map(opt => {
+                            const selected = filter.pitValues?.includes(opt);
+                            return (
+                              <button key={opt} onClick={() => {
+                                const current = filter.pitValues || [];
+                                const updated = selected ? current.filter(v => v !== opt) : [...current, opt];
+                                updateFilter(filter.id, { pitValues: updated });
+                              }} className={`px-2 py-0.5 rounded text-xs transition-colors ${
+                                selected ? 'bg-blueAlliance text-white' : 'bg-background border border-border hover:bg-interactive'
+                              }`}>{opt}</button>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {pitDef?.kind === 'number' && (
+                        <>
+                          <select value={filter.operator} onChange={e => updateFilter(filter.id, { operator: e.target.value as FilterConfig['operator'] })}
+                            className="w-16 px-2 py-1.5 bg-background border border-border rounded text-sm">
+                            <option value=">=">&gt;=</option><option value="<=">&lt;=</option>
+                            <option value=">">&gt;</option><option value="<">&lt;</option>
+                          </select>
+                          <input type="number" value={filter.threshold} onChange={e => updateFilter(filter.id, { threshold: parseFloat(e.target.value) || 0 })}
+                            className="w-20 px-2 py-1.5 bg-background border border-border rounded text-sm" />
+                        </>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <select value={filter.field} onChange={e => updateFilter(filter.id, { field: e.target.value })}
+                        className="flex-1 min-w-[140px] px-2 py-1.5 bg-background border border-border rounded text-sm">
+                        {STAT_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                      </select>
+                      <select value={filter.operator} onChange={e => updateFilter(filter.id, { operator: e.target.value as FilterConfig['operator'] })}
+                        className="w-16 px-2 py-1.5 bg-background border border-border rounded text-sm">
+                        <option value=">=">&gt;=</option><option value="<=">&lt;=</option>
+                        <option value=">">&gt;</option><option value="<">&lt;</option>
+                      </select>
+                      <input type="number" value={filter.threshold} onChange={e => updateFilter(filter.id, { threshold: parseFloat(e.target.value) || 0 })}
+                        className="w-20 px-2 py-1.5 bg-background border border-border rounded text-sm" />
+                    </>
+                  )}
+                  <button onClick={() => removeFilter(filter.id)} className="p-1.5 text-textMuted hover:text-danger rounded transition-colors" title="Remove filter">
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              );
+            })}
+            <div className="flex items-center gap-2 pt-1">
+              <span className="text-xs text-textMuted">Add:</span>
+              <button onClick={() => addFilter('stats')} className="flex items-center gap-1 px-2.5 py-1 text-xs text-success bg-background border border-border rounded hover:bg-interactive transition-colors">
+                <Plus size={12} /> Stats
+              </button>
+              <button onClick={() => addFilter('pit')} className="flex items-center gap-1 px-2.5 py-1 text-xs text-success bg-background border border-border rounded hover:bg-interactive transition-colors">
+                <Plus size={12} /> Pit Data
+              </button>
+            </div>
+          </div>
+        )}
           </div>
         )}
       </div>
@@ -2672,6 +2808,8 @@ function PickList() {
             onToggleCompare={toggleCompare}
             teamPassesFilters={teamPassesFilters}
             hasActiveFilters={hasActiveFilters}
+            expandedTeam={expandedTeam}
+            onToggleExpand={(num) => setExpandedTeam(prev => prev === num ? null : num)}
           />
           <DroppableColumn
             id="tier2-column"
@@ -2689,6 +2827,8 @@ function PickList() {
             onToggleCompare={toggleCompare}
             teamPassesFilters={teamPassesFilters}
             hasActiveFilters={hasActiveFilters}
+            expandedTeam={expandedTeam}
+            onToggleExpand={(num) => setExpandedTeam(prev => prev === num ? null : num)}
           />
           <DroppableColumn
             id="tier3-column"
@@ -2706,6 +2846,8 @@ function PickList() {
             onToggleCompare={toggleCompare}
             teamPassesFilters={teamPassesFilters}
             hasActiveFilters={hasActiveFilters}
+            expandedTeam={expandedTeam}
+            onToggleExpand={(num) => setExpandedTeam(prev => prev === num ? null : num)}
           />
           {/* Tier 4: Do Not Pick (only visible when teams have been added to it) */}
           {tier4Teams.length > 0 && (
@@ -2725,6 +2867,8 @@ function PickList() {
               onToggleCompare={toggleCompare}
               teamPassesFilters={teamPassesFilters}
               hasActiveFilters={hasActiveFilters}
+              expandedTeam={expandedTeam}
+              onToggleExpand={(num) => setExpandedTeam(prev => prev === num ? null : num)}
             />
           )}
         </div>
