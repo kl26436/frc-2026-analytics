@@ -1520,71 +1520,72 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onT
       {/* Expanded detail */}
       {isExpanded && (
         <div className="px-3 pb-2 pt-1 border-t border-border/50 space-y-1.5">
-          {/* Row 1: Points + Rank */}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5 text-xs">
-            {tbaRanking && (
-              <span className="text-textSecondary">
-                Rank <span className="font-semibold text-textPrimary">#{tbaRanking.rank}</span>
-                {tbaRanking.sort_orders?.[0] != null && (
-                  <span className="text-textMuted ml-1">({tbaRanking.sort_orders[0].toFixed(1)} RP)</span>
-                )}
+          {/* Stats — vertical list, label: value */}
+          <div className="text-xs space-y-0.5">
+            <div className="flex justify-between">
+              <span className="text-textMuted">Rank</span>
+              <span className="font-semibold text-textPrimary">
+                {tbaRanking ? `#${tbaRanking.rank}` : '?'}
+                {tbaRanking?.sort_orders?.[0] != null && <span className="font-normal text-textMuted"> ({tbaRanking.sort_orders[0].toFixed(1)} RP)</span>}
               </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-textMuted">Total Points</span>
+              <span className="font-semibold text-textPrimary">{teamStats?.avgTotalPoints?.toFixed(1) ?? '?'}</span>
+            </div>
+            {teamTrend && teamTrend.trend !== 'stable' && (
+              <div className={`flex justify-between ${teamTrend.trend === 'improving' ? 'text-success' : 'text-danger'}`}>
+                <span>Last 3 Avg</span>
+                <span className="font-semibold">{teamTrend.last3Avg.total.toFixed(0)} pts {teamTrend.trend === 'improving' ? '\u2191' : '\u2193'}</span>
+              </div>
             )}
-            <span className="text-textSecondary">
-              Total Pts <span className="font-semibold text-textPrimary">{teamStats?.avgTotalPoints?.toFixed(1) ?? '?'}</span>
-            </span>
-            <span className="text-textSecondary">
-              Auto Pts <span className="font-medium text-textPrimary">{teamStats?.avgAutoPoints?.toFixed(1) ?? '?'}</span>
-            </span>
-            {teamStats && (
-              <span className="text-textMuted ml-auto">{teamStats.matchesPlayed} matches</span>
-            )}
-          </div>
-
-          {/* Row 2: Fuel */}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5 text-xs">
-            <span className="text-textSecondary">
-              Total Fuel <span className="font-medium text-textPrimary">{teamStats?.avgTotalFuelEstimate?.toFixed(1) ?? '?'}</span>
-            </span>
-            <span className="text-textSecondary">
-              Auto Fuel <span className="font-medium text-textPrimary">{teamStats?.avgAutoFuelEstimate?.toFixed(1) ?? '?'}</span>
-            </span>
-            <span className="text-textSecondary">
-              Teleop Fuel <span className="font-medium text-textPrimary">{teamStats?.avgTeleopFuelEstimate?.toFixed(1) ?? '?'}</span>
-            </span>
-          </div>
-
-          {/* Row 3: Climb + badges */}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5 text-xs">
-            <span className="text-textSecondary">
-              Endgame Climb{' '}
+            <div className="h-px bg-border/50 my-1" />
+            <div className="text-[10px] font-semibold text-textSecondary uppercase tracking-wider">Auto</div>
+            <div className="flex justify-between">
+              <span className="text-textMuted">Auto Points</span>
+              <span className="font-medium text-textPrimary">{teamStats?.avgAutoPoints?.toFixed(1) ?? '?'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-textMuted">Auto Fuel</span>
+              <span className="font-medium text-textPrimary">{teamStats?.avgAutoFuelEstimate?.toFixed(1) ?? '?'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-textMuted">Auto Climb</span>
+              <span className="font-medium text-textPrimary">{teamStats?.autoClimbCount ? 'Yes' : 'No'}</span>
+            </div>
+            <div className="h-px bg-border/50 my-1" />
+            <div className="text-[10px] font-semibold text-textSecondary uppercase tracking-wider">Teleop</div>
+            <div className="flex justify-between">
+              <span className="text-textMuted">Teleop Points</span>
+              <span className="font-medium text-textPrimary">{teamStats?.avgTeleopPoints?.toFixed(1) ?? '?'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-textMuted">Teleop Fuel</span>
+              <span className="font-medium text-textPrimary">{teamStats?.avgTeleopFuelEstimate?.toFixed(1) ?? '?'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-textMuted">Endgame Climb</span>
               <span className="font-medium text-textPrimary">
                 {teamStats?.level3ClimbCount ? 'Level 3' : teamStats?.level2ClimbCount ? 'Level 2' : teamStats?.level1ClimbCount ? 'Level 1' : 'None'}
               </span>
-            </span>
-            <span className="text-textSecondary">
-              Auto Climb{' '}
-              <span className="font-medium text-textPrimary">
-                {teamStats?.autoClimbCount ? 'Yes' : 'No'}
-              </span>
-            </span>
+            </div>
+            <div className="h-px bg-border/50 my-1" />
+            <div className="text-[10px] font-semibold text-textSecondary uppercase tracking-wider">Other</div>
+            <div className="flex justify-between">
+              <span className="text-textMuted">Dedicated Passer</span>
+              <span className="font-medium text-textPrimary">{teamStats?.dedicatedPasserRate?.toFixed(0) ?? '?'}%</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-textMuted">Bulldozed Fuel</span>
+              <span className="font-medium text-textPrimary">{teamStats?.bulldozedFuelRate?.toFixed(0) ?? '?'}%</span>
+            </div>
             {pit?.canGoUnderTrench && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-surfaceElevated text-textSecondary border border-border">Trench</span>
-            )}
-            {teamStats && teamStats.dedicatedPasserRate > 30 && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-surfaceElevated text-textSecondary border border-border">Dedicated Passer</span>
-            )}
-            {pit?.vibeCheck === 'bad' && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-surfaceElevated text-danger border border-border">Bad Vibe</span>
+              <div className="flex justify-between">
+                <span className="text-textMuted">Trench</span>
+                <span className="font-medium text-textPrimary">Yes</span>
+              </div>
             )}
           </div>
-
-          {/* Trend */}
-          {teamTrend && teamTrend.trend !== 'stable' && (
-            <div className={`text-xs font-semibold ${teamTrend.trend === 'improving' ? 'text-success' : 'text-danger'}`}>
-              Last 3 avg: {teamTrend.last3Avg.total.toFixed(0)} pts {teamTrend.trend === 'improving' ? '\u2191' : '\u2193'}
-            </div>
-          )}
 
           {/* Tier move buttons */}
           <div className="flex items-center gap-2 flex-wrap" onClick={e => e.stopPropagation()}>
