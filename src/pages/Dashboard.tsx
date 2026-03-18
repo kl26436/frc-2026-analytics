@@ -1,9 +1,10 @@
 import { useEffect, useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
-import { Trophy, Target, TrendingUp, RefreshCw, ChevronDown, ChevronUp, Hash, WifiOff, Eye, Flag, Clock, MessageSquare, Flame } from 'lucide-react';
+import { Trophy, Target, TrendingUp, RefreshCw, ChevronDown, ChevronUp, Hash, WifiOff, Eye, Flag, Clock, MessageSquare, Flame, Binoculars } from 'lucide-react';
 import { teamKeyToNumber } from '../utils/tbaApi';
 import { computeMatchup } from '../utils/predictions';
+import { usePitScoutStore } from '../store/usePitScoutStore';
 
 const OUR_TEAM = 148;
 const RANKINGS_TO_SHOW = 5;
@@ -132,6 +133,59 @@ function Dashboard() {
     }
     return map;
   }, [tbaData]);
+
+  const pitEntries = usePitScoutStore(s => s.entries);
+
+  // Teams to watch NOW — teams in the current match that are our upcoming partners/opponents
+  const watchNow = useMemo(() => {
+    if (!tbaData?.matches || !homeMatches.length) return [];
+    const homeKey = `frc${HOME}`;
+    const lo: Record<string, number> = { qm: 0, ef: 1, qf: 2, sf: 3, f: 4 };
+    const sorted = [...tbaData.matches].sort((a, b) => {
+      if (lo[a.comp_level] !== lo[b.comp_level]) return lo[a.comp_level] - lo[b.comp_level];
+      return a.match_number - b.match_number;
+    });
+
+    // Current match = first unplayed
+    const current = sorted.find(m => m.alliances.red.score < 0);
+    if (!current) return [];
+
+    // Teams in the current match
+    const currentTeams = new Set([
+      ...current.alliances.red.team_keys.map(teamKeyToNumber),
+      ...current.alliances.blue.team_keys.map(teamKeyToNumber),
+    ]);
+    const currentRedSet = new Set(current.alliances.red.team_keys.map(teamKeyToNumber));
+
+    // Check each upcoming home match for partners/opponents in the current match
+    const results: { teamNumber: number; role: 'partner' | 'opponent'; forMatch: string; onRed: boolean }[] = [];
+    const seen = new Set<number>();
+
+    for (const hm of upcomingMatches) {
+      const homeOnRed = hm.alliances.red.team_keys.includes(homeKey);
+      const partnerKeys = (homeOnRed ? hm.alliances.red.team_keys : hm.alliances.blue.team_keys).filter(tk => tk !== homeKey);
+      const opponentKeys = homeOnRed ? hm.alliances.blue.team_keys : hm.alliances.red.team_keys;
+      const pfx: Record<string, string> = { qm: 'Q', ef: 'E', qf: 'QF', sf: 'SF', f: 'F' };
+      const label = `${pfx[hm.comp_level]}${hm.match_number}`;
+
+      for (const tk of partnerKeys) {
+        const num = teamKeyToNumber(tk);
+        if (currentTeams.has(num) && !seen.has(num)) {
+          seen.add(num);
+          results.push({ teamNumber: num, role: 'partner', forMatch: label, onRed: currentRedSet.has(num) });
+        }
+      }
+      for (const tk of opponentKeys) {
+        const num = teamKeyToNumber(tk);
+        if (currentTeams.has(num) && !seen.has(num)) {
+          seen.add(num);
+          results.push({ teamNumber: num, role: 'opponent', forMatch: label, onRed: currentRedSet.has(num) });
+        }
+      }
+    }
+
+    return results;
+  }, [tbaData, homeMatches, upcomingMatches, HOME]);
 
   // Current match on the field (first unplayed match = last completed + 1)
   const currentMatchLabel = useMemo(() => {
@@ -286,6 +340,25 @@ function Dashboard() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Watch now banner */}
+      {watchNow.length > 0 && currentMatchLabel && (
+        <Link to="/schedule" className="block bg-blueAlliance/10 border border-blueAlliance/25 rounded-lg px-4 py-2.5 hover:bg-blueAlliance/15 transition-colors">
+          <div className="flex items-center gap-2 text-sm">
+            <Binoculars size={16} className="text-blueAlliance flex-shrink-0" />
+            <span className="text-textSecondary font-medium">Match {currentMatchLabel}:</span>
+            <div className="flex items-center gap-3 flex-wrap">
+              {watchNow.map(tw => (
+                <span key={tw.teamNumber} className="inline-flex items-center gap-1">
+                  <span className={`font-bold ${tw.onRed ? 'text-redAlliance' : 'text-blueAlliance'}`}>{tw.teamNumber}</span>
+                  <span className={`text-[10px] ${tw.role === 'partner' ? 'text-success' : 'text-danger'}`}>{tw.role}</span>
+                  <span className="text-textMuted text-xs">for {tw.forMatch}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        </Link>
       )}
 
       {/* Pre-event placeholder — no matches at all yet */}

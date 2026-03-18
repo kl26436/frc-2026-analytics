@@ -1,12 +1,12 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Link } from 'react-router-dom';
-import { Calendar, ChevronDown, Eye, MessageSquare } from 'lucide-react';
+import { useEffect, useMemo, useCallback } from 'react';
+import { Printer } from 'lucide-react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
-import { useNinjaStore } from '../store/useNinjaStore';
 import { usePitScoutStore } from '../store/usePitScoutStore';
 import { teamKeyToNumber } from '../utils/tbaApi';
-import { NINJA_TAG_LABELS, NINJA_TAG_COLORS } from '../types/ninja';
 import type { TBAMatch } from '../types/tba';
+import type { PitScoutEntry } from '../types/pitScouting';
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const COMP_ORDER: Record<string, number> = { qm: 0, ef: 1, qf: 2, sf: 3, f: 4 };
 
@@ -19,23 +19,13 @@ function matchLabel(m: TBAMatch): string {
   return `${m.comp_level.toUpperCase()}${m.set_number}-${m.match_number}`;
 }
 
+// ─── Main Component ──────────────────────────────────────────────────────────
+
 function MatchSchedule() {
   const tbaData = useAnalyticsStore(s => s.tbaData);
   const homeTeamNumber = useAnalyticsStore(s => s.homeTeamNumber);
-  const teamStatistics = useAnalyticsStore(s => s.teamStatistics);
   const eventCode = useAnalyticsStore(s => s.eventCode);
   const pitEntries = usePitScoutStore(s => s.entries);
-
-  const ninjaStore = useNinjaStore();
-
-  useEffect(() => {
-    if (eventCode) {
-      ninjaStore.subscribeToNotes(eventCode);
-    }
-    return () => ninjaStore.unsubscribeAll();
-  }, [eventCode]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const [expandedTeam, setExpandedTeam] = useState<number | null>(null);
 
   const homeKey = `frc${homeTeamNumber}`;
 
@@ -47,59 +37,109 @@ function MatchSchedule() {
 
   // Home team's matches
   const homeMatches = useMemo(() => {
-    return allMatches.filter(m =>
-      m.alliances.red.team_keys.includes(homeKey) ||
-      m.alliances.blue.team_keys.includes(homeKey)
+    return allMatches.filter(
+      m => m.alliances.red.team_keys.includes(homeKey) || m.alliances.blue.team_keys.includes(homeKey)
     );
   }, [allMatches, homeKey]);
 
-  // Find upcoming (unplayed) home matches
-  const upcomingHomeMatches = useMemo(() => {
-    return homeMatches.filter(m => m.alliances.red.score < 0 && m.alliances.blue.score < 0);
-  }, [homeMatches]);
+  // For a team, find their immediately prior match before a given match
+  const getTeamPriorMatch = useCallback(
+    (teamNumber: number, beforeMatch: TBAMatch): TBAMatch | null => {
+      const teamKey = `frc${teamNumber}`;
+      const beforeSK = matchSortKey(beforeMatch);
+      for (let i = allMatches.length - 1; i >= 0; i--) {
+        const m = allMatches[i];
+        if (matchSortKey(m) >= beforeSK) continue;
+        const teams = [...m.alliances.red.team_keys, ...m.alliances.blue.team_keys];
+        if (teams.includes(teamKey)) return m;
+      }
+      return null;
+    },
+    [allMatches]
+  );
 
-  // Selected match to prep for
-  const [selectedMatchKey, setSelectedMatchKey] = useState<string | null>(null);
+  // Watch schedule: only prior matches for partners/opponents
+  const watchSchedule = useMemo(() => {
+    if (homeMatches.length === 0) return [];
 
-  // Default to next unplayed match
-  useEffect(() => {
-    if (upcomingHomeMatches.length > 0 && !selectedMatchKey) {
-      setSelectedMatchKey(upcomingHomeMatches[0].key);
+    const priorMatchMap: Map<string, { teamNumber: number; role: 'partner' | 'opponent'; forMatch: string; forMatchKey: string }[]> = new Map();
+
+    for (const hm of homeMatches) {
+      const homeOnRed = hm.alliances.red.team_keys.includes(homeKey);
+      const partnerKeys = (homeOnRed ? hm.alliances.red.team_keys : hm.alliances.blue.team_keys).filter(tk => tk !== homeKey);
+      const opponentKeys = homeOnRed ? hm.alliances.blue.team_keys : hm.alliances.red.team_keys;
+
+      const addPrior = (teamKey: string, role: 'partner' | 'opponent') => {
+        const num = teamKeyToNumber(teamKey);
+        const prior = getTeamPriorMatch(num, hm);
+        if (!prior) return;
+        if (!priorMatchMap.has(prior.key)) priorMatchMap.set(prior.key, []);
+        priorMatchMap.get(prior.key)!.push({ teamNumber: num, role, forMatch: matchLabel(hm), forMatchKey: hm.key });
+      };
+
+      for (const tk of partnerKeys) addPrior(tk, 'partner');
+      for (const tk of opponentKeys) addPrior(tk, 'opponent');
     }
-  }, [upcomingHomeMatches, selectedMatchKey]);
 
-  const selectedMatch = allMatches.find(m => m.key === selectedMatchKey);
+    const schedule: {
+      match: TBAMatch;
+      teamsToWatch: { teamNumber: number; role: 'partner' | 'opponent'; forMatch: string }[];
+    }[] = [];
 
-  // Teams in the selected match (partners + opponents)
-  const matchTeams = useMemo(() => {
-    if (!selectedMatch) return [];
-    const reds = selectedMatch.alliances.red.team_keys.map(teamKeyToNumber);
-    const blues = selectedMatch.alliances.blue.team_keys.map(teamKeyToNumber);
-    return [...reds, ...blues];
-  }, [selectedMatch]);
+    for (const m of allMatches) {
+      const entries = priorMatchMap.get(m.key);
+      if (!entries) continue;
+      const seen = new Set<string>();
+      const deduped = entries.filter(e => {
+        const key = `${e.teamNumber}-${e.forMatchKey}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      schedule.push({ match: m, teamsToWatch: deduped });
+    }
 
-  // Prior matches involving any of these teams, before our match
-  const priorMatches = useMemo(() => {
-    if (!selectedMatch || matchTeams.length === 0) return [];
-    const selectedSortKey = matchSortKey(selectedMatch);
-    const teamKeys = new Set(matchTeams.map(n => `frc${n}`));
+    return schedule;
+  }, [allMatches, homeMatches, homeKey, getTeamPriorMatch]);
 
-    return allMatches.filter(m => {
-      if (matchSortKey(m) >= selectedSortKey) return false;
-      const mTeams = [...m.alliances.red.team_keys, ...m.alliances.blue.team_keys];
-      return mTeams.some(tk => teamKeys.has(tk));
-    });
-  }, [allMatches, selectedMatch, matchTeams]);
+  // Drive type lookup
+  const getDriveType = useCallback(
+    (teamNumber: number) => pitEntries.find(e => e.teamNumber === teamNumber)?.driveType || null,
+    [pitEntries]
+  );
 
-  // Team intel lookup
-  const getTeamIntel = (teamNumber: number) => {
-    const stats = teamStatistics.find(t => t.teamNumber === teamNumber);
-    const pit = pitEntries.find(e => e.teamNumber === teamNumber);
-    const notes = ninjaStore.notes
-      .filter(n => n.teamNumber === teamNumber)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-    return { stats, pit, notes };
-  };
+  // ─── PDF Export ──────────────────────────────────────────────────────────────
+
+  const printMatchPrep = useCallback(() => {
+    const body = buildWatchHTML(watchSchedule, pitEntries, eventCode);
+
+    const html = `<!DOCTYPE html>
+<html><head><title>Match Prep - ${eventCode}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: Arial, sans-serif; padding: 16px; font-size: 11px; color: #111; }
+  h1 { font-size: 16px; margin-bottom: 8px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #999; padding: 4px 8px; text-align: left; font-size: 10px; }
+  th { background: #222; color: #fff; }
+  tr:nth-child(even) { background: #f5f5f5; }
+  .red { color: #c0392b; font-weight: 700; }
+  .blue { color: #2980b9; font-weight: 700; }
+  .drive { font-size: 8px; color: #555; margin-left: 2px; }
+  .prep { font-weight: 700; color: #b57d00; }
+  @media print { body { padding: 8px; } }
+</style></head>
+<body>${body}</body></html>`;
+
+    const win = window.open('', '_blank');
+    if (win) {
+      win.document.write(html);
+      win.document.close();
+      win.print();
+    }
+  }, [watchSchedule, pitEntries, eventCode]);
+
+  // ─── Render ──────────────────────────────────────────────────────────────────
 
   if (!tbaData?.matches?.length) {
     return (
@@ -112,174 +152,122 @@ function MatchSchedule() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="text-2xl font-bold">Match Prep</h1>
-        {/* Match selector */}
-        <div className="relative">
-          <select
-            value={selectedMatchKey || ''}
-            onChange={e => setSelectedMatchKey(e.target.value)}
-            className="bg-surfaceElevated border border-border rounded-lg px-4 py-2 pr-8 text-sm font-medium appearance-none"
-          >
-            {homeMatches.map(m => {
-              const played = m.alliances.red.score >= 0;
-              return (
-                <option key={m.key} value={m.key}>
-                  {matchLabel(m)} {played ? '(played)' : ''}
-                </option>
-              );
-            })}
-          </select>
-          <ChevronDown size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-textMuted pointer-events-none" />
-        </div>
+        <button
+          onClick={printMatchPrep}
+          className="flex items-center gap-1.5 bg-surfaceElevated border border-border rounded-lg px-3 py-1.5 text-sm font-medium hover:bg-interactive transition-colors"
+        >
+          <Printer size={14} />
+          Export PDF
+        </button>
       </div>
 
-      {/* Selected match overview */}
-      {selectedMatch && (
-        <div className="bg-surface p-4 rounded-lg border border-border">
-          <h2 className="font-bold text-lg mb-3">
-            <Calendar size={16} className="inline mr-2 text-blueAlliance" />
-            Preparing for {matchLabel(selectedMatch)}
-          </h2>
-          <div className="grid grid-cols-2 gap-4">
-            {/* Red Alliance */}
-            <div>
-              <p className="text-sm font-bold text-redAlliance mb-2">Red Alliance</p>
-              {selectedMatch.alliances.red.team_keys.map(tk => {
-                const num = teamKeyToNumber(tk);
-                const isHome = num === homeTeamNumber;
-                return <TeamIntelCard key={num} teamNumber={num} isHome={isHome} intel={getTeamIntel(num)} expanded={expandedTeam === num} onToggle={() => setExpandedTeam(prev => prev === num ? null : num)} />;
-              })}
-            </div>
-            {/* Blue Alliance */}
-            <div>
-              <p className="text-sm font-bold text-blueAlliance mb-2">Blue Alliance</p>
-              {selectedMatch.alliances.blue.team_keys.map(tk => {
-                const num = teamKeyToNumber(tk);
-                const isHome = num === homeTeamNumber;
-                return <TeamIntelCard key={num} teamNumber={num} isHome={isHome} intel={getTeamIntel(num)} expanded={expandedTeam === num} onToggle={() => setExpandedTeam(prev => prev === num ? null : num)} />;
-              })}
-            </div>
+      {/* Watch Schedule */}
+      <div className="space-y-0">
+        {watchSchedule.length === 0 && (
+          <p className="text-textSecondary text-sm py-4 text-center">No prior matches to watch yet.</p>
+        )}
+        {/* Column headers */}
+        {watchSchedule.length > 0 && (
+          <div className="grid grid-cols-[50px_70px_1fr_1fr] gap-2 px-3 py-1.5 text-[10px] font-bold text-textMuted uppercase tracking-wide border-b border-border">
+            <span>Match</span>
+            <span>Prep for</span>
+            <span>Partners</span>
+            <span>Opponents</span>
           </div>
-        </div>
-      )}
+        )}
+        {watchSchedule.map(({ match: m, teamsToWatch }) => {
+          const played = m.alliances.red.score >= 0;
+          const redSet = new Set(m.alliances.red.team_keys.map(teamKeyToNumber));
+          const partnerTeams = teamsToWatch.filter(tw => tw.role === 'partner');
+          const opponentTeams = teamsToWatch.filter(tw => tw.role === 'opponent');
 
-      {/* Prior matches to watch */}
-      {priorMatches.length > 0 && (
-        <div>
-          <h2 className="font-bold text-lg mb-3">
-            <Eye size={16} className="inline mr-2 text-warning" />
-            Prior Matches to Watch ({priorMatches.length})
-          </h2>
-          <div className="space-y-2">
-            {priorMatches.map(m => {
-              const redNums = m.alliances.red.team_keys.map(teamKeyToNumber);
-              const blueNums = m.alliances.blue.team_keys.map(teamKeyToNumber);
-              const played = m.alliances.red.score >= 0;
-              // Highlight teams that are in our upcoming match
-              const highlight = (num: number) => matchTeams.includes(num);
+          const renderTeam = (tw: typeof teamsToWatch[0], i: number) => {
+            const onRed = redSet.has(tw.teamNumber);
+            const drive = getDriveType(tw.teamNumber);
+            return (
+              <span key={`${tw.teamNumber}-${i}`} className="inline-flex items-center gap-1">
+                <span className={`font-bold font-mono ${onRed ? 'text-redAlliance' : 'text-blueAlliance'}`}>
+                  {tw.teamNumber}
+                </span>
+                {drive && (
+                  <span className={`text-[9px] px-1 py-0 rounded ${onRed ? 'bg-redAlliance/10 text-redAlliance' : 'bg-blueAlliance/10 text-blueAlliance'}`}>
+                    {drive}
+                  </span>
+                )}
+              </span>
+            );
+          };
 
-              return (
-                <div key={m.key} className="bg-surface border border-border rounded-lg p-3">
-                  <div className="flex items-center gap-3 mb-1">
-                    <span className="font-bold text-sm">{matchLabel(m)}</span>
-                    {played && (
-                      <span className="text-xs text-textMuted">
-                        {m.alliances.red.score} - {m.alliances.blue.score}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex gap-4 text-sm">
-                    <div className="flex gap-2">
-                      <span className="text-redAlliance font-medium text-xs">Red:</span>
-                      {redNums.map(n => (
-                        <Link key={n} to={`/teams/${n}`} className={`text-xs ${highlight(n) ? 'font-bold text-textPrimary' : 'text-textSecondary'}`}>
-                          {n}
-                        </Link>
-                      ))}
-                    </div>
-                    <div className="flex gap-2">
-                      <span className="text-blueAlliance font-medium text-xs">Blue:</span>
-                      {blueNums.map(n => (
-                        <Link key={n} to={`/teams/${n}`} className={`text-xs ${highlight(n) ? 'font-bold text-textPrimary' : 'text-textSecondary'}`}>
-                          {n}
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+          return (
+            <div key={m.key} className={`grid grid-cols-[50px_70px_1fr_1fr] gap-2 items-center px-3 py-2 border-b border-border/50 text-xs ${played ? 'opacity-50' : ''}`}>
+              <span className={`font-bold ${played ? 'text-textMuted' : 'text-textPrimary'}`}>
+                {matchLabel(m)}
+              </span>
+
+              <div className="flex flex-wrap gap-1">
+                {[...new Set(teamsToWatch.map(tw => tw.forMatch))].map(fm => (
+                  <span key={fm} className="font-bold text-warning bg-warning/10 px-1.5 py-0.5 rounded">{fm}</span>
+                ))}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {partnerTeams.map(renderTeam)}
+                {partnerTeams.length === 0 && <span className="text-textMuted">—</span>}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {opponentTeams.map(renderTeam)}
+                {opponentTeams.length === 0 && <span className="text-textMuted">—</span>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-// Team intel card for the match prep view
-function TeamIntelCard({ teamNumber, isHome, intel, expanded, onToggle }: {
-  teamNumber: number;
-  isHome: boolean;
-  intel: ReturnType<typeof Object.prototype.valueOf> & {
-    stats: ReturnType<typeof useAnalyticsStore.getState>['teamStatistics'][0] | undefined;
-    pit: ReturnType<typeof usePitScoutStore.getState>['entries'][0] | undefined;
-    notes: ReturnType<typeof useNinjaStore.getState>['notes'];
-  };
-  expanded: boolean;
-  onToggle: () => void;
-}) {
-  const { stats, pit, notes } = intel;
+// ─── PDF HTML Builder ────────────────────────────────────────────────────────
 
-  return (
-    <div className={`rounded-lg border p-2 mb-2 cursor-pointer transition-colors ${isHome ? 'bg-warning/10 border-warning/40' : 'bg-card border-border hover:bg-interactive'}`} onClick={onToggle}>
-      <div className="flex items-center gap-2">
-        <Link to={`/teams/${teamNumber}`} className="font-bold text-sm hover:text-blueAlliance" onClick={e => e.stopPropagation()}>
-          {teamNumber}
-        </Link>
-        {stats && <span className="text-xs text-textSecondary">{stats.avgTotalPoints.toFixed(0)} pts</span>}
-        {pit?.driveType && <span className="text-[10px] px-1.5 py-0.5 rounded bg-blueAlliance/20 text-blueAlliance font-medium">{pit.driveType}</span>}
-        {pit?.canGoUnderTrench && <span className="text-[10px] px-1.5 py-0.5 rounded bg-success/20 text-success font-medium">trench</span>}
-        {notes.length > 0 && (
-          <span className="flex items-center gap-0.5 text-xs text-warning ml-auto">
-            <MessageSquare size={12} /> {notes.length}
-          </span>
-        )}
-      </div>
+function buildWatchHTML(
+  watchSchedule: { match: TBAMatch; teamsToWatch: { teamNumber: number; role: 'partner' | 'opponent'; forMatch: string }[] }[],
+  pitEntries: PitScoutEntry[],
+  eventCode: string
+): string {
+  const getDrive = (n: number) => pitEntries.find(e => e.teamNumber === n)?.driveType || '';
 
-      {expanded && (
-        <div className="mt-2 space-y-2 border-t border-border/50 pt-2">
-          {stats && (
-            <div className="flex flex-wrap gap-2 text-xs text-textSecondary">
-              <span>Auto: {stats.avgAutoPoints.toFixed(1)}</span>
-              <span>Teleop: {stats.avgTeleopPoints.toFixed(1)}</span>
-              <span>AC: {stats.autoClimbRate !== undefined ? (stats.autoClimbRate * 100).toFixed(0) + '%' : '?'}</span>
-              <span>Rel: {stats.lostConnectionRate !== undefined ? ((1 - stats.lostConnectionRate) * 100).toFixed(0) + '%' : '?'}</span>
-            </div>
-          )}
-          {notes.slice(0, 3).map(note => (
-            <div key={note.id} className="text-xs bg-background/50 rounded p-2">
-              <div className="flex items-center gap-1 mb-0.5">
-                <span className="font-medium text-textSecondary">{note.authorName}</span>
-                {note.matchNumber && <span className="text-blueAlliance">Q{note.matchNumber}</span>}
-              </div>
-              <p className="text-textPrimary">{note.text}</p>
-              {note.tags.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {note.tags.map(tag => (
-                    <span key={tag} className={`px-1 py-0.5 rounded-full text-[10px] ${NINJA_TAG_COLORS[tag]}`}>
-                      {NINJA_TAG_LABELS[tag]}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
-          {notes.length === 0 && <p className="text-xs text-textMuted italic">No scouting notes</p>}
-        </div>
-      )}
-    </div>
-  );
+  let html = `<h1>Watch Schedule &mdash; ${eventCode}</h1>`;
+  html += `<table><thead><tr><th>Match</th><th>Prep For</th><th>Partners</th><th>Opponents</th></tr></thead><tbody>`;
+
+  for (const { match: m, teamsToWatch } of watchSchedule) {
+    const redSet = new Set(m.alliances.red.team_keys.map(teamKeyToNumber));
+    const partners = teamsToWatch.filter(tw => tw.role === 'partner');
+    const opponents = teamsToWatch.filter(tw => tw.role === 'opponent');
+
+    const formatTeams = (teams: typeof teamsToWatch) => {
+      if (teams.length === 0) return '&mdash;';
+      return teams.map(tw => {
+        const drive = getDrive(tw.teamNumber);
+        const cls = redSet.has(tw.teamNumber) ? 'red' : 'blue';
+        return `<strong class="${cls}">${tw.teamNumber}</strong>${drive ? `<span class="drive">${drive}</span>` : ''}`;
+      }).join('&nbsp;&nbsp; ');
+    };
+
+    const prepFor = [...new Set(teamsToWatch.map(tw => tw.forMatch))].join(', ');
+
+    html += `<tr>`;
+    html += `<td><strong>${matchLabel(m)}</strong></td>`;
+    html += `<td class="prep">${prepFor}</td>`;
+    html += `<td>${formatTeams(partners)}</td>`;
+    html += `<td>${formatTeams(opponents)}</td>`;
+    html += `</tr>`;
+  }
+
+  html += `</tbody></table>`;
+  return html;
 }
 
 export default MatchSchedule;
