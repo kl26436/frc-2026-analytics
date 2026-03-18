@@ -377,7 +377,7 @@ export function buildDraftSimulatorPrompt(
   teamStats: TeamStatistics[],
   fuelStats: TeamFuelStats[],
   trends: TeamTrend[],
-  predictions: PredictionTeamInput[],
+  _predictions: PredictionTeamInput[],
   homeTeamNumber: number,
   homeTeamSeed?: number,
 ): string {
@@ -482,13 +482,12 @@ export function buildPlayoffStrategyPrompt(
   teamStats: TeamStatistics[],
   fuelStats: TeamFuelStats[],
   trends: TeamTrend[],
-  predictions: PredictionTeamInput[],
+  _predictions: PredictionTeamInput[],
   entries: ScoutEntry[],
 ): string {
   const formatAllianceRobot = (num: number) => {
     const stat = teamStats.find(t => t.teamNumber === num);
     const fuel = fuelStats.find(t => t.teamNumber === num);
-    const pred = predictions.find(p => p.teamNumber === num);
     const trend = trends.find(t => t.teamNumber === num);
     const teamEntries = entries.filter(e => e.team_number === num);
 
