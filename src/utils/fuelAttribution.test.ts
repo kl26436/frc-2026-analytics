@@ -35,6 +35,7 @@ function makeEntry(overrides: Partial<ScoutEntry> & {
     auton_SCORE_PLUS_5: 0,
     auton_SCORE_PLUS_10: 0,
     auton_did_nothing: false,
+    auton_went_to_neutral: false,
     teleop_FUEL_SCORE: 0,
     teleop_FUEL_PASS: 0,
     teleop_SCORE_PLUS_1: 0,
