@@ -281,23 +281,14 @@ function TeamDetail() {
           );
         })()}
         {(() => {
-          const highest = teamStats.level3ClimbCount > 0
-            ? { label: 'L3', count: teamStats.level3ClimbCount, rate: teamStats.level3ClimbRate }
-            : teamStats.level2ClimbCount > 0
-            ? { label: 'L2', count: teamStats.level2ClimbCount, rate: teamStats.level2ClimbRate }
-            : teamStats.level1ClimbCount > 0
-            ? { label: 'L1', count: teamStats.level1ClimbCount, rate: teamStats.level1ClimbRate }
-            : { label: 'None', count: 0, rate: 0 };
           return (
             <div className="bg-surface p-4 md:p-6 rounded-lg border border-border border-l-4 border-l-danger">
               <div className="flex items-center justify-between mb-2">
-                <p className="text-textSecondary text-sm">Highest Climb</p>
+                <p className="text-textSecondary text-sm">Avg Endgame Pts</p>
                 <ArrowUpCircle size={20} className="text-danger" />
               </div>
-              <p className="text-3xl font-bold">{highest.label}</p>
-              {highest.count > 0 && (
-                <p className="text-xs text-textSecondary mt-0.5">{highest.count}/{n} ({highest.rate.toFixed(0)}%)</p>
-              )}
+              <p className="text-3xl font-bold">{teamStats.avgEndgamePoints.toFixed(1)}</p>
+              <p className="text-xs text-textSecondary mt-0.5">per match</p>
             </div>
           );
         })()}

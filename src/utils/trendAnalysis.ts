@@ -19,11 +19,13 @@ export interface TeamTrend {
   overallAvg: {
     total: number;
     auto: number;
+    endgame: number;
     l3ClimbRate: number;         // 0-100
   };
   last3Avg: {
     total: number;
     auto: number;
+    endgame: number;
     l3ClimbRate: number;         // 0-100
   };
   best3of4Avg: {
@@ -59,8 +61,8 @@ export function computeTeamTrend(teamNumber: number, allEntries: ScoutEntry[]): 
     return {
       teamNumber,
       matchResults: [],
-      overallAvg: { total: 0, auto: 0, l3ClimbRate: 0 },
-      last3Avg: { total: 0, auto: 0, l3ClimbRate: 0 },
+      overallAvg: { total: 0, auto: 0, endgame: 0, l3ClimbRate: 0 },
+      last3Avg: { total: 0, auto: 0, endgame: 0, l3ClimbRate: 0 },
       best3of4Avg: { total: 0 },
       delta: 0,
       trend: 'stable',
@@ -70,6 +72,7 @@ export function computeTeamTrend(teamNumber: number, allEntries: ScoutEntry[]): 
   // Overall averages
   const overallTotal = matchResults.reduce((s, m) => s + m.total, 0) / n;
   const overallAuto = matchResults.reduce((s, m) => s + m.autoPoints, 0) / n;
+  const overallEndgame = matchResults.reduce((s, m) => s + m.endgamePoints, 0) / n;
   const overallL3 = (matchResults.filter(m => m.climbLevel === 3).length / n) * 100;
 
   // Last 3 (or fewer)
@@ -77,6 +80,7 @@ export function computeTeamTrend(teamNumber: number, allEntries: ScoutEntry[]): 
   const l3n = last3.length;
   const last3Total = last3.reduce((s, m) => s + m.total, 0) / l3n;
   const last3Auto = last3.reduce((s, m) => s + m.autoPoints, 0) / l3n;
+  const last3Endgame = last3.reduce((s, m) => s + m.endgamePoints, 0) / l3n;
   const last3L3 = (last3.filter(m => m.climbLevel === 3).length / l3n) * 100;
 
   // Best 3 of last 4
@@ -102,8 +106,8 @@ export function computeTeamTrend(teamNumber: number, allEntries: ScoutEntry[]): 
   return {
     teamNumber,
     matchResults,
-    overallAvg: { total: overallTotal, auto: overallAuto, l3ClimbRate: overallL3 },
-    last3Avg: { total: last3Total, auto: last3Auto, l3ClimbRate: last3L3 },
+    overallAvg: { total: overallTotal, auto: overallAuto, endgame: overallEndgame, l3ClimbRate: overallL3 },
+    last3Avg: { total: last3Total, auto: last3Auto, endgame: last3Endgame, l3ClimbRate: last3L3 },
     best3of4Avg: { total: best3of4Total },
     delta,
     trend,

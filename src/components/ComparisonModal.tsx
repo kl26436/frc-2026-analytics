@@ -531,16 +531,16 @@ function ComparisonModal({ teams, onPickTeam, onClose }: ComparisonModalProps) {
                     </div>
                   ))}
                 </div>
-                {/* Overall vs Last 3 — L3 Climb Rate */}
+                {/* Overall vs Last 3 — Endgame Points */}
                 <div className={`grid ${isTwoTeam ? 'grid-cols-[1fr_1fr_1fr]' : `grid-cols-[1fr_repeat(${teamCount},1fr)]`} text-xs border-b border-border`}>
-                  <div className="px-3 py-2 text-textSecondary">L3 Climb</div>
+                  <div className="px-3 py-2 text-textSecondary">Endgame Pts</div>
                   {trends.map((trend, i) => (
                     <div key={teams[i].teamNumber} className="px-2 py-2 text-center">
                       {trend ? (
                         <div className="flex items-center justify-center gap-1.5">
-                          <span className="text-textSecondary">{trend.overallAvg.l3ClimbRate.toFixed(0)}%</span>
+                          <span className="text-textSecondary">{trend.overallAvg.endgame.toFixed(1)}</span>
                           <span className="text-textMuted">→</span>
-                          <span className="font-semibold">{trend.last3Avg.l3ClimbRate.toFixed(0)}%</span>
+                          <span className="font-semibold">{trend.last3Avg.endgame.toFixed(1)}</span>
                         </div>
                       ) : <span className="text-textMuted">—</span>}
                     </div>

@@ -145,17 +145,13 @@ const STAT_OPTIONS: { value: keyof TeamStatistics; label: string }[] = [
   { value: 'avgTotalFuelEstimate', label: 'Avg Total Fuel' },
   { value: 'avgAutoFuelEstimate', label: 'Avg Auto Fuel' },
   { value: 'avgTeleopFuelEstimate', label: 'Avg Teleop Fuel' },
-  { value: 'level3ClimbRate', label: 'L3 Climb Rate (%)' },
-  { value: 'level2ClimbRate', label: 'L2 Climb Rate (%)' },
-  { value: 'level1ClimbRate', label: 'L1 Climb Rate (%)' },
-  { value: 'climbFailedRate', label: 'Climb Failed Rate (%)' },
+  { value: 'avgEndgamePoints', label: 'Avg Endgame Points' },
   { value: 'autoClimbRate', label: 'Auto Climb Rate (%)' },
   { value: 'autoDidNothingRate', label: 'Auto Did Nothing (%)' },
   { value: 'dedicatedPasserRate', label: 'Dedicated Passer (%)' },
   { value: 'overallUnreliabilityRate', label: 'Unreliability (%)' },
   { value: 'lostConnectionRate', label: 'Lost Connection (%)' },
   { value: 'noRobotRate', label: 'No Robot (%)' },
-  { value: 'poorAccuracyRate', label: 'Poor Accuracy (%)' },
 ];
 
 const DEFAULT_FILTERS: FilterConfig[] = [
@@ -981,6 +977,10 @@ function LivePickListView({
               const pitDef = isPit ? PIT_FIELDS.find(f => f.value === filter.pitField) : null;
               return (
                 <div key={filter.id} className="flex flex-wrap items-center gap-2">
+                  <select value={filter.icon} onChange={e => handleLiveUpdateFilter(filter.id, { icon: e.target.value })}
+                    className="w-20 px-1.5 py-1.5 bg-background border border-border rounded text-sm">
+                    {Object.keys(FILTER_ICONS).map(k => <option key={k} value={k}>{k}</option>)}
+                  </select>
                   <input type="text" value={filter.label} onChange={e => handleLiveUpdateFilter(filter.id, { label: e.target.value })}
                     className="w-28 px-2 py-1.5 bg-background border border-border rounded text-sm" placeholder="Name" />
                   {isPit ? (
@@ -1169,13 +1169,13 @@ function LivePickListView({
                                       }`}>{trend ? trend.last3Avg.total.toFixed(1) : '-'}</td>
                                     </tr>
                                     <tr>
-                                      <td className="text-textSecondary pr-1">L3</td>
-                                      <td className="text-right px-1">{stats.level3ClimbRate.toFixed(0)}%</td>
+                                      <td className="text-textSecondary pr-1">EG</td>
+                                      <td className="text-right px-1">{stats.avgEndgamePoints.toFixed(1)}</td>
                                       <td className={`text-right pl-1 font-semibold ${
-                                        trend && trend.last3Avg.l3ClimbRate > stats.level3ClimbRate + 5 ? 'text-success'
-                                        : trend && trend.last3Avg.l3ClimbRate < stats.level3ClimbRate - 5 ? 'text-danger'
+                                        trend && trend.last3Avg.endgame > stats.avgEndgamePoints * 1.05 ? 'text-success'
+                                        : trend && trend.last3Avg.endgame < stats.avgEndgamePoints * 0.95 ? 'text-danger'
                                         : 'text-textPrimary'
-                                      }`}>{trend ? `${trend.last3Avg.l3ClimbRate.toFixed(0)}%` : '-'}</td>
+                                      }`}>{trend ? trend.last3Avg.endgame.toFixed(1) : '-'}</td>
                                     </tr>
                                     <tr>
                                       <td className="text-textSecondary pr-1">Auto</td>
@@ -1372,7 +1372,7 @@ function SortableWatchlistCard({ id, disabled, children }: { id: string; disable
 
 // Sortable team card component
 function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onToggleFlag, onToggleWatchlist, isSelectedForCompare, onToggleCompare, passesFilters, hasActiveFilters, disableInteraction, showTrendGlow, isExpanded, onToggleExpand }: {
-  team: PickListTeam | { teamNumber: number; teamName?: string; avgTotalPoints: number; level3ClimbRate: number; avgAutoPoints: number };
+  team: PickListTeam | { teamNumber: number; teamName?: string; avgTotalPoints: number; avgAutoPoints: number };
   currentTier?: 'tier1' | 'tier2' | 'tier3' | 'tier4';
   tierNames?: { tier1: string; tier2: string; tier3: string; tier4: string };
   onMoveTier?: (tier: 'tier1' | 'tier2' | 'tier3' | 'tier4') => void;
@@ -2482,6 +2482,10 @@ function PickList() {
               const pitDef = isPit ? PIT_FIELDS.find(f => f.value === filter.pitField) : null;
               return (
                 <div key={filter.id} className="flex flex-wrap items-center gap-2">
+                  <select value={filter.icon} onChange={e => updateFilter(filter.id, { icon: e.target.value })}
+                    className="w-20 px-1.5 py-1.5 bg-background border border-border rounded text-sm">
+                    {Object.keys(FILTER_ICONS).map(k => <option key={k} value={k}>{k}</option>)}
+                  </select>
                   <input type="text" value={filter.label} onChange={e => updateFilter(filter.id, { label: e.target.value })}
                     className="w-28 px-2 py-1.5 bg-background border border-border rounded text-sm" placeholder="Name" />
                   {isPit ? (
@@ -2692,13 +2696,13 @@ function PickList() {
                                     }`}>{trend ? trend.last3Avg.total.toFixed(1) : '-'}</td>
                                   </tr>
                                   <tr>
-                                    <td className="text-textSecondary pr-1">L3</td>
-                                    <td className="text-right px-1">{stats.level3ClimbRate.toFixed(0)}%</td>
+                                    <td className="text-textSecondary pr-1">EG</td>
+                                    <td className="text-right px-1">{stats.avgEndgamePoints.toFixed(1)}</td>
                                     <td className={`text-right pl-1 font-semibold ${
-                                      trend && trend.last3Avg.l3ClimbRate > stats.level3ClimbRate + 5 ? 'text-success'
-                                      : trend && trend.last3Avg.l3ClimbRate < stats.level3ClimbRate - 5 ? 'text-danger'
+                                      trend && trend.last3Avg.endgame > stats.avgEndgamePoints * 1.05 ? 'text-success'
+                                      : trend && trend.last3Avg.endgame < stats.avgEndgamePoints * 0.95 ? 'text-danger'
                                       : 'text-textPrimary'
-                                    }`}>{trend ? `${trend.last3Avg.l3ClimbRate.toFixed(0)}%` : '-'}</td>
+                                    }`}>{trend ? trend.last3Avg.endgame.toFixed(1) : '-'}</td>
                                   </tr>
                                   <tr>
                                     <td className="text-textSecondary pr-1">Auto</td>

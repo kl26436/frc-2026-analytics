@@ -774,8 +774,6 @@ function Dashboard() {
           </h2>
           <div className="space-y-1">
             {topClimbers.map((team, i) => {
-              const lvl = team.level3ClimbCount > 0 ? 'L3' : team.level2ClimbCount > 0 ? 'L2' : team.level1ClimbCount > 0 ? 'L1' : '--';
-              const color = lvl === 'L3' ? 'bg-warning/20 text-warning border border-warning/30' : lvl === 'L2' ? 'bg-success/20 text-success border border-success/30' : lvl === 'L1' ? 'bg-blueAlliance/20 text-blueAlliance border border-blueAlliance/30' : 'bg-textMuted/20 text-textMuted';
               const isHome = team.teamNumber === HOME;
               const ml = teamMatchLabel.get(team.teamNumber);
               return (
@@ -788,8 +786,7 @@ function Dashboard() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${color}`}>{lvl}</span>
-                    <span className="font-bold text-sm text-blueAlliance">{team.avgEndgamePoints.toFixed(1)}</span>
+                    <span className="font-bold text-sm text-blueAlliance">{team.avgEndgamePoints.toFixed(1)} pts</span>
                     {ml && <span className={`text-right text-xs font-medium whitespace-nowrap ${ml.upcoming ? 'text-textSecondary' : 'text-textMuted'}`}>{ml.upcoming ? `Next: ${ml.label}` : ml.label}</span>}
                   </div>
                 </Link>
