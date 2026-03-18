@@ -1169,7 +1169,7 @@ function LivePickListView({
                                       }`}>{trend ? trend.last3Avg.total.toFixed(1) : '-'}</td>
                                     </tr>
                                     <tr>
-                                      <td className="text-textSecondary pr-1">EG</td>
+                                      <td className="text-textSecondary pr-1">Endgame</td>
                                       <td className="text-right px-1">{stats.avgEndgamePoints.toFixed(1)}</td>
                                       <td className={`text-right pl-1 font-semibold ${
                                         trend && trend.last3Avg.endgame > stats.avgEndgamePoints * 1.05 ? 'text-success'
@@ -2696,7 +2696,7 @@ function PickList() {
                                     }`}>{trend ? trend.last3Avg.total.toFixed(1) : '-'}</td>
                                   </tr>
                                   <tr>
-                                    <td className="text-textSecondary pr-1">EG</td>
+                                    <td className="text-textSecondary pr-1">Endgame</td>
                                     <td className="text-right px-1">{stats.avgEndgamePoints.toFixed(1)}</td>
                                     <td className={`text-right pl-1 font-semibold ${
                                       trend && trend.last3Avg.endgame > stats.avgEndgamePoints * 1.05 ? 'text-success'
