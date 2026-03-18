@@ -145,7 +145,10 @@ const STAT_OPTIONS: { value: keyof TeamStatistics; label: string }[] = [
   { value: 'avgTeleopFuelEstimate', label: 'Avg Teleop Fuel' },
   { value: 'avgEndgamePoints', label: 'Avg Endgame Points' },
   { value: 'autoClimbRate', label: 'Auto Climb Rate (%)' },
+  { value: 'centerFieldAutoRate', label: 'Mid Field Auto (%)' },
   { value: 'autoDidNothingRate', label: 'Auto Did Nothing (%)' },
+  { value: 'avgTotalPass', label: 'Avg Passes Per Match' },
+  { value: 'passerRatio', label: 'Pass Ratio (passes/total moved)' },
   { value: 'dedicatedPasserRate', label: 'Dedicated Passer (%)' },
   { value: 'overallUnreliabilityRate', label: 'Unreliability (%)' },
   { value: 'lostConnectionRate', label: 'Lost Connection (%)' },
@@ -157,6 +160,7 @@ const DEFAULT_FILTERS: FilterConfig[] = [
   { id: 'strongAuto', label: 'Strong Auto', icon: 'zap', field: 'avgAutoPoints', operator: '>=', threshold: 10, active: false },
   { id: 'reliable', label: 'Reliable', icon: 'shield', field: 'overallUnreliabilityRate', operator: '<=', threshold: 15, active: false },
   { id: 'highScorer', label: 'High Scorer', icon: 'trophy', field: 'avgTotalPoints', operator: '>=', threshold: 35, active: false },
+  { id: 'goodPasser', label: 'Good Passer', icon: 'zap', field: 'avgTotalPass', operator: '>=', threshold: 5, active: false },
   { id: 'pitTrench', label: 'Trench', icon: 'arrowDown', field: 'canGoUnderTrench', operator: '>=', threshold: 0, active: false, filterType: 'pit-boolean', pitField: 'canGoUnderTrench' },
   { id: 'pitDriveType', label: 'Drive Type', icon: 'wrench', field: '', operator: '>=', threshold: 0, active: false, filterType: 'pit-select', pitField: 'driveType', pitValues: [] },
 ];

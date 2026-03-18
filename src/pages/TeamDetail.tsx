@@ -310,6 +310,7 @@ function TeamDetail() {
                   <th className="hidden md:table-cell px-3 py-3 text-center text-textSecondary text-sm font-semibold">Start</th>
                   <th className="hidden md:table-cell px-3 py-3 text-right text-textSecondary text-sm font-semibold">Auto Scored</th>
                   <th className="hidden md:table-cell px-3 py-3 text-center text-textSecondary text-sm font-semibold">Auto Climb</th>
+                  <th className="hidden md:table-cell px-3 py-3 text-center text-textSecondary text-sm font-semibold">Mid Field</th>
                   <th className="px-3 py-3 text-right text-textSecondary text-sm font-semibold">Auto Pts</th>
                   <th className="hidden md:table-cell px-3 py-3 text-right text-textSecondary text-sm font-semibold">Teleop Scored</th>
                   <th className="hidden md:table-cell px-3 py-3 text-right text-textSecondary text-sm font-semibold">Passes</th>
@@ -371,6 +372,13 @@ function TeamDetail() {
                       <td className="hidden md:table-cell px-3 py-3 text-center">
                         {entry.auton_AUTON_CLIMBED > 0 ? (
                           <span className="text-success font-semibold">Y</span>
+                        ) : (
+                          <span className="text-textMuted">-</span>
+                        )}
+                      </td>
+                      <td className="hidden md:table-cell px-3 py-3 text-center">
+                        {entry.auton_went_to_neutral ? (
+                          <span className="text-warning font-semibold">Y</span>
                         ) : (
                           <span className="text-textMuted">-</span>
                         )}
@@ -507,6 +515,7 @@ function TeamDetail() {
             <h3 className="text-sm font-bold text-textSecondary mb-2">Autonomous</h3>
             <TotalsRow items={[
               { label: 'Auto Climb', value: `${teamStats.autoClimbCount}/${n}` },
+              { label: 'Mid Field', value: `${teamStats.centerFieldAutoCount}/${n}` },
               { label: 'Did Nothing', value: `${teamStats.autoDidNothingCount}/${n}`, color: teamStats.autoDidNothingCount > 0 ? 'text-danger' : '' },
               { label: 'Passer', value: `${teamStats.dedicatedPasserCount}/${n}` },
             ]} />

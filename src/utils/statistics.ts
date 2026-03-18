@@ -54,6 +54,7 @@ export function calculateTeamStatistics(
   // ── Auto counts ──
   const autoClimbCount = entries.filter(e => e.auton_AUTON_CLIMBED > 0).length;
   const autoDidNothingCount = entries.filter(e => e.auton_did_nothing).length;
+  const centerFieldAutoCount = entries.filter(e => e.auton_went_to_neutral).length;
 
   // ── Start zone counts ──
   const startZoneCounts = [1, 2, 3, 4, 5, 6].map(zone => {
@@ -184,8 +185,8 @@ export function calculateTeamStatistics(
     // ── Derived: Auto Rates ──
     autoClimbRate: pct(autoClimbCount, n),
     autoDidNothingRate: pct(autoDidNothingCount, n),
-    centerFieldAutoRate: 0, // TODO: populate when auto path data is available from data wrangler
-    centerFieldAutoCount: 0,
+    centerFieldAutoRate: pct(centerFieldAutoCount, n),
+    centerFieldAutoCount,
     startZoneDistribution: startZoneCounts.map(c => pct(c, n)),
 
     // ── Derived: Flag Rates ──

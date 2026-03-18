@@ -44,6 +44,7 @@ export interface ScoutEntry {
   auton_SCORE_PLUS_5: number;
   auton_SCORE_PLUS_10: number;
   auton_did_nothing: boolean;
+  auton_went_to_neutral: boolean;
 
   // ── Teleop Scoring ──
   teleop_FUEL_SCORE: number;
