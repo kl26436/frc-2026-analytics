@@ -103,13 +103,27 @@ export const useMetricsStore = create<MetricsState>()(
     }),
     {
       name: 'frc-metrics-storage',
-      version: 9,
+      version: 10,
       migrate: (persistedState: unknown, version: number) => {
-        if (version >= 9) {
+        if (version === 9) {
+          // v10: Disable scoring accuracy, L3 climb count, auto climb %;
+          //      enable avg endgame pts
           const state = persistedState as { config: MetricsConfig };
-          return { config: state.config };
+          const disableIds = new Set(['fuelScoringAccuracy', 'level3ClimbCount', 'autoClimbRate']);
+          const enableIds = new Set(['avgEndgamePoints']);
+          return {
+            config: {
+              ...state.config,
+              columns: state.config.columns.map(col =>
+                disableIds.has(col.id) ? { ...col, enabled: false }
+                : enableIds.has(col.id) ? { ...col, enabled: true }
+                : col
+              ),
+              lastUpdated: new Date().toISOString(),
+            },
+          };
         }
-        // v9: Use FMS-attributed points (fuelField) for Avg Points column
+        // Older versions: reset to defaults
         return {
           config: {
             columns: DEFAULT_METRICS,
