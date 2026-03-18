@@ -1,10 +1,10 @@
 import { useEffect, useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
-import { Trophy, Target, TrendingUp, RefreshCw, ChevronDown, ChevronUp, Hash, WifiOff, Eye, Flag, Clock, MessageSquare, Flame, Binoculars } from 'lucide-react';
+import { Trophy, Target, TrendingUp, RefreshCw, ChevronDown, ChevronUp, Hash, WifiOff, Eye, Flag, Clock, MessageSquare, Flame, Binoculars, GitBranch } from 'lucide-react';
 import { teamKeyToNumber } from '../utils/tbaApi';
 import { computeMatchup } from '../utils/predictions';
-import { usePitScoutStore } from '../store/usePitScoutStore';
+import { matchLabel, matchSortKey } from '../utils/formatting';
 
 const OUR_TEAM = 148;
 const RANKINGS_TO_SHOW = 5;
@@ -34,13 +34,7 @@ function Dashboard() {
       match.alliances.red.team_keys.includes(`frc${HOME}`) ||
       match.alliances.blue.team_keys.includes(`frc${HOME}`)
     )
-    .sort((a, b) => {
-      const levelOrder = { qm: 0, ef: 1, qf: 2, sf: 3, f: 4 };
-      if (levelOrder[a.comp_level] !== levelOrder[b.comp_level]) {
-        return levelOrder[a.comp_level] - levelOrder[b.comp_level];
-      }
-      return a.match_number - b.match_number;
-    }) || [];
+    .sort((a, b) => matchSortKey(a) - matchSortKey(b)) || [];
 
   const completedMatches = homeMatches.filter(m => m.alliances.red.score >= 0);
   const upcomingMatches = homeMatches.filter(m => m.alliances.red.score < 0);
@@ -60,6 +54,10 @@ function Dashboard() {
 
   const homeRanking = tbaData?.rankings?.rankings.find(r => r.team_key === `frc${HOME}`);
   const nextMatch = upcomingMatches[0];
+
+  // ── Playoffs detection ──
+  const inPlayoffs = (tbaData?.alliances?.length ?? 0) > 0 ||
+    (tbaData?.matches ?? []).some(m => m.comp_level !== 'qm');
 
   // ── Top teams (only include teams that actually score in each category) ──
   const topScorers = [...teamStatistics].filter(t => t.avgTotalPoints > 0).sort((a, b) => b.avgTotalPoints - a.avgTotalPoints).slice(0, 5);
@@ -88,10 +86,7 @@ function Dashboard() {
     return map;
   }, [homeMatches, predictionInputs]);
 
-  const getMatchLabel = (match: typeof homeMatches[0]) => {
-    const prefixes = { qm: 'Q', ef: 'E', qf: 'QF', sf: 'SF', f: 'F' };
-    return `${prefixes[match.comp_level]}${match.match_number}`;
-  };
+  const getMatchLabel = (match: typeof homeMatches[0]) => matchLabel(match);
 
   const rankClass = (i: number) =>
     i === 0 ? 'text-sm font-extrabold text-warning'
@@ -106,16 +101,11 @@ function Dashboard() {
   const teamMatchLabel = useMemo(() => {
     const map = new Map<number, { label: string; upcoming: boolean }>();
     if (!tbaData?.matches) return map;
-    const pfx: Record<string, string> = { qm: 'Q', ef: 'E', qf: 'QF', sf: 'SF', f: 'F' };
-    const allMatches = [...tbaData.matches].sort((a, b) => {
-      const lo: Record<string, number> = { qm: 0, ef: 1, qf: 2, sf: 3, f: 4 };
-      if (lo[a.comp_level] !== lo[b.comp_level]) return lo[a.comp_level] - lo[b.comp_level];
-      return a.match_number - b.match_number;
-    });
+    const allMatches = [...tbaData.matches].sort((a, b) => matchSortKey(a) - matchSortKey(b));
     // First pass: next upcoming match per team
     for (const m of allMatches) {
       if (m.alliances.red.score >= 0) continue;
-      const label = `${pfx[m.comp_level]}${m.match_number}`;
+      const label = matchLabel(m);
       for (const k of [...m.alliances.red.team_keys, ...m.alliances.blue.team_keys]) {
         const num = teamKeyToNumber(k);
         if (!map.has(num)) map.set(num, { label, upcoming: true });
@@ -125,7 +115,7 @@ function Dashboard() {
     for (let i = allMatches.length - 1; i >= 0; i--) {
       const m = allMatches[i];
       if (m.alliances.red.score < 0) continue;
-      const label = `${pfx[m.comp_level]}${m.match_number}`;
+      const label = matchLabel(m);
       for (const k of [...m.alliances.red.team_keys, ...m.alliances.blue.team_keys]) {
         const num = teamKeyToNumber(k);
         if (!map.has(num)) map.set(num, { label, upcoming: false });
@@ -134,17 +124,11 @@ function Dashboard() {
     return map;
   }, [tbaData]);
 
-  const pitEntries = usePitScoutStore(s => s.entries);
-
   // Teams to watch NOW — teams in the current match that are our upcoming partners/opponents
   const watchNow = useMemo(() => {
     if (!tbaData?.matches || !homeMatches.length) return [];
     const homeKey = `frc${HOME}`;
-    const lo: Record<string, number> = { qm: 0, ef: 1, qf: 2, sf: 3, f: 4 };
-    const sorted = [...tbaData.matches].sort((a, b) => {
-      if (lo[a.comp_level] !== lo[b.comp_level]) return lo[a.comp_level] - lo[b.comp_level];
-      return a.match_number - b.match_number;
-    });
+    const sorted = [...tbaData.matches].sort((a, b) => matchSortKey(a) - matchSortKey(b));
 
     // Current match = first unplayed
     const current = sorted.find(m => m.alliances.red.score < 0);
@@ -165,8 +149,7 @@ function Dashboard() {
       const homeOnRed = hm.alliances.red.team_keys.includes(homeKey);
       const partnerKeys = (homeOnRed ? hm.alliances.red.team_keys : hm.alliances.blue.team_keys).filter(tk => tk !== homeKey);
       const opponentKeys = homeOnRed ? hm.alliances.blue.team_keys : hm.alliances.red.team_keys;
-      const pfx: Record<string, string> = { qm: 'Q', ef: 'E', qf: 'QF', sf: 'SF', f: 'F' };
-      const label = `${pfx[hm.comp_level]}${hm.match_number}`;
+      const label = matchLabel(hm);
 
       for (const tk of partnerKeys) {
         const num = teamKeyToNumber(tk);
@@ -190,15 +173,10 @@ function Dashboard() {
   // Current match on the field (first unplayed match = last completed + 1)
   const currentMatchLabel = useMemo(() => {
     if (!tbaData?.matches) return null;
-    const pfx: Record<string, string> = { qm: 'Q', ef: 'E', qf: 'QF', sf: 'SF', f: 'F' };
-    const lo: Record<string, number> = { qm: 0, ef: 1, qf: 2, sf: 3, f: 4 };
-    const sorted = [...tbaData.matches].sort((a, b) => {
-      if (lo[a.comp_level] !== lo[b.comp_level]) return lo[a.comp_level] - lo[b.comp_level];
-      return a.match_number - b.match_number;
-    });
+    const sorted = [...tbaData.matches].sort((a, b) => matchSortKey(a) - matchSortKey(b));
     // First unplayed match = currently on the field or queuing
     const current = sorted.find(m => m.alliances.red.score < 0);
-    if (current) return `${pfx[current.comp_level]}${current.match_number}`;
+    if (current) return matchLabel(current);
     return null;
   }, [tbaData]);
 
@@ -357,6 +335,17 @@ function Dashboard() {
                 </span>
               ))}
             </div>
+          </div>
+        </Link>
+      )}
+
+      {/* Playoffs banner */}
+      {inPlayoffs && (
+        <Link to="/bracket" className="block bg-warning/10 border border-warning/25 rounded-lg px-4 py-2.5 hover:bg-warning/15 transition-colors">
+          <div className="flex items-center gap-2 text-sm">
+            <GitBranch size={16} className="text-warning flex-shrink-0" />
+            <span className="font-medium text-warning">Playoffs Active</span>
+            <span className="text-textSecondary">— View bracket, predictions & alliance matchups</span>
           </div>
         </Link>
       )}

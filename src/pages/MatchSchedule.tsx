@@ -1,23 +1,11 @@
-import { useEffect, useMemo, useCallback } from 'react';
+import { useMemo, useCallback } from 'react';
 import { Printer } from 'lucide-react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { usePitScoutStore } from '../store/usePitScoutStore';
 import { teamKeyToNumber } from '../utils/tbaApi';
+import { matchLabel, matchSortKey } from '../utils/formatting';
 import type { TBAMatch } from '../types/tba';
 import type { PitScoutEntry } from '../types/pitScouting';
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-const COMP_ORDER: Record<string, number> = { qm: 0, ef: 1, qf: 2, sf: 3, f: 4 };
-
-function matchSortKey(m: TBAMatch): number {
-  return (COMP_ORDER[m.comp_level] ?? 0) * 1000 + m.match_number;
-}
-
-function matchLabel(m: TBAMatch): string {
-  if (m.comp_level === 'qm') return `Q${m.match_number}`;
-  return `${m.comp_level.toUpperCase()}${m.set_number}-${m.match_number}`;
-}
 
 // ─── Main Component ──────────────────────────────────────────────────────────
 

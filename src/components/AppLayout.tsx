@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
-import { BarChart3, Users, ClipboardList, Menu, X, Calendar, Swords, Handshake, ClipboardCheck, ChevronDown, Search, Target, Shield, LogOut, AlertTriangle, LineChart, PlayCircle, FlaskConical, Sparkles, ExternalLink } from 'lucide-react';
+import { BarChart3, Users, ClipboardList, Menu, X, Calendar, Swords, Handshake, ClipboardCheck, ChevronDown, Search, Target, Shield, LogOut, AlertTriangle, LineChart, PlayCircle, FlaskConical, Sparkles, ExternalLink, GitBranch } from 'lucide-react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { useAuth } from '../contexts/AuthContext';
 import ActiveSessionBanner from './ActiveSessionBanner';
@@ -97,6 +97,11 @@ function NavDropdown({ label, icon: Icon, items, groups, isActive }: NavDropdown
 }
 
 // Navigation structure
+const dashboardItems: NavItem[] = [
+  { to: '/', icon: BarChart3, label: 'Dashboard' },
+  { to: '/bracket', icon: GitBranch, label: 'Playoff Bracket' },
+];
+
 const analysisItems: NavItem[] = [
   { to: '/teams', icon: Users, label: 'Teams' },
   { to: '/event', icon: Calendar, label: 'Event' },
@@ -225,16 +230,11 @@ function AppLayout() {
     return () => clearInterval(id);
   }, [autoRefreshEnabled, fetchTBAData, triggerSync, eventCode]);
 
+  const isDashboardActive = location.pathname === '/' || location.pathname === '/bracket';
   const isScoutingActive = scoutingItems.filter(item => !item.external).some(item => location.pathname === item.to || location.pathname.startsWith(item.to + '/'));
   const isAnalysisActive = analysisItems.some(item => location.pathname === item.to || location.pathname.startsWith(item.to + '/'));
   const isStrategyActive = allStrategyItems.some(item => location.pathname === item.to || location.pathname.startsWith(item.to + '/'));
 
-  const navLinkClass = (path: string) =>
-    `flex items-center gap-2 px-3 xl:px-4 py-2 rounded-lg transition-colors text-sm xl:text-base ${
-      location.pathname === path || location.pathname.startsWith(path + '/')
-        ? 'bg-surfaceElevated text-textPrimary font-semibold'
-        : 'text-textSecondary hover:text-textPrimary hover:bg-surfaceElevated'
-    }`;
 
   const mobileNavLinkClass = (path: string) =>
     `flex items-center gap-3 px-4 py-3 rounded transition-colors ${
@@ -260,10 +260,7 @@ function AppLayout() {
 
             {/* Desktop Navigation */}
             <nav className="hidden lg:flex gap-2 xl:gap-3 items-center border-l border-border pl-3 ml-3">
-              <Link to="/" className={navLinkClass('/')}>
-                <BarChart3 size={20} />
-                <span>Dashboard</span>
-              </Link>
+              <NavDropdown label="Dashboard" icon={BarChart3} items={dashboardItems} isActive={isDashboardActive} />
 
               <NavDropdown label="Scouting" icon={Search} items={scoutingItems} isActive={isScoutingActive} />
 
@@ -287,10 +284,12 @@ function AppLayout() {
           {/* Mobile Navigation */}
           {mobileMenuOpen && (
             <nav className="lg:hidden mt-4 pt-4 border-t border-border space-y-1 max-h-[calc(100vh-5rem)] overflow-y-auto">
-              <Link to="/" onClick={closeMobileMenu} className={`${mobileNavLinkClass('/')} bg-surfaceElevated`}>
-                <BarChart3 size={20} />
-                <span>Dashboard</span>
-              </Link>
+              {dashboardItems.map(({ to, icon: Icon, label }) => (
+                <Link key={to} to={to} onClick={closeMobileMenu} className={mobileNavLinkClass(to)}>
+                  <Icon size={20} />
+                  <span>{label}</span>
+                </Link>
+              ))}
 
               <div className="pt-2">
                 <p className="px-4 py-1 text-xs font-semibold text-textMuted uppercase tracking-wider">Scouting</p>

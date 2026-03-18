@@ -33,7 +33,6 @@ import {
   Download,
   Upload,
   Flag,
-  StickyNote,
   GripVertical,
   ArrowUp,
   ArrowDown,
@@ -53,7 +52,6 @@ import {
   AlertTriangle,
   Handshake,
   Eye,
-  Bookmark,
   ChevronDown,
   ChevronUp,
   Check,
@@ -155,7 +153,7 @@ const STAT_OPTIONS: { value: keyof TeamStatistics; label: string }[] = [
 ];
 
 const DEFAULT_FILTERS: FilterConfig[] = [
-  { id: 'autoClimber', label: 'Auto Climber', icon: 'zap', field: 'autoClimbRate', operator: '>=', threshold: 0.5, active: false },
+  { id: 'autoClimber', label: 'Auto Climber', icon: 'zap', field: 'autoClimbRate', operator: '>=', threshold: 50, active: false },
   { id: 'strongAuto', label: 'Strong Auto', icon: 'zap', field: 'avgAutoPoints', operator: '>=', threshold: 10, active: false },
   { id: 'reliable', label: 'Reliable', icon: 'shield', field: 'overallUnreliabilityRate', operator: '<=', threshold: 15, active: false },
   { id: 'highScorer', label: 'High Scorer', icon: 'trophy', field: 'avgTotalPoints', operator: '>=', threshold: 35, active: false },
@@ -1371,7 +1369,7 @@ function SortableWatchlistCard({ id, disabled, children }: { id: string; disable
 }
 
 // Sortable team card component
-function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onToggleFlag, onToggleWatchlist, isSelectedForCompare, onToggleCompare, passesFilters, hasActiveFilters, disableInteraction, showTrendGlow, isExpanded, onToggleExpand }: {
+function TeamCard({ team, currentTier, tierNames, onMoveTier, onToggleWatchlist, isSelectedForCompare, onToggleCompare, passesFilters, hasActiveFilters, disableInteraction, showTrendGlow, isExpanded, onToggleExpand }: {
   team: PickListTeam | { teamNumber: number; teamName?: string; avgTotalPoints: number; avgAutoPoints: number };
   currentTier?: 'tier1' | 'tier2' | 'tier3' | 'tier4';
   tierNames?: { tier1: string; tier2: string; tier3: string; tier4: string };
@@ -1412,15 +1410,6 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onUpdateNotes, onT
     state.teamTrends.find(t => t.teamNumber === team.teamNumber)
   );
 
-  const [isEditingNotes, setIsEditingNotes] = useState(false);
-  const [notes, setNotes] = useState(isPickListTeam ? (team as PickListTeam).notes : '');
-
-  // Sync notes when team data changes externally (e.g. live mode Firestore push)
-  useEffect(() => {
-    if (isPickListTeam && !isEditingNotes) {
-      setNotes((team as PickListTeam).notes);
-    }
-  }, [isPickListTeam ? (team as PickListTeam).notes : '']); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pit = usePitScoutStore.getState().getEntryByTeam(team.teamNumber);
   const tbaRankings = useAnalyticsStore(state => state.tbaData?.rankings);

@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import {
-  Bot, BarChart3, Users, ClipboardList, Swords, AlertTriangle, Sparkles,
+  Bot, BarChart3, ClipboardList, Dices, Swords, AlertTriangle, Sparkles, Trophy,
 } from 'lucide-react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import ClaudeChat from '../components/ClaudeChat';
@@ -8,16 +8,18 @@ import {
   INSIGHT_TEMPLATES,
   type InsightTemplateId,
   buildEventOverviewPrompt,
-  buildTeamDeepDivePrompt,
   buildPickListHelperPrompt,
+  buildDraftSimulatorPrompt,
+  buildPlayoffStrategyPrompt,
   buildMatchPreviewPrompt,
   buildDataQualityAuditPrompt,
 } from '../utils/insightPrompts';
 
 const ICON_MAP: Record<string, React.ElementType> = {
   BarChart3,
-  Users,
   ClipboardList,
+  Dices,
+  Trophy,
   Swords,
   AlertTriangle,
 };
@@ -33,10 +35,11 @@ export default function AIInsights() {
   const eventCode = useAnalyticsStore(s => s.eventCode);
 
   const [activeTemplate, setActiveTemplate] = useState<InsightTemplateId | null>(null);
-  const [teamNumber, setTeamNumber] = useState<string>(String(homeTeamNumber));
   const [redTeams, setRedTeams] = useState<string>('');
   const [blueTeams, setBlueTeams] = useState<string>('');
   const [matchNumber, setMatchNumber] = useState<string>('');
+  const [allianceTeams, setAllianceTeams] = useState<string>(String(homeTeamNumber));
+  const [seedNumber, setSeedNumber] = useState<string>('');
 
   // Build the prompt based on active template
   const prompt = useMemo(() => {
@@ -46,14 +49,19 @@ export default function AIInsights() {
       case 'event_overview':
         return buildEventOverviewPrompt(teamStatistics, teamFuelStats, teamTrends, pgTbaMatches, eventCode);
 
-      case 'team_deep_dive': {
-        const num = parseInt(teamNumber);
-        if (!num) return '';
-        return buildTeamDeepDivePrompt(num, teamStatistics, teamFuelStats, teamTrends, scoutEntries, pgTbaMatches);
-      }
-
       case 'pick_list_helper':
         return buildPickListHelperPrompt(teamStatistics, teamFuelStats, teamTrends, predictionInputs, homeTeamNumber);
+
+      case 'draft_simulator': {
+        const seed = seedNumber ? parseInt(seedNumber) : undefined;
+        return buildDraftSimulatorPrompt(teamStatistics, teamFuelStats, teamTrends, predictionInputs, homeTeamNumber, seed);
+      }
+
+      case 'playoff_strategy': {
+        const alliance = allianceTeams.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+        if (alliance.length < 2) return '';
+        return buildPlayoffStrategyPrompt(alliance, teamStatistics, teamFuelStats, teamTrends, predictionInputs, scoutEntries);
+      }
 
       case 'match_preview': {
         const red = redTeams.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
@@ -69,7 +77,7 @@ export default function AIInsights() {
       default:
         return '';
     }
-  }, [activeTemplate, teamStatistics, teamFuelStats, teamTrends, scoutEntries, pgTbaMatches, predictionInputs, homeTeamNumber, eventCode, teamNumber, redTeams, blueTeams, matchNumber]);
+  }, [activeTemplate, teamStatistics, teamFuelStats, teamTrends, scoutEntries, pgTbaMatches, predictionInputs, homeTeamNumber, eventCode, redTeams, blueTeams, matchNumber, allianceTeams, seedNumber]);
 
   const hasData = teamStatistics.length > 0 || scoutEntries.length > 0;
 
@@ -124,19 +132,33 @@ export default function AIInsights() {
       </div>
 
       {/* Template-specific inputs */}
-      {activeTemplate === 'team_deep_dive' && (
+      {activeTemplate === 'draft_simulator' && (
         <div className="bg-surface rounded-lg border border-border p-4">
-          <label className="block text-sm font-medium mb-2">Team Number</label>
+          <label className="block text-sm font-medium mb-2">Your Seed (optional — leave blank to auto-estimate)</label>
           <input
             type="number"
-            value={teamNumber}
-            onChange={e => setTeamNumber(e.target.value)}
-            placeholder="e.g. 148"
+            value={seedNumber}
+            onChange={e => setSeedNumber(e.target.value)}
+            placeholder="e.g. 3"
+            min={1}
+            max={40}
             className="px-3 py-2 bg-card border border-border rounded-lg text-sm text-textPrimary w-32 focus:outline-none focus:border-success"
           />
-          {teamNumber && !teamStatistics.find(t => t.teamNumber === parseInt(teamNumber)) && (
-            <p className="text-xs text-warning mt-1">No data for team {teamNumber}</p>
-          )}
+          <p className="text-xs text-textSecondary mt-1">If you already know your ranking, enter it for a more accurate simulation</p>
+        </div>
+      )}
+
+      {activeTemplate === 'playoff_strategy' && (
+        <div className="bg-surface rounded-lg border border-border p-4">
+          <label className="block text-sm font-medium mb-2">Your Alliance Teams (comma-separated)</label>
+          <input
+            type="text"
+            value={allianceTeams}
+            onChange={e => setAllianceTeams(e.target.value)}
+            placeholder="148, 6328, 1768"
+            className="px-3 py-2 bg-card border border-border rounded-lg text-sm text-textPrimary w-full max-w-sm focus:outline-none focus:border-success"
+          />
+          <p className="text-xs text-textSecondary mt-1">Enter 2-4 team numbers for your playoff alliance</p>
         </div>
       )}
 
@@ -180,11 +202,11 @@ export default function AIInsights() {
       {/* Claude Chat */}
       {activeTemplate && prompt && (
         <ClaudeChat
-          key={activeTemplate + teamNumber + redTeams + blueTeams}
+          key={activeTemplate + redTeams + blueTeams + allianceTeams + seedNumber}
           prompt={prompt}
           title={INSIGHT_TEMPLATES.find(t => t.id === activeTemplate)?.label || 'Analysis'}
           description={INSIGHT_TEMPLATES.find(t => t.id === activeTemplate)?.description}
-          cacheKey={`${eventCode}_${activeTemplate}_${teamNumber}_${redTeams}_${blueTeams}`}
+          cacheKey={`${eventCode}_${activeTemplate}_${redTeams}_${blueTeams}_${allianceTeams}_${seedNumber}`}
         />
       )}
 

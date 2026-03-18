@@ -53,3 +53,24 @@ export function formatDuration(seconds: number): string {
 export function formatProb(p: number): string {
   return `${(p * 100).toFixed(0)}%`;
 }
+
+// ── Match utilities ─────────────────────────────────────────────────────────────
+
+export const COMP_ORDER: Record<string, number> = { qm: 0, ef: 1, qf: 2, sf: 3, f: 4 };
+
+/** Format a TBA match as a human-readable label (e.g. "Q5", "M3", "F2"). */
+export function matchLabel(m: { comp_level: string; set_number: number; match_number: number }): string {
+  if (m.comp_level === 'qm') return `Q${m.match_number}`;
+  // FRC double-elim: TBA uses sf with set_number 1-13 for bracket matches → show as M#
+  if (m.comp_level === 'sf') return `M${m.set_number}`;
+  // Finals: show as F1, F2, F3 (match_number is the game within best-of-3)
+  if (m.comp_level === 'f') return `F${m.match_number}`;
+  // Fallback for ef/qf (older formats)
+  const pfx: Record<string, string> = { ef: 'E', qf: 'QF' };
+  return `${pfx[m.comp_level] ?? m.comp_level.toUpperCase()}${m.set_number}-${m.match_number}`;
+}
+
+/** Numeric sort key for ordering matches by comp level, set, then match number. */
+export function matchSortKey(m: { comp_level: string; set_number: number; match_number: number }): number {
+  return (COMP_ORDER[m.comp_level] ?? 0) * 100000 + m.set_number * 100 + m.match_number;
+}

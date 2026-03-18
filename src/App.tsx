@@ -23,6 +23,7 @@ import AIInsights from './pages/AIInsights';
 import RobotPictures from './pages/RobotPictures';
 import PitAnalysis from './pages/PitAnalysis';
 import MatchSchedule from './pages/MatchSchedule';
+import PlayoffBracket from './pages/PlayoffBracket';
 
 function AppContent() {
   const setEventCode = useAnalyticsStore(state => state.setEventCode);
@@ -83,6 +84,7 @@ function AppContent() {
         <Route path="/event" element={<EventSetup />} />
         <Route path="/metrics" element={<MetricsSettings />} />
         <Route path="/schedule" element={<MatchSchedule />} />
+        <Route path="/bracket" element={<PlayoffBracket />} />
         <Route path="/ninja" element={<Navigate to="/pit-scouting" replace />} />
         <Route path="/ninja/:teamNumber" element={<Navigate to="/pit-scouting" replace />} />
         <Route path="/admin" element={<AdminSettings />} />

@@ -7,8 +7,9 @@ import type { PredictionTeamInput } from './predictions';
 
 export type InsightTemplateId =
   | 'event_overview'
-  | 'team_deep_dive'
   | 'pick_list_helper'
+  | 'draft_simulator'
+  | 'playoff_strategy'
   | 'match_preview'
   | 'data_quality_audit';
 
@@ -26,17 +27,23 @@ export const INSIGHT_TEMPLATES: InsightTemplate[] = [
     description: 'Full event analysis — top performers, RP trends, scoring distribution, reliability flags, and key takeaways.',
     icon: 'BarChart3',
   },
-  {
-    id: 'team_deep_dive',
-    label: 'Team Deep Dive',
-    description: 'Detailed analysis of a specific team — scoring trends, consistency, climb reliability, strengths & weaknesses.',
-    icon: 'Users',
-  },
-  {
+{
     id: 'pick_list_helper',
     label: 'Pick List Helper',
     description: 'Alliance selection strategy — tier recommendations, synergy analysis, which teams pair well together.',
     icon: 'ClipboardList',
+  },
+  {
+    id: 'draft_simulator',
+    label: 'Draft Simulator',
+    description: 'Simulate alliance selection — predict all 8 alliances, best/worst case scenarios for your team, and likely declines.',
+    icon: 'Dices',
+  },
+  {
+    id: 'playoff_strategy',
+    label: 'Playoff Strategy',
+    description: 'Post-selection game plan — role assignments, opponent breakdowns, ball movement strategy, and how to win each round.',
+    icon: 'Trophy',
   },
   {
     id: 'match_preview',
@@ -58,12 +65,30 @@ function buildGameContext(): string {
   return `You are an FRC (FIRST Robotics Competition) analytics assistant for Team 148 Robowranglers. The 2026 game is "REBUILT."
 
 Key game mechanics:
-- **Fuel**: Balls scored into a hub. FMS tracks alliance-level totals only. We use power curve attribution (beta=0.7) to estimate per-robot scoring.
-- **Tower Climbing**: Levels 0-3 (None=0, L1=10, L2=20, L3=30 points). Per-robot data from FMS.
-- **Auto Climb**: 15 points if robot climbs tower during autonomous.
+- **Fuel**: Balls scored into a hub. FMS tracks alliance-level totals only. We use power curve attribution (beta=0.7) to estimate per-robot scoring. Fuel scoring is BY FAR the most important factor — it drives both match wins and the Energized/Supercharged bonus RPs.
+- **Endgame Climbing**: Levels 0-3 (None=0, L1=10, L2=20, L3=30 points). Per-robot data from FMS.
+- **Auto Climb**: 15 points if robot climbs tower during autonomous. Very valuable — worth more than 10 fuel points and contributes to Traversal RP.
 - **Ranking Points**: Win=3 RP, Energized (hub>=100)=1 RP, Supercharged (hub>=360)=1 RP, Traversal (tower>=50)=1 RP. Max 6 RP/match.
 
-**IMPORTANT strategic context for 2026:** L3 climbing (30 pts) is extremely rare and strategically a non-factor at most events. The game is primarily about fuel scoring (shooting) and auto performance (including auto climbing). De-emphasize L3 in your analysis — only mention it if a team has a very high L3 rate (>50%). Focus on fuel scoring volume, auto scoring, auto climbing, and reliability.
+## Strategic Priority Order (MUST FOLLOW)
+1. **Fuel scoring volume** — the #1 differentiator between good and great teams. High-volume shooters win matches. You can easily outscore any climb advantage with a few extra balls.
+2. **Passing & ball movement** — REBUILT is a passing game. Great passers enable their alliance's best shooters by feeding them balls. Teams that move balls out of the opponent's zone also starve the other alliance of scoring opportunities. Passing is a force multiplier — a great passer makes the whole alliance better.
+3. **Auto performance** — auto fuel + auto climbing. Strong auto creates large leads that are hard to overcome.
+4. **Reliability** — disconnects, no-shows, and breakdowns are disqualifying. A reliable 30-point robot beats a flaky 50-point robot.
+5. **Endgame reliability** — does the team consistently climb L1 or L2? Consistency matters more than level. L3 is a non-factor (see below).
+
+## L3 Climbing — IRRELEVANT, DO NOT OVERWEIGHT
+L3 climbing is worth only 10 more points than L2 (30 vs 20). That's equivalent to just 1-2 extra fuel balls — which any decent shooter can outscore easily. A team that shoots 5 more balls per match is worth FAR more than a team that sometimes hits L3. At most events, fewer than 5% of robots attempt L3 and even fewer do it reliably. The risk of a failed L3 attempt (scoring 0 instead of 20) far outweighs the 10-point upside. DO NOT treat L3 capability as a differentiator. Only mention L3 if a team has >50% L3 success rate AND you've already fully covered fuel scoring, passing, auto, and reliability. The real endgame differentiator is L2 vs L1 reliability, not L3.
+
+## Passing & Ball Movement — VERY IMPORTANT
+Passing is a critical and often underrated mechanic in REBUILT. Teams that can pass effectively increase their alliance's overall cycle speed and scoring volume. A great passer enables their alliance partners to score more — look at pass counts alongside scoring. High-pass teams are excellent alliance partners even if their own scoring is moderate, because they multiply the alliance's output. When evaluating teams, always consider their passing contribution.
+
+## Output Style — IMPORTANT
+- Lead with fuel scoring and passing. These are what matter.
+- Do NOT waste time listing reliability percentages for every team. Most teams are 90%+ reliable — that's normal, not noteworthy. ONLY mention reliability if a team has a genuine problem (>15% disconnect rate, multiple lost connections).
+- Do NOT list climb percentages for every team. Only mention climbing if it's specifically relevant (e.g., "this team can't climb at all" or discussing Traversal RP math).
+- Do NOT pad your analysis with stats the reader can see in the tables. Add insight, not recitation.
+- Keep it short and actionable. Strategy leads don't need a paragraph per team — they need clear rankings and key differentiators.
 
 Be specific with team numbers. Use data to support claims. Keep analysis actionable for strategy meetings.`;
 }
@@ -77,18 +102,25 @@ function formatTeamStats(stats: TeamStatistics[]): string {
     return bTotal - aTotal;
   });
 
+  // Flag unreliable teams separately instead of cluttering the main table
+  const unreliable = sorted.filter(t => t.lostConnectionRate !== undefined && t.lostConnectionRate > 0.15);
+
   const rows = sorted.map(t => {
     const autoFuel = t.avgAutoFuelEstimate?.toFixed(1) ?? '0';
     const teleopFuel = t.avgTeleopFuelEstimate?.toFixed(1) ?? '0';
-    const autoClimb = t.autoClimbRate !== undefined ? `${(t.autoClimbRate * 100).toFixed(0)}%` : '?';
     const avgPts = t.avgTotalPoints?.toFixed(1) ?? '?';
-    const reliability = t.lostConnectionRate !== undefined ? `${((1 - t.lostConnectionRate) * 100).toFixed(0)}%` : '?';
-    return `| ${t.teamNumber} | ${t.matchesPlayed} | ${autoFuel} | ${teleopFuel} | ${avgPts} | ${autoClimb} | ${reliability} |`;
+    return `| ${t.teamNumber} | ${t.matchesPlayed} | ${autoFuel} | ${teleopFuel} | ${avgPts} |`;
   });
 
-  return `| Team | Matches | Avg Auto Fuel | Avg Teleop Fuel | Avg Pts | Auto Climb% | Reliability |
-|------|---------|---------------|-----------------|---------|-------------|-------------|
+  let table = `| Team | Matches | Avg Auto Fuel | Avg Teleop Fuel | Avg Pts |
+|------|---------|---------------|-----------------|---------|
 ${rows.join('\n')}`;
+
+  if (unreliable.length > 0) {
+    table += `\n\n**Reliability Concerns** (>15% disconnect rate — most teams are fine, only these have issues):\n${unreliable.map(t => `- Team ${t.teamNumber}: ${(t.lostConnectionRate! * 100).toFixed(0)}% disconnect rate (${t.lostConnectionCount} disconnects in ${t.matchesPlayed} matches)`).join('\n')}`;
+  }
+
+  return table;
 }
 
 function formatFuelStats(fuelStats: TeamFuelStats[]): string {
@@ -165,12 +197,13 @@ ${formatMatchResults(matches)}
 
 Provide a comprehensive event overview covering:
 
-1. **Top Performers**: Who are the best 5-8 teams overall? Break down by fuel scoring, auto performance, and auto climbing.
+1. **Top Performers**: Who are the best 5-8 teams overall? Rank primarily by fuel scoring volume, then passing/ball movement, then auto performance.
 2. **Scoring Patterns**: What's the typical match score? How often are Energized/Supercharged/Traversal RPs being achieved?
-3. **Climbing Landscape**: Who auto-climbs reliably? How many teams can L2? (L3 is rare — only mention if a team actually does it consistently.)
-4. **Hot & Cold Teams**: Who is trending up vs down based on recent matches?
-5. **Reliability Concerns**: Which teams have reliability issues (disconnects, no-shows)?
-6. **Key Insights**: What non-obvious patterns do you see? Anything that would affect pick list strategy?
+3. **Ball Movement & Passing**: Which teams are the best passers/feeders? Who moves the most balls? Passing is a critical and often underrated skill — highlight teams that enable their alliance.
+4. **Auto & Climbing**: Who auto-climbs reliably? What's the L1/L2 split? (Ignore L3 unless a team does it >50% of the time.)
+5. **Hot & Cold Teams**: Who is trending up vs down based on recent matches?
+6. **Reliability Concerns**: Which teams have reliability issues (disconnects, no-shows)?
+7. **Key Insights**: What non-obvious patterns do you see? Which teams are the best alliance partners because they feed shooters and move balls effectively?
 
 Be specific with team numbers. Rank teams where appropriate. Format for a strategy meeting.`;
 }
@@ -314,10 +347,249 @@ You are helping Team ${homeTeamNumber} prepare their alliance selection pick lis
 
 5. **Sleeper Picks**: Any underrated teams that the data suggests are better than their ranking shows?
 
-**Alliance Selection Format — Snake Draft:**
-Alliance selection uses a snake draft. Round 1: Alliances 1-8 pick in order (1, 2, 3, 4, 5, 6, 7, 8). Round 2: Alliances pick in reverse order (8, 7, 6, 5, 4, 3, 2, 1). Round 3 (if needed): Back to 1-8 order. This means Alliance 1 picks first but then picks last in Round 2, while Alliance 8 picks last in Round 1 but first in Round 2 (back-to-back picks). Your tier and pairing recommendations MUST be feasible given the snake draft — do not suggest alliances that could not form based on the teams' rankings and likely draft positions.
+**Alliance Selection Format — Snake Draft (CRITICAL — understand this before making recommendations):**
+
+FRC alliance selection uses a snake draft with 8 alliances of 3-4 robots each. The top 8 ranked teams become alliance captains (seeds 1-8).
+
+**How it works:**
+- **Round 1**: Captains pick in seed order (1→2→3→4→5→6→7→8). Each captain invites one team.
+- **Round 2**: Order REVERSES (8→7→6→5→4→3→2→1). Each captain picks again.
+- **Round 3** (backup robot, if needed): Order returns to 1→8.
+- Any team can DECLINE an invitation (they stay in the pool for a higher-seeded captain to pick later, or become captain of a lower alliance). Teams cannot decline twice.
+
+**Key strategic implications you MUST account for:**
+- **Alliance 1** picks the best available team first, but then picks LAST in Round 2 — their second pick will be the ~16th best available robot.
+- **Alliance 8** picks last in Round 1, but picks FIRST in Round 2 — they get back-to-back picks. Alliance 8 often ends up with a stronger overall trio than Alliances 4-6.
+- **The "8th alliance advantage"**: Getting two consecutive picks means Alliance 8 can grab two complementary robots before anyone else picks in Round 2.
+- **Captains are locked**: The 8 alliance captains cannot be picked by other alliances. So when recommending picks, exclude any team likely to be a top-8 seed (they'll be captains).
+- **Declines matter**: Top teams may decline lower seeds hoping to be picked by a higher seed or to captain their own alliance.
+
+**When making tier/pairing recommendations:**
+- Consider which teams will realistically be available at each draft position
+- Don't suggest pairing two teams that would both be first-round picks — only one captain gets a first-round pick
+- Think about which teams complement each other (e.g., a high-volume shooter + a strong passer + a reliable climber)
+- Consider whether Team ${homeTeamNumber} is likely to be a captain (picking) or a pick (being selected)
 
 Be decisive. Give clear rankings, not hedged recommendations.`;
+}
+
+export function buildDraftSimulatorPrompt(
+  teamStats: TeamStatistics[],
+  fuelStats: TeamFuelStats[],
+  trends: TeamTrend[],
+  predictions: PredictionTeamInput[],
+  homeTeamNumber: number,
+  homeTeamSeed?: number,
+): string {
+  // Rank teams by estimated strength for seeding prediction
+  const rankedTeams = [...teamStats].sort((a, b) => {
+    const aScore = (a.avgTotalPoints || 0);
+    const bScore = (b.avgTotalPoints || 0);
+    return bScore - aScore;
+  });
+
+  // Split into captains and pick pool
+  const captains = rankedTeams.slice(0, 8);
+  const pickPool = rankedTeams.slice(8);
+
+  const captainTable = captains.map((t, i) => {
+    const fuel = fuelStats.find(f => f.teamNumber === t.teamNumber);
+    return `| Seed ${i + 1} | ${t.teamNumber} | ${t.avgTotalPoints?.toFixed(1) ?? '?'} | ${t.avgAutoFuelEstimate?.toFixed(1) ?? '?'} | ${t.avgTeleopFuelEstimate?.toFixed(1) ?? '?'} | ${fuel?.avgPasses.toFixed(1) ?? '?'} |`;
+  }).join('\n');
+
+  const pickPoolTable = pickPool.map((t, i) => {
+    const fuel = fuelStats.find(f => f.teamNumber === t.teamNumber);
+    const trend = trends.find(tr => tr.teamNumber === t.teamNumber);
+    const trendDir = trend ? (trend.trend === 'improving' ? 'UP' : trend.trend === 'declining' ? 'DOWN' : 'STABLE') : '?';
+    return `| ${i + 1} | ${t.teamNumber} | ${t.avgTotalPoints?.toFixed(1) ?? '?'} | ${t.avgAutoFuelEstimate?.toFixed(1) ?? '?'} | ${t.avgTeleopFuelEstimate?.toFixed(1) ?? '?'} | ${fuel?.avgPasses.toFixed(1) ?? '?'} | ${trendDir} |`;
+  }).join('\n');
+
+  const homeRank = rankedTeams.findIndex(t => t.teamNumber === homeTeamNumber) + 1;
+  const seedInfo = homeTeamSeed
+    ? `Team ${homeTeamNumber} is seed **#${homeTeamSeed}**${homeTeamSeed <= 8 ? ' (CAPTAIN — picks in Round 1)' : ' (in the pick pool — will be selected by a captain)'}.`
+    : `Based on data, Team ${homeTeamNumber} is ranked approximately **#${homeRank}** out of ${rankedTeams.length} teams${homeRank <= 8 ? ' (likely a CAPTAIN)' : ' (likely in the pick pool)'}.`;
+
+  return `${buildGameContext()}
+
+# Alliance Selection Draft Simulator — Team ${homeTeamNumber}
+
+## ${seedInfo}
+
+## CAPTAINS (Seeds 1-8) — These teams CANNOT be picked. They do the picking.
+| Seed | Team | Avg Pts | Auto Fuel | Teleop Fuel | Passes |
+|------|------|---------|-----------|-------------|--------|
+${captainTable}
+
+## PICK POOL — Available to be picked, ranked by strength
+These are the teams captains choose from. The #1 seed picks FIRST and can take ANY of these teams.
+| Pool Rank | Team | Avg Pts | Auto Fuel | Teleop Fuel | Passes | Trend |
+|-----------|------|---------|-----------|-------------|--------|-------|
+${pickPoolTable}
+
+## HOW THE DRAFT WORKS — READ CAREFULLY
+
+**Round 1 — Captains pick in seed order (1→2→3→4→5→6→7→8):**
+- Seed 1 (${captains[0]?.teamNumber}) picks FIRST. They have first choice of the ENTIRE pick pool. They will almost always take the #1 ranked available team (Pool Rank #1) because you always want the best robot you can get.
+- Seed 2 picks next from whoever is left, and so on down to Seed 8.
+- **THE KEY RULE: In Round 1, captains pick the best available robot.** Period. There is no reason to skip a stronger team for a weaker one in Round 1. A captain picking a Pool Rank #15 team when Pool Rank #1 is available would be insane.
+
+**Round 2 — REVERSE order (8→7→6→5→4→3→2→1):**
+- Seed 8 picks first in Round 2 (back-to-back with their Round 1 pick).
+- Seed 1 picks LAST in Round 2 — they get the ~16th best available team.
+- Round 2 picks may consider synergy/complementary skills more, but teams still generally take the best available.
+
+**Declines:**
+- A team can DECLINE an invitation if they think a higher-seeded captain will pick them, or if they'd rather captain a lower alliance themselves.
+- Declines are rare for top picks. A team ranked Pool #1 will almost never decline Seed 1.
+- Declines are more common from teams in the 9-12 range who might prefer to captain Alliance 7 or 8 instead of being a 2nd pick for Alliance 3.
+
+**CRITICAL: When simulating, work through it step by step:**
+1. Seed 1 looks at the pick pool. Who is the best available? Pick them.
+2. Seed 2 looks at remaining pool. Who is the best available? Pick them.
+3. Continue through Seed 8.
+4. Then Seed 8 picks again (Round 2), then 7, 6, 5, 4, 3, 2, 1.
+
+## Analysis Requested
+
+### 1. Most Likely Draft Outcome
+Walk through every pick in order. For each pick state:
+- Who the captain is
+- Who they pick and why (usually: "best available team in the pool")
+- If anyone might decline and what happens next
+
+Then show the final 8 alliances as a table:
+
+| Alliance | Captain | 1st Pick | 2nd Pick | Est. Alliance Strength |
+|----------|---------|----------|----------|------------------------|
+
+### 2. Best Case Scenario for Team ${homeTeamNumber}
+What's the dream alliance? What declines or surprises would need to happen?
+
+### 3. Worst Case Scenario for Team ${homeTeamNumber}
+What if key targets get taken before you? What's the floor for your alliance?
+
+### 4. Scariest Opposing Alliances
+Which 2-3 alliances are the biggest playoff threats?
+
+### 5. Key Decision Points
+Specific moments in the draft that change everything for Team ${homeTeamNumber}. Who might decline whom? What picks create cascading effects?
+
+Be specific with team numbers. Make bold predictions. The pick pool ranking IS the default pick order — deviate from it only if you have a strong reason.`;
+}
+
+export function buildPlayoffStrategyPrompt(
+  allianceTeams: number[],
+  teamStats: TeamStatistics[],
+  fuelStats: TeamFuelStats[],
+  trends: TeamTrend[],
+  predictions: PredictionTeamInput[],
+  entries: ScoutEntry[],
+): string {
+  const formatAllianceRobot = (num: number) => {
+    const stat = teamStats.find(t => t.teamNumber === num);
+    const fuel = fuelStats.find(t => t.teamNumber === num);
+    const pred = predictions.find(p => p.teamNumber === num);
+    const trend = trends.find(t => t.teamNumber === num);
+    const teamEntries = entries.filter(e => e.team_number === num);
+
+    const matchBreakdown = teamEntries
+      .sort((a, b) => a.match_number - b.match_number)
+      .map(e => {
+        const autoFuel = e.auton_FUEL_SCORE || 0;
+        const teleopFuel = e.teleop_FUEL_SCORE || 0;
+        const autoPasses = e.auton_FUEL_PASS || 0;
+        const teleopPasses = e.teleop_FUEL_PASS || 0;
+        return `| Q${e.match_number} | ${autoFuel} | ${teleopFuel} | ${autoPasses + teleopPasses} | ${e.climb_level} | ${e.lost_connection ? 'YES' : ''} | ${(e.notes || '').slice(0, 60)} |`;
+      })
+      .join('\n');
+
+    const hasReliabilityIssue = stat?.lostConnectionRate !== undefined && stat.lostConnectionRate > 0.15;
+
+    return `### Team ${num}
+- FMS attributed: ${fuel?.avgShotsScored.toFixed(1) ?? '?'} balls/match (Auto=${fuel?.avgAutoScored.toFixed(1) ?? '?'}, Teleop=${fuel?.avgTeleopScored.toFixed(1) ?? '?'})
+- Passes: ${fuel?.avgPasses.toFixed(1) ?? '?'}/match
+- Avg total pts: ${stat?.avgTotalPoints?.toFixed(1) ?? '?'}
+- Trend: ${trend ? `${trend.trend} (${trend.delta > 0 ? '+' : ''}${trend.delta.toFixed(0)}%)` : '?'}${hasReliabilityIssue ? `\n- ⚠️ RELIABILITY ISSUE: ${(stat!.lostConnectionRate! * 100).toFixed(0)}% disconnect rate (${stat!.lostConnectionCount} disconnects)` : ''}
+
+| Match | Auto Fuel | Teleop Fuel | Passes | Climb | Lost Conn | Notes |
+|-------|-----------|-------------|--------|-------|-----------|-------|
+${matchBreakdown || 'No entries.'}`;
+  };
+
+  // Get all other teams as potential opponents
+  const opponentStats = teamStats
+    .filter(t => !allianceTeams.includes(t.teamNumber))
+    .sort((a, b) => {
+      const aTotal = (a.avgAutoFuelEstimate || 0) + (a.avgTeleopFuelEstimate || 0);
+      const bTotal = (b.avgAutoFuelEstimate || 0) + (b.avgTeleopFuelEstimate || 0);
+      return bTotal - aTotal;
+    });
+
+  const opponentTable = opponentStats.map(t => {
+    const fuel = fuelStats.find(f => f.teamNumber === t.teamNumber);
+    return `| ${t.teamNumber} | ${t.avgTotalPoints?.toFixed(1) ?? '?'} | ${t.avgAutoFuelEstimate?.toFixed(1) ?? '?'} | ${t.avgTeleopFuelEstimate?.toFixed(1) ?? '?'} | ${fuel?.avgPasses.toFixed(1) ?? '?'} |`;
+  }).join('\n');
+
+  // Identify do-not-pick / terrible teams
+  const terribleTeams = opponentStats.filter(t => {
+    const totalFuel = (t.avgAutoFuelEstimate || 0) + (t.avgTeleopFuelEstimate || 0);
+    return totalFuel < 3 || (t.lostConnectionRate !== undefined && t.lostConnectionRate > 0.3);
+  });
+
+  return `${buildGameContext()}
+
+# Playoff Strategy — Alliance: ${allianceTeams.join(', ')}
+
+## Your Alliance — Detailed Profiles
+
+${allianceTeams.map(t => formatAllianceRobot(t)).join('\n\n')}
+
+## All Other Teams (Potential Opponents)
+| Team | Avg Pts | Auto Fuel | Teleop Fuel | Passes |
+|------|---------|-----------|-------------|--------|
+${opponentTable}
+
+${terribleTeams.length > 0 ? `## Weak Teams to Watch For
+These teams are significantly below average — if they're on the opposing alliance, exploit it:
+${terribleTeams.map(t => `- **${t.teamNumber}**: ${(t.avgAutoFuelEstimate || 0) + (t.avgTeleopFuelEstimate || 0) < 3 ? 'barely scores' : ''}${t.lostConnectionRate !== undefined && t.lostConnectionRate > 0.3 ? ' unreliable (' + (t.lostConnectionRate * 100).toFixed(0) + '% disconnect rate)' : ''}`).join('\n')}` : ''}
+
+## Analysis Requested
+
+You are the strategy coach for this alliance in playoffs. Provide a complete game plan:
+
+1. **Role Assignments**: For each robot on the alliance, assign their primary role:
+   - Primary shooter (best scorer — gets fed balls)
+   - Feeder/passer (moves balls to the shooter, starves opponents)
+   - Flex/support (fills gaps — maybe shoots AND passes)
+   - Who climbs where in endgame? Assign climb levels to maximize Traversal RP.
+
+2. **Ball Movement Strategy**: This is critical. How should balls flow?
+   - Who picks up from where?
+   - Who passes to whom?
+   - How do you starve the opposing alliance of balls?
+   - What's the auto plan for ball positioning?
+
+3. **Auto Period Plan**: What should each robot do in auto?
+   - Auto climb priority (who goes for it, who doesn't bother?)
+   - Auto fuel scoring plan
+   - Starting positions
+
+4. **Opponent Scouting — Key Threats**: Who are the scariest teams you'll likely face in playoffs?
+   - Top 8-10 teams you're most worried about and why
+   - How do you defend against or outscore each threat?
+   - Any teams with specific weaknesses to exploit?
+
+5. **Worst-Case Scenarios**: What happens if...
+   - Your best shooter disconnects?
+   - You face the #1 alliance?
+   - A robot breaks down mid-match?
+
+6. **RP Strategy**: How do you consistently get bonus RPs?
+   - Energized (hub>=100) — is your alliance capable?
+   - Traversal (tower>=50) — climb assignment plan
+   - When to play safe vs aggressive
+
+Be specific, actionable, and decisive. This is for the drive team and strategy leads.`;
 }
 
 export function buildMatchPreviewPrompt(
@@ -356,7 +628,7 @@ ${formatAllianceTeams(blueTeams, 'Blue')}
 1. **Predicted Winner**: Which alliance is favored and by how much?
 2. **Scoring Breakdown**: Expected auto, teleop, and endgame points per alliance.
 3. **RP Predictions**: Likelihood of each alliance achieving Energized, Supercharged, and Traversal RPs.
-4. **Key Matchup Factors**: What will decide this match? (e.g., "If Team X climbs L3, Red wins")
+4. **Key Matchup Factors**: What will decide this match? (e.g., "If Team X's passing enables Team Y to score 10+ teleop balls, Red wins")
 5. **Upset Potential**: Could the underdog win? What would need to happen?`;
 }
 
