@@ -1,108 +1,29 @@
-import { useMemo, useCallback } from 'react';
+import { useCallback } from 'react';
 import { Printer } from 'lucide-react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { usePitScoutStore } from '../store/usePitScoutStore';
 import { teamKeyToNumber } from '../utils/tbaApi';
-import { matchLabel, matchSortKey } from '../utils/formatting';
-import type { TBAMatch } from '../types/tba';
+import { matchLabel } from '../utils/formatting';
+import { useWatchSchedule } from '../hooks/useWatchSchedule';
+import type { WatchEntry } from '../hooks/useWatchSchedule';
 import type { PitScoutEntry } from '../types/pitScouting';
-
-// ─── Main Component ──────────────────────────────────────────────────────────
 
 function MatchSchedule() {
   const tbaData = useAnalyticsStore(s => s.tbaData);
-  const homeTeamNumber = useAnalyticsStore(s => s.homeTeamNumber);
   const eventCode = useAnalyticsStore(s => s.eventCode);
   const pitEntries = usePitScoutStore(s => s.entries);
 
-  const homeKey = `frc${homeTeamNumber}`;
+  const watchSchedule = useWatchSchedule();
 
-  // All matches sorted
-  const allMatches = useMemo(() => {
-    if (!tbaData?.matches) return [];
-    return [...tbaData.matches].sort((a, b) => matchSortKey(a) - matchSortKey(b));
-  }, [tbaData]);
-
-  // Home team's matches
-  const homeMatches = useMemo(() => {
-    return allMatches.filter(
-      m => m.alliances.red.team_keys.includes(homeKey) || m.alliances.blue.team_keys.includes(homeKey)
-    );
-  }, [allMatches, homeKey]);
-
-  // For a team, find their immediately prior match before a given match
-  const getTeamPriorMatch = useCallback(
-    (teamNumber: number, beforeMatch: TBAMatch): TBAMatch | null => {
-      const teamKey = `frc${teamNumber}`;
-      const beforeSK = matchSortKey(beforeMatch);
-      for (let i = allMatches.length - 1; i >= 0; i--) {
-        const m = allMatches[i];
-        if (matchSortKey(m) >= beforeSK) continue;
-        const teams = [...m.alliances.red.team_keys, ...m.alliances.blue.team_keys];
-        if (teams.includes(teamKey)) return m;
-      }
-      return null;
-    },
-    [allMatches]
-  );
-
-  // Watch schedule: only prior matches for partners/opponents
-  const watchSchedule = useMemo(() => {
-    if (homeMatches.length === 0) return [];
-
-    const priorMatchMap: Map<string, { teamNumber: number; role: 'partner' | 'opponent'; forMatch: string; forMatchKey: string }[]> = new Map();
-
-    for (const hm of homeMatches) {
-      const homeOnRed = hm.alliances.red.team_keys.includes(homeKey);
-      const partnerKeys = (homeOnRed ? hm.alliances.red.team_keys : hm.alliances.blue.team_keys).filter(tk => tk !== homeKey);
-      const opponentKeys = homeOnRed ? hm.alliances.blue.team_keys : hm.alliances.red.team_keys;
-
-      const addPrior = (teamKey: string, role: 'partner' | 'opponent') => {
-        const num = teamKeyToNumber(teamKey);
-        const prior = getTeamPriorMatch(num, hm);
-        if (!prior) return;
-        if (!priorMatchMap.has(prior.key)) priorMatchMap.set(prior.key, []);
-        priorMatchMap.get(prior.key)!.push({ teamNumber: num, role, forMatch: matchLabel(hm), forMatchKey: hm.key });
-      };
-
-      for (const tk of partnerKeys) addPrior(tk, 'partner');
-      for (const tk of opponentKeys) addPrior(tk, 'opponent');
-    }
-
-    const schedule: {
-      match: TBAMatch;
-      teamsToWatch: { teamNumber: number; role: 'partner' | 'opponent'; forMatch: string }[];
-    }[] = [];
-
-    for (const m of allMatches) {
-      const entries = priorMatchMap.get(m.key);
-      if (!entries) continue;
-      const seen = new Set<string>();
-      const deduped = entries.filter(e => {
-        const key = `${e.teamNumber}-${e.forMatchKey}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-      schedule.push({ match: m, teamsToWatch: deduped });
-    }
-
-    return schedule;
-  }, [allMatches, homeMatches, homeKey, getTeamPriorMatch]);
-
-  // Drive type lookup
   const getDriveType = useCallback(
     (teamNumber: number) => pitEntries.find(e => e.teamNumber === teamNumber)?.driveType || null,
     [pitEntries]
   );
 
-  // ─── PDF Export ──────────────────────────────────────────────────────────────
-
   const printMatchPrep = useCallback(() => {
     const body = buildWatchHTML(watchSchedule, pitEntries, eventCode);
-
     const html = `<!DOCTYPE html>
-<html><head><title>Match Prep - ${eventCode}</title>
+<html><head><title>Watch Schedule - ${eventCode}</title>
 <style>
   * { box-sizing: border-box; }
   body { font-family: Arial, sans-serif; padding: 16px; font-size: 11px; color: #111; }
@@ -118,16 +39,9 @@ function MatchSchedule() {
   @media print { body { padding: 8px; } }
 </style></head>
 <body>${body}</body></html>`;
-
     const win = window.open('', '_blank');
-    if (win) {
-      win.document.write(html);
-      win.document.close();
-      win.print();
-    }
+    if (win) { win.document.write(html); win.document.close(); win.print(); }
   }, [watchSchedule, pitEntries, eventCode]);
-
-  // ─── Render ──────────────────────────────────────────────────────────────────
 
   if (!tbaData?.matches?.length) {
     return (
@@ -140,7 +54,6 @@ function MatchSchedule() {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="text-2xl font-bold">Match Prep</h1>
         <button
@@ -152,68 +65,108 @@ function MatchSchedule() {
         </button>
       </div>
 
-      {/* Watch Schedule */}
-      <div className="space-y-0">
-        {watchSchedule.length === 0 && (
-          <p className="text-textSecondary text-sm py-4 text-center">No prior matches to watch yet.</p>
-        )}
-        {/* Column headers */}
-        {watchSchedule.length > 0 && (
-          <div className="grid grid-cols-[50px_70px_1fr_1fr] gap-2 px-3 py-1.5 text-[10px] font-bold text-textMuted uppercase tracking-wide border-b border-border">
-            <span>Match</span>
-            <span>Prep for</span>
-            <span>Partners</span>
-            <span>Opponents</span>
-          </div>
-        )}
-        {watchSchedule.map(({ match: m, teamsToWatch }) => {
-          const played = m.alliances.red.score >= 0;
-          const redSet = new Set(m.alliances.red.team_keys.map(teamKeyToNumber));
-          const partnerTeams = teamsToWatch.filter(tw => tw.role === 'partner');
-          const opponentTeams = teamsToWatch.filter(tw => tw.role === 'opponent');
+      <WatchScheduleTable watchSchedule={watchSchedule} getDriveType={getDriveType} />
+    </div>
+  );
+}
 
-          const renderTeam = (tw: typeof teamsToWatch[0], i: number) => {
-            const onRed = redSet.has(tw.teamNumber);
-            const drive = getDriveType(tw.teamNumber);
-            return (
-              <span key={`${tw.teamNumber}-${i}`} className="inline-flex items-center gap-1">
-                <span className={`font-bold font-mono ${onRed ? 'text-redAlliance' : 'text-blueAlliance'}`}>
-                  {tw.teamNumber}
-                </span>
-                {drive && (
-                  <span className={`text-[9px] px-1 py-0 rounded ${onRed ? 'bg-redAlliance/10 text-redAlliance' : 'bg-blueAlliance/10 text-blueAlliance'}`}>
-                    {drive}
-                  </span>
-                )}
-              </span>
-            );
-          };
+// ─── Shared Watch Schedule Table ─────────────────────────────────────────────
 
-          return (
-            <div key={m.key} className={`grid grid-cols-[50px_70px_1fr_1fr] gap-2 items-center px-3 py-2 border-b border-border/50 text-xs ${played ? 'opacity-50' : ''}`}>
-              <span className={`font-bold ${played ? 'text-textMuted' : 'text-textPrimary'}`}>
-                {matchLabel(m)}
-              </span>
+export interface WatchScheduleTableProps {
+  watchSchedule: WatchEntry[];
+  getDriveType: (teamNumber: number) => string | null;
+  /** If provided, only show rows where at least one team is assigned to this ninja email */
+  filterNinjaEmail?: string;
+  /** Map of teamNumber → { ninjaName, ninjaEmail } */
+  ninjaByTeam?: Map<number, { ninjaName: string; ninjaEmail: string }>;
+}
 
-              <div className="flex flex-wrap gap-1">
-                {[...new Set(teamsToWatch.map(tw => tw.forMatch))].map(fm => (
-                  <span key={fm} className="font-bold text-warning bg-warning/10 px-1.5 py-0.5 rounded">{fm}</span>
-                ))}
-              </div>
+export function WatchScheduleTable({ watchSchedule, getDriveType, filterNinjaEmail, ninjaByTeam }: WatchScheduleTableProps) {
+  const filteredSchedule = filterNinjaEmail
+    ? watchSchedule.filter(({ teamsToWatch }) =>
+        teamsToWatch.some(tw => ninjaByTeam?.get(tw.teamNumber)?.ninjaEmail === filterNinjaEmail)
+      )
+    : watchSchedule;
 
-              <div className="flex flex-wrap items-center gap-2">
-                {partnerTeams.map(renderTeam)}
-                {partnerTeams.length === 0 && <span className="text-textMuted">—</span>}
-              </div>
+  if (filteredSchedule.length === 0) {
+    return <p className="text-textSecondary text-sm py-4 text-center">No prior matches to watch yet.</p>;
+  }
 
-              <div className="flex flex-wrap items-center gap-2">
-                {opponentTeams.map(renderTeam)}
-                {opponentTeams.length === 0 && <span className="text-textMuted">—</span>}
-              </div>
-            </div>
-          );
-        })}
+  const showNinjaCols = !!ninjaByTeam;
+
+  return (
+    <div className="space-y-0">
+      {/* Column headers */}
+      <div className={`grid gap-2 px-3 py-1.5 text-[10px] font-bold text-textMuted uppercase tracking-wide border-b border-border ${showNinjaCols ? 'grid-cols-[50px_70px_1fr_1fr]' : 'grid-cols-[50px_70px_1fr_1fr]'}`}>
+        <span>Match</span>
+        <span>Prep For</span>
+        <span>Partners</span>
+        <span>Opponents</span>
       </div>
+
+      {filteredSchedule.map(({ match: m, teamsToWatch }) => {
+        const played = m.alliances.red.score >= 0;
+        const redSet = new Set(m.alliances.red.team_keys.map(teamKeyToNumber));
+        const partnerTeams = teamsToWatch.filter(tw => tw.role === 'partner');
+        const opponentTeams = teamsToWatch.filter(tw => tw.role === 'opponent');
+
+        // Group prep-for labels with spacing if multiple
+        const prepLabels = [...new Set(teamsToWatch.map(tw => tw.forMatch))];
+
+        const renderTeam = (tw: typeof teamsToWatch[0], i: number) => {
+          const onRed = redSet.has(tw.teamNumber);
+          const drive = getDriveType(tw.teamNumber);
+          const ninja = ninjaByTeam?.get(tw.teamNumber);
+          const isHighlighted = filterNinjaEmail && ninja?.ninjaEmail === filterNinjaEmail;
+          return (
+            <span key={`${tw.teamNumber}-${i}`} className={`inline-flex items-center gap-1 ${isHighlighted ? 'ring-1 ring-warning/50 rounded px-0.5' : ''}`}>
+              <span className={`font-bold font-mono ${onRed ? 'text-redAlliance' : 'text-blueAlliance'}`}>
+                {tw.teamNumber}
+              </span>
+              {drive && (
+                <span className={`text-[9px] px-1 py-0 rounded ${onRed ? 'bg-redAlliance/10 text-redAlliance' : 'bg-blueAlliance/10 text-blueAlliance'}`}>
+                  {drive}
+                </span>
+              )}
+              {ninja && (
+                <span className="text-[9px] px-1 py-0 rounded bg-warning/10 text-warning font-semibold">
+                  {ninja.ninjaName.split(' ')[0]}
+                </span>
+              )}
+            </span>
+          );
+        };
+
+        return (
+          <div
+            key={m.key}
+            className={`grid grid-cols-[50px_70px_1fr_1fr] gap-2 items-start px-3 py-2 border-b border-border/50 text-xs ${played ? 'opacity-50' : ''}`}
+          >
+            <span className={`font-bold pt-0.5 ${played ? 'text-textMuted' : 'text-textPrimary'}`}>
+              {matchLabel(m)}
+            </span>
+
+            <div className="flex flex-col gap-0.5 pt-0.5">
+              {prepLabels.map((fm, idx) => (
+                <span key={fm}>
+                  <span className="font-bold text-warning bg-warning/10 px-1.5 py-0.5 rounded">{fm}</span>
+                  {idx < prepLabels.length - 1 && <span className="block h-1" />}
+                </span>
+              ))}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {partnerTeams.map(renderTeam)}
+              {partnerTeams.length === 0 && <span className="text-textMuted">—</span>}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {opponentTeams.map(renderTeam)}
+              {opponentTeams.length === 0 && <span className="text-textMuted">—</span>}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -221,7 +174,7 @@ function MatchSchedule() {
 // ─── PDF HTML Builder ────────────────────────────────────────────────────────
 
 function buildWatchHTML(
-  watchSchedule: { match: TBAMatch; teamsToWatch: { teamNumber: number; role: 'partner' | 'opponent'; forMatch: string }[] }[],
+  watchSchedule: WatchEntry[],
   pitEntries: PitScoutEntry[],
   eventCode: string
 ): string {
@@ -245,13 +198,7 @@ function buildWatchHTML(
     };
 
     const prepFor = [...new Set(teamsToWatch.map(tw => tw.forMatch))].join(', ');
-
-    html += `<tr>`;
-    html += `<td><strong>${matchLabel(m)}</strong></td>`;
-    html += `<td class="prep">${prepFor}</td>`;
-    html += `<td>${formatTeams(partners)}</td>`;
-    html += `<td>${formatTeams(opponents)}</td>`;
-    html += `</tr>`;
+    html += `<tr><td><strong>${matchLabel(m)}</strong></td><td class="prep">${prepFor}</td><td>${formatTeams(partners)}</td><td>${formatTeams(opponents)}</td></tr>`;
   }
 
   html += `</tbody></table>`;

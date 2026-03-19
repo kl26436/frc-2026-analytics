@@ -1,9 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Eye, UserPlus, X, ChevronRight, StickyNote, Clock, Search } from 'lucide-react';
+import { Eye, UserPlus, X, ChevronRight, StickyNote, Clock, Search, Binoculars } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { useNinjaStore } from '../store/useNinjaStore';
+import { usePitScoutStore } from '../store/usePitScoutStore';
+import { useWatchSchedule } from '../hooks/useWatchSchedule';
+import { WatchScheduleTable } from './MatchSchedule';
 import { NINJA_TAG_LABELS, NINJA_TAG_COLORS } from '../types/ninja';
 import type { NinjaTag } from '../types/ninja';
 
@@ -21,9 +24,13 @@ function NinjaDashboard() {
   const removeAssignment = useNinjaStore(s => s.removeAssignment);
   const unsubscribeAll = useNinjaStore(s => s.unsubscribeAll);
 
+  const pitEntries = usePitScoutStore(s => s.entries);
+  const watchSchedule = useWatchSchedule();
+
   const [searchQuery, setSearchQuery] = useState('');
   const [assigningTeam, setAssigningTeam] = useState<number | null>(null);
   const [selectedNinjaEmail, setSelectedNinjaEmail] = useState('');
+  const [watchNinjaFilter, setWatchNinjaFilter] = useState<string>(''); // '' = all
 
   // Subscribe to data on mount
   useEffect(() => {
@@ -177,6 +184,31 @@ function NinjaDashboard() {
 
   const totalTeams = allTeams.length;
   const assignedCount = allTeams.filter(t => assignments[String(t.number)]).length;
+
+  // Map teamNumber → ninja assignment (for watch schedule display)
+  const ninjaByTeam = useMemo(() => {
+    const map = new Map<number, { ninjaName: string; ninjaEmail: string }>();
+    for (const [teamStr, a] of Object.entries(assignments)) {
+      map.set(Number(teamStr), { ninjaName: a.ninjaName, ninjaEmail: a.ninjaEmail });
+    }
+    return map;
+  }, [assignments]);
+
+  // Drive type lookup
+  const getDriveType = (teamNumber: number) =>
+    pitEntries.find(e => e.teamNumber === teamNumber)?.driveType || null;
+
+  // Ninja options for the watch schedule filter
+  const ninjaOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const a of Object.values(assignments)) {
+      seen.set(a.ninjaEmail, a.ninjaName);
+    }
+    return [...seen.entries()].map(([email, name]) => ({ email, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [assignments]);
+
+  // Effective filter: admins can pick, non-admins locked to self
+  const effectiveWatchFilter = isAdmin ? watchNinjaFilter : userEmail;
 
   const formatRelativeTime = (iso: string) => {
     const diff = Date.now() - new Date(iso).getTime();
@@ -463,6 +495,41 @@ function NinjaDashboard() {
           <Eye size={48} className="mx-auto mb-3 text-textMuted" />
           <h2 className="text-xl font-bold mb-1">No Teams Found</h2>
           <p className="text-textSecondary">Set an event code in Admin Settings and sync TBA data to see teams.</p>
+        </div>
+      )}
+
+      {/* Watch Schedule */}
+      {watchSchedule.length > 0 && (
+        <div className="bg-surface rounded-lg border border-border overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+            <h2 className="font-bold flex items-center gap-2">
+              <Binoculars size={16} />
+              Watch Schedule
+            </h2>
+            {isAdmin && ninjaOptions.length > 0 && (
+              <select
+                value={watchNinjaFilter}
+                onChange={e => setWatchNinjaFilter(e.target.value)}
+                className="text-xs px-2 py-1 bg-card border border-border rounded text-textPrimary focus:outline-none focus:border-success"
+              >
+                <option value="">All Ninjas</option>
+                {ninjaOptions.map(n => (
+                  <option key={n.email} value={n.email}>{n.name}</option>
+                ))}
+              </select>
+            )}
+            {!isAdmin && (
+              <span className="text-xs text-textMuted">Showing your teams</span>
+            )}
+          </div>
+          <div className="overflow-x-auto">
+            <WatchScheduleTable
+              watchSchedule={watchSchedule}
+              getDriveType={getDriveType}
+              filterNinjaEmail={effectiveWatchFilter || undefined}
+              ninjaByTeam={ninjaByTeam}
+            />
+          </div>
         </div>
       )}
     </div>
