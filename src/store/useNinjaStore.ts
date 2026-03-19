@@ -5,9 +5,16 @@ import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage
 import { db, storage } from '../lib/firebase';
 import type { NinjaAssignment, NinjaNote, NinjaAssignmentsDoc } from '../types/ninja';
 
+interface OfflineNoteOp {
+  type: 'add' | 'update' | 'delete';
+  eventCode: string;
+  note: NinjaNote;
+}
+
 interface NinjaState {
   assignments: Record<string, NinjaAssignment>; // keyed by team number string
   notes: NinjaNote[];
+  notesQueue: OfflineNoteOp[];
   loading: boolean;
   error: string | null;
 
@@ -30,6 +37,9 @@ interface NinjaState {
   uploadNinjaPhoto: (teamNumber: number, eventCode: string, file: File) => Promise<{ url: string; path: string }>;
   deleteNinjaPhoto: (path: string) => Promise<void>;
 
+  // Sync
+  syncNotesQueue: () => Promise<void>;
+
   // Cleanup
   unsubscribeAll: () => void;
 }
@@ -39,6 +49,7 @@ export const useNinjaStore = create<NinjaState>()(
     (set, get) => ({
       assignments: {},
       notes: [],
+      notesQueue: [],
       loading: false,
       error: null,
       _notesUnsubscribe: null,
@@ -105,13 +116,22 @@ export const useNinjaStore = create<NinjaState>()(
         const unsubscribe = onSnapshot(
           q,
           (snapshot) => {
-            const notes: NinjaNote[] = snapshot.docs.map(d => ({
+            const serverNotes: NinjaNote[] = snapshot.docs.map(d => ({
               ...(d.data() as Omit<NinjaNote, 'id'>),
               id: d.id,
             }));
-            // Sort newest first
-            notes.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-            set({ notes });
+
+            // Preserve locally-queued notes (temp IDs) not yet in Firestore
+            const { notesQueue } = get();
+            const queuedAdds = notesQueue
+              .filter(op => op.type === 'add')
+              .map(op => op.note);
+            const serverIds = new Set(serverNotes.map(n => n.id));
+            const localOnly = queuedAdds.filter(n => !serverIds.has(n.id));
+
+            const merged = [...serverNotes, ...localOnly];
+            merged.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+            set({ notes: merged });
           },
           (err) => {
             console.error('Ninja notes listener error:', err);
@@ -123,33 +143,121 @@ export const useNinjaStore = create<NinjaState>()(
       },
 
       addNote: async (eventCode, noteData) => {
-        const notesRef = collection(db, 'ninjaNotes', eventCode, 'notes');
         const now = new Date().toISOString();
-        const docData = {
-          ...noteData,
-          createdAt: now,
-          updatedAt: now,
-        };
-        const docRef = await addDoc(notesRef, docData);
-        return docRef.id;
+
+        // Generate a temp local ID; replaced with real Firestore ID on sync
+        const tempId = `offline_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        const note: NinjaNote = { ...noteData, id: tempId, createdAt: now, updatedAt: now };
+
+        // Always show locally immediately
+        set(state => ({
+          notes: [note, ...state.notes],
+        }));
+
+        if (!navigator.onLine) {
+          set(state => ({
+            notesQueue: [...state.notesQueue, { type: 'add', eventCode, note }],
+          }));
+          return tempId;
+        }
+
+        try {
+          const notesRef = collection(db, 'ninjaNotes', eventCode, 'notes');
+          const { id: _tempId, ...docData } = note;
+          const docRef = await addDoc(notesRef, docData);
+
+          // Replace temp note with real Firestore ID in state
+          set(state => ({
+            notes: state.notes.map(n => n.id === tempId ? { ...note, id: docRef.id } : n),
+          }));
+
+          return docRef.id;
+        } catch {
+          // Went offline during the write — queue it
+          set(state => ({
+            notesQueue: [...state.notesQueue, { type: 'add', eventCode, note }],
+          }));
+          return tempId;
+        }
       },
 
       updateNote: async (eventCode, noteId, updates) => {
-        const noteRef = doc(db, 'ninjaNotes', eventCode, 'notes', noteId);
-        await updateDoc(noteRef, {
-          ...updates,
-          updatedAt: new Date().toISOString(),
-        });
+        const now = new Date().toISOString();
+        const existing = get().notes.find(n => n.id === noteId);
+        if (!existing) return;
+
+        const updatedNote: NinjaNote = { ...existing, ...updates, updatedAt: now };
+        const isTemp = noteId.startsWith('offline_');
+
+        // Update local state immediately
+        set(state => ({
+          notes: state.notes.map(n => n.id === noteId ? updatedNote : n),
+        }));
+
+        if (isTemp || !navigator.onLine) {
+          // For temp notes: update the queued add op
+          // For online→offline: add an update op
+          set(state => ({
+            notesQueue: isTemp
+              ? state.notesQueue.map(op =>
+                  op.type === 'add' && op.note.id === noteId ? { ...op, note: updatedNote } : op
+                )
+              : [...state.notesQueue, { type: 'update', eventCode, note: updatedNote }],
+          }));
+          return;
+        }
+
+        try {
+          const noteRef = doc(db, 'ninjaNotes', eventCode, 'notes', noteId);
+          await updateDoc(noteRef, { ...updates, updatedAt: now });
+        } catch {
+          if (!navigator.onLine) {
+            set(state => ({
+              notesQueue: [...state.notesQueue, { type: 'update', eventCode, note: updatedNote }],
+            }));
+          }
+        }
       },
 
       deleteNote: async (eventCode, noteId) => {
-        // Delete associated photos first
         const note = get().notes.find(n => n.id === noteId);
-        if (note?.photos?.length) {
-          await Promise.all(note.photos.map(p => get().deleteNinjaPhoto(p.path)));
+        const isTemp = noteId.startsWith('offline_');
+
+        // Remove from local state immediately
+        set(state => ({
+          notes: state.notes.filter(n => n.id !== noteId),
+        }));
+
+        if (isTemp) {
+          // Never reached Firestore — just remove the queued add op
+          set(state => ({
+            notesQueue: state.notesQueue.filter(op => !(op.type === 'add' && op.note.id === noteId)),
+          }));
+          return;
         }
-        const noteRef = doc(db, 'ninjaNotes', eventCode, 'notes', noteId);
-        await deleteDoc(noteRef);
+
+        if (!navigator.onLine) {
+          if (note) {
+            set(state => ({
+              notesQueue: [...state.notesQueue, { type: 'delete', eventCode, note }],
+            }));
+          }
+          return;
+        }
+
+        try {
+          if (note?.photos?.length) {
+            await Promise.all(note.photos.map(p => get().deleteNinjaPhoto(p.path)));
+          }
+          const noteRef = doc(db, 'ninjaNotes', eventCode, 'notes', noteId);
+          await deleteDoc(noteRef);
+        } catch {
+          if (!navigator.onLine && note) {
+            set(state => ({
+              notesQueue: [...state.notesQueue, { type: 'delete', eventCode, note }],
+            }));
+          }
+        }
       },
 
       uploadNinjaPhoto: async (teamNumber, eventCode, file) => {
@@ -169,6 +277,44 @@ export const useNinjaStore = create<NinjaState>()(
         }
       },
 
+      syncNotesQueue: async () => {
+        const { notesQueue } = get();
+        if (notesQueue.length === 0) return;
+
+        const failed: OfflineNoteOp[] = [];
+        for (const op of notesQueue) {
+          try {
+            const notesRef = collection(db, 'ninjaNotes', op.eventCode, 'notes');
+            if (op.type === 'add') {
+              const { id: tempId, ...docData } = op.note;
+              const docRef = await addDoc(notesRef, docData);
+              // Replace temp ID with real Firestore ID in local state
+              set(state => ({
+                notes: state.notes.map(n => n.id === tempId ? { ...op.note, id: docRef.id } : n),
+              }));
+            } else if (op.type === 'update') {
+              const noteRef = doc(db, 'ninjaNotes', op.eventCode, 'notes', op.note.id);
+              await updateDoc(noteRef, {
+                text: op.note.text,
+                tags: op.note.tags,
+                matchNumber: op.note.matchNumber,
+                photos: op.note.photos,
+                updatedAt: op.note.updatedAt,
+              });
+            } else if (op.type === 'delete') {
+              if (op.note.photos?.length) {
+                await Promise.all(op.note.photos.map(p => get().deleteNinjaPhoto(p.path)));
+              }
+              const noteRef = doc(db, 'ninjaNotes', op.eventCode, 'notes', op.note.id);
+              await deleteDoc(noteRef);
+            }
+          } catch {
+            failed.push(op);
+          }
+        }
+        set({ notesQueue: failed });
+      },
+
       unsubscribeAll: () => {
         get()._notesUnsubscribe?.();
         get()._assignmentsUnsubscribe?.();
@@ -179,7 +325,24 @@ export const useNinjaStore = create<NinjaState>()(
       name: 'ninja-store',
       partialize: (state) => ({
         assignments: state.assignments,
+        notes: state.notes,
+        notesQueue: state.notesQueue,
       }),
+      merge: (persisted, current) => {
+        const p = persisted as Partial<NinjaState> | undefined;
+        return {
+          ...current,
+          ...p,
+          notesQueue: p?.notesQueue ?? [],
+        };
+      },
     }
   )
 );
+
+// Auto-sync when browser comes back online
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => {
+    useNinjaStore.getState().syncNotesQueue();
+  });
+}

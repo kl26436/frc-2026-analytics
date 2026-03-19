@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Camera, Save, Loader2, CheckCircle, ChevronLeft, Download, Printer, ClipboardCheck, MessageSquare, UserPlus, X, Clipboard } from 'lucide-react';
+import { Camera, Save, Loader2, CheckCircle, ChevronLeft, Download, Printer, ClipboardCheck, MessageSquare, UserPlus, X, Clipboard, WifiOff, RefreshCw } from 'lucide-react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { usePitScoutStore } from '../store/usePitScoutStore';
 import { useFirebaseAuth } from '../hooks/useFirebaseAuth';
@@ -15,7 +15,7 @@ function PitScouting() {
   const eventCode = useAnalyticsStore(state => state.eventCode);
   const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
   const robotPictures = useAnalyticsStore(state => state.robotPictures);
-  const { entries, error, lastScoutName, setLastScoutName, addEntry, uploadPhoto, loadEntriesFromFirestore } = usePitScoutStore();
+  const { entries, offlineQueue, error, lastScoutName, setLastScoutName, addEntry, uploadPhoto, loadEntriesFromFirestore, syncOfflineQueue } = usePitScoutStore();
   const { user, loading: authLoading, signIn } = useFirebaseAuth();
   const { isAdmin, accessConfig, userProfiles } = useAuth();
 
@@ -32,6 +32,8 @@ function PitScouting() {
   const [formData, setFormData] = useState<Omit<PitScoutEntry, 'id' | 'timestamp'> | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [savedOffline, setSavedOffline] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
   const [formTab, setFormTab] = useState<'pit' | 'inspection' | 'notes'>('pit');
 
   // Ninja notes integration
@@ -131,10 +133,16 @@ function PitScouting() {
       });
 
       setLastScoutName(scoutName);
+      const wasQueued = !navigator.onLine;
       setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      setSavedOffline(wasQueued);
+      setTimeout(() => {
+        setSaved(false);
+        setSavedOffline(false);
+        setSelectedTeam(null);
+      }, 1200);
     } catch {
-      // save failed — setSaving(false) in finally handles UI
+      // real error (not network) — setSaving(false) in finally handles UI
     } finally {
       setSaving(false);
     }
@@ -212,6 +220,27 @@ function PitScouting() {
         {error && (
           <div className="bg-danger/10 border border-danger/30 text-danger px-4 py-3 rounded-lg">
             {error}
+          </div>
+        )}
+
+        {(offlineQueue.length > 0 || ninjaStore.notesQueue.length > 0) && (
+          <div className="flex items-center justify-between gap-3 bg-warning/10 border border-warning/30 text-warning px-4 py-3 rounded-lg">
+            <div className="flex items-center gap-2">
+              <WifiOff size={16} />
+              <span className="text-sm font-medium">
+                {[
+                  offlineQueue.length > 0 && `${offlineQueue.length} ${offlineQueue.length === 1 ? 'entry' : 'entries'}`,
+                  ninjaStore.notesQueue.length > 0 && `${ninjaStore.notesQueue.length} ${ninjaStore.notesQueue.length === 1 ? 'note' : 'notes'}`,
+                ].filter(Boolean).join(' · ')} saved offline — will sync when connected
+              </span>
+            </div>
+            <button
+              onClick={() => { syncOfflineQueue(); ninjaStore.syncNotesQueue(); }}
+              className="flex items-center gap-1 text-sm font-semibold hover:opacity-70 transition-opacity"
+            >
+              <RefreshCw size={14} />
+              Sync now
+            </button>
           </div>
         )}
 
@@ -452,6 +481,20 @@ function PitScouting() {
           </button>
         ))}
       </div>
+
+      {offlineQueue.some(e => e.teamNumber === selectedTeam) && (
+        <div className="flex items-center gap-2 bg-warning/10 border border-warning/30 text-warning px-4 py-2.5 rounded-lg text-sm">
+          <WifiOff size={15} />
+          <span>Saved locally — will sync to cloud when reconnected</span>
+        </div>
+      )}
+
+      {photoError && (
+        <div className="flex items-center gap-2 bg-danger/10 border border-danger/30 text-danger px-4 py-2.5 rounded-lg text-sm">
+          <WifiOff size={15} />
+          <span>{photoError}</span>
+        </div>
+      )}
 
       {/* ═══ PIT SCOUT TAB ═══ */}
       {formTab === 'pit' && <>
@@ -871,15 +914,25 @@ function PitScouting() {
           <input ref={wiringCameraRef} type="file" accept="image/*" capture="environment" onChange={async (e) => {
             const file = e.target.files?.[0];
             if (!file || !selectedTeam) return;
-            const result = await uploadPhoto(selectedTeam, eventCode, file);
-            updateField('wiringPhotoUrl', result.url);
+            try {
+              const result = await uploadPhoto(selectedTeam, eventCode, file);
+              updateField('wiringPhotoUrl', result.url);
+            } catch {
+              setPhotoError('Photo upload failed — reconnect and try again.');
+              setTimeout(() => setPhotoError(null), 4000);
+            }
             e.target.value = '';
           }} className="hidden" />
           <input ref={complexityCameraRef} type="file" accept="image/*" capture="environment" onChange={async (e) => {
             const file = e.target.files?.[0];
             if (!file || !selectedTeam) return;
-            const result = await uploadPhoto(selectedTeam, eventCode, file);
-            updateField('complexityPhotoUrl', result.url);
+            try {
+              const result = await uploadPhoto(selectedTeam, eventCode, file);
+              updateField('complexityPhotoUrl', result.url);
+            } catch {
+              setPhotoError('Photo upload failed — reconnect and try again.');
+              setTimeout(() => setPhotoError(null), 4000);
+            }
             e.target.value = '';
           }} className="hidden" />
         </div>
@@ -887,6 +940,13 @@ function PitScouting() {
 
       {/* ═══ NOTES TAB ═══ */}
       {formTab === 'notes' && selectedTeam && <>
+        {ninjaStore.notesQueue.some(op => op.note.teamNumber === selectedTeam) && (
+          <div className="flex items-center gap-2 bg-warning/10 border border-warning/30 text-warning px-4 py-2.5 rounded-lg text-sm">
+            <WifiOff size={15} />
+            <span>Notes saved locally — will sync when reconnected</span>
+          </div>
+        )}
+
         {/* Add note form */}
         <div className="bg-surface p-4 rounded-lg border border-border space-y-3">
           <h2 className="font-bold text-lg">Add Note</h2>
@@ -956,11 +1016,23 @@ function PitScouting() {
               disabled={!noteText.trim()}
               onClick={async () => {
                 if (!noteText.trim() || !user?.email) return;
-                // Upload note photos
+                // Upload note photos — skip if offline (photos require connectivity)
                 const uploadedPhotos: { url: string; path: string; caption: string }[] = [];
-                for (const photo of notePhotos) {
-                  const result = await uploadPhoto(selectedTeam, eventCode, photo.file);
-                  uploadedPhotos.push({ url: result.url, path: result.path, caption: '' });
+                if (notePhotos.length > 0) {
+                  if (!navigator.onLine) {
+                    setPhotoError('Photos require connectivity — note will be saved without them.');
+                    setTimeout(() => setPhotoError(null), 4000);
+                  } else {
+                    for (const photo of notePhotos) {
+                      try {
+                        const result = await uploadPhoto(selectedTeam, eventCode, photo.file);
+                        uploadedPhotos.push({ url: result.url, path: result.path, caption: '' });
+                      } catch {
+                        setPhotoError('Photo upload failed — note saved without it.');
+                        setTimeout(() => setPhotoError(null), 4000);
+                      }
+                    }
+                  }
                 }
                 await ninjaStore.addNote(eventCode, {
                   teamNumber: selectedTeam,
@@ -992,10 +1064,11 @@ function PitScouting() {
             .filter(n => n.teamNumber === selectedTeam)
             .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
             .map(note => (
-              <div key={note.id} className="bg-surface p-3 rounded-lg border border-border">
+              <div key={note.id} className={`bg-surface p-3 rounded-lg border ${note.id.startsWith('offline_') ? 'border-warning/40' : 'border-border'}`}>
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-xs font-semibold text-textSecondary">{note.authorName}</span>
                   {note.matchNumber && <span className="text-xs text-blueAlliance font-medium">Q{note.matchNumber}</span>}
+                  {note.id.startsWith('offline_') && <WifiOff size={11} className="text-warning" aria-label="Pending sync" />}
                   <span className="text-xs text-textMuted ml-auto">{new Date(note.createdAt).toLocaleString()}</span>
                 </div>
                 <p className="text-sm text-textPrimary">{note.text}</p>
@@ -1032,17 +1105,24 @@ function PitScouting() {
             disabled={saving || !formData.coachName.trim()}
             className={`w-full flex items-center justify-center gap-2 px-6 py-4 font-bold text-lg rounded-lg transition-colors ${
               saved
-                ? 'bg-success text-background'
+                ? savedOffline ? 'bg-warning text-background' : 'bg-success text-background'
                 : 'bg-success text-background hover:bg-success/90 disabled:opacity-50 disabled:cursor-not-allowed'
             }`}
           >
             {saving ? (
               <Loader2 size={24} className="animate-spin" />
             ) : saved ? (
-              <>
-                <CheckCircle size={24} />
-                Saved!
-              </>
+              savedOffline ? (
+                <>
+                  <WifiOff size={24} />
+                  Saved offline
+                </>
+              ) : (
+                <>
+                  <CheckCircle size={24} />
+                  Saved!
+                </>
+              )
             ) : (
               <>
                 <Save size={24} />
