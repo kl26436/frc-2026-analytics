@@ -54,6 +54,7 @@ interface PickListState {
   getWatchlistTeams: () => PickListTeam[];
 
   // Bulk operations
+  setTeams: (teams: PickListTeam[]) => void;
   clearPickList: () => void;
   clearAllFlags: () => void;
   exportPickList: () => string; // Returns JSON string
@@ -567,6 +568,19 @@ export const usePickListStore = create<PickListState>()(
               ...pickList.config,
               lastUpdated: new Date().toISOString(),
             },
+          },
+        });
+      },
+
+      // Bulk-set all teams (used by drag-and-drop to commit pre-computed ranks)
+      setTeams: (teams) => {
+        const { pickList } = get();
+        if (!pickList) return;
+        set({
+          pickList: {
+            ...pickList,
+            teams,
+            config: { ...pickList.config, lastUpdated: new Date().toISOString() },
           },
         });
       },

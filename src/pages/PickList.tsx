@@ -1742,6 +1742,7 @@ function PickList() {
   const exportPickList = usePickListStore(state => state.exportPickList);
   const importPickList = usePickListStore(state => state.importPickList);
   const moveTeam = usePickListStore(state => state.moveTeam);
+  const setTeams = usePickListStore(state => state.setTeams);
   const moveTeamAbove = usePickListStore(state => state.moveTeamAbove);
   const redFlagThresholds = usePickListStore(state => state.redFlagThresholds);
   const setRedFlagThresholds = usePickListStore(state => state.setRedFlagThresholds);
@@ -1949,19 +1950,14 @@ function PickList() {
     });
   };
 
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active } = event;
+  const handleDragEnd = (_event: DragEndEvent) => {
     setActiveId(null);
     const finalItems = personalDragItems;
     setPersonalDragItems(null);
     if (!finalItems || !pickList) return;
-    const activeNum = parseInt(active.id.toString().replace('team-', ''));
-    const finalTeam = finalItems.find(t => t.teamNumber === activeNum);
-    const originalTeam = pickList.teams.find(t => t.teamNumber === activeNum);
-    if (!finalTeam || !originalTeam) return;
-    if (finalTeam.tier !== originalTeam.tier || finalTeam.rank !== originalTeam.rank) {
-      moveTeam(activeNum, finalTeam.tier, finalTeam.rank);
-    }
+    // Commit the pre-computed ranks directly (applyLiveSameTierMove/CrossTierMove
+    // already recalculated all ranks correctly during drag)
+    setTeams(finalItems);
   };
 
 
