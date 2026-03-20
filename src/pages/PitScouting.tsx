@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Camera, Save, Loader2, CheckCircle, ChevronLeft, Download, Printer, ClipboardCheck, MessageSquare, UserPlus, X, Clipboard, WifiOff, RefreshCw, Binoculars } from 'lucide-react';
+import { Camera, Save, Loader2, CheckCircle, ChevronLeft, Download, Printer, ClipboardCheck, MessageSquare, UserPlus, X, Clipboard, WifiOff, RefreshCw, Binoculars, Search } from 'lucide-react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { usePitScoutStore } from '../store/usePitScoutStore';
 import { useFirebaseAuth } from '../hooks/useFirebaseAuth';
@@ -38,6 +38,7 @@ function PitScouting() {
   const [savedOffline, setSavedOffline] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [formTab, setFormTab] = useState<'pit' | 'inspection' | 'notes'>('pit');
+  const [teamSearch, setTeamSearch] = useState('');
 
   // Auto-select team from URL query param (e.g. /pit-scouting?team=148)
   const [searchParams, setSearchParams] = useSearchParams();
@@ -324,6 +325,43 @@ function PitScouting() {
                 {needsPhotos} scouted team{needsPhotos !== 1 ? 's' : ''} missing photos
               </p>
             ) : null;
+          })()}
+        </div>
+
+        {/* Quick Team Search */}
+        <div className="relative">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-textMuted" />
+          <input
+            type="text"
+            inputMode="numeric"
+            placeholder="Search team number..."
+            value={teamSearch}
+            onChange={e => setTeamSearch(e.target.value)}
+            className="w-full pl-9 pr-3 py-2.5 bg-card border border-border rounded-lg text-textPrimary placeholder-textMuted focus:outline-none focus:border-success"
+          />
+          {teamSearch.trim() && (() => {
+            const matches = teamStatistics.filter(t => String(t.teamNumber).includes(teamSearch.trim()));
+            return matches.length > 0 ? (
+              <div className="absolute z-20 top-full mt-1 w-full bg-surface border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                {matches.map(team => {
+                  const status = getTeamScoutStatus(team.teamNumber);
+                  return (
+                    <button
+                      key={team.teamNumber}
+                      onClick={() => { setSelectedTeam(team.teamNumber); setTeamSearch(''); }}
+                      className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-interactive transition-colors border-b border-border last:border-b-0"
+                    >
+                      <span className={`font-bold ${status.text}`}>{team.teamNumber}</span>
+                      {status.label && <span className="text-xs text-textMuted">{status.label}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="absolute z-20 top-full mt-1 w-full bg-surface border border-border rounded-lg shadow-lg px-4 py-3 text-sm text-textMuted">
+                No teams found
+              </div>
+            );
           })()}
         </div>
 
@@ -1178,7 +1216,7 @@ function PitScouting() {
                   {note.id.startsWith('offline_') && <WifiOff size={11} className="text-warning" aria-label="Pending sync" />}
                   <span className="text-xs text-textMuted ml-auto">{new Date(note.createdAt).toLocaleString()}</span>
                 </div>
-                <p className="text-sm text-textPrimary">{note.text}</p>
+                <p className="text-sm text-textPrimary whitespace-pre-wrap">{note.text}</p>
                 {note.photos && note.photos.length > 0 && (
                   <div className="flex gap-2 mt-2">
                     {note.photos.map((photo, i) => (
