@@ -311,7 +311,23 @@ export const useAnalyticsStore = create<AnalyticsState>()(
         }
 
         const teamFuelStats = aggregateTeamFuel(matchFuelAttribution);
-        set({ matchFuelAttribution, teamFuelStats });
+
+        // Merge FMS-attributed point averages into teamStatistics so all pages
+        // show consistent numbers (FMS-attributed when available, scout fallback)
+        const fuelMap = new Map(teamFuelStats.map(f => [f.teamNumber, f]));
+        const teamStatistics = get().teamStatistics.map(ts => {
+          const fuel = fuelMap.get(ts.teamNumber);
+          if (!fuel) return ts;
+          return {
+            ...ts,
+            avgAutoPoints: fuel.avgAutoPointsScored + fuel.avgAutoTowerPoints,
+            avgTeleopPoints: fuel.avgTeleopPointsScored,
+            avgEndgamePoints: fuel.avgEndgameTowerPoints,
+            avgTotalPoints: fuel.avgTotalPointsScored,
+          };
+        });
+
+        set({ matchFuelAttribution, teamFuelStats, teamStatistics });
         get().calculateLocalOPR();
         get().calculatePredictionInputs();
       },

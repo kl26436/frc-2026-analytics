@@ -159,18 +159,32 @@ export function computeMatchFuelAttribution(
 
     // Check if robot has any FUEL_SCORE or FUEL_PASS actions (trusted signal)
     let hasFuelActions = false;
+    let hasScoreActions = false;
     if (actions) {
       const allActions = [...actions.auto, ...actions.teleop];
-      hasFuelActions = allActions.some(a => a.type === 'FUEL_SCORE' || a.type === 'FUEL_PASS');
+      hasScoreActions = allActions.some(a => a.type === 'FUEL_SCORE');
+      hasFuelActions = hasScoreActions || allActions.some(a => a.type === 'FUEL_PASS');
     }
 
-    // Bulldozed-only = flagged as bulldozer AND has no trusted fuel actions
-    const isBulldozedOnly = !!entry.eff_rep_bulldozed_fuel && !hasFuelActions;
+    // Check summary-level scoring signal (FUEL_SCORE events counted by tablet)
+    const hasSummaryFuel = (entry.auton_FUEL_SCORE || 0) + (entry.teleop_FUEL_SCORE || 0) +
+      (entry.auton_FUEL_PASS || 0) + (entry.teleop_FUEL_PASS || 0) > 0;
+    const hasSummaryScoring = (entry.auton_FUEL_SCORE || 0) + (entry.teleop_FUEL_SCORE || 0) > 0;
+
+    // A robot has a scoring signal if there's any FUEL_SCORE in actions or summary.
+    // When this is true, PASSER/BULLDOZE flags shouldn't zero out shots — the robot scores too.
+    const hasScoringSignal = hasScoreActions || hasSummaryScoring;
+
+    // Bulldozed-only = flagged as bulldozer AND has no scoring signal at all
+    // (if they have FUEL_SCORE events, they score AND bulldoze — use normal shot data)
+    const isBulldozedOnly = !!entry.eff_rep_bulldozed_fuel && !hasScoringSignal;
+
+    // Dedicated passer should only zero shots if robot truly never scores
+    // (if they have FUEL_SCORE events, they score AND pass — use actual shot/pass split)
+    const isTrulyDedicatedPasser = isDedicatedPasser && !hasScoringSignal;
 
     // No-show: only trust the flag if the robot has no actual fuel data.
     // If there's fuel data despite the no-show flag, the flag is likely a scouter mistake.
-    const hasSummaryFuel = (entry.auton_FUEL_SCORE || 0) + (entry.teleop_FUEL_SCORE || 0) +
-      (entry.auton_FUEL_PASS || 0) + (entry.teleop_FUEL_PASS || 0) > 0;
     const isRealNoShow = isNoShow && !hasFuelActions && !hasSummaryFuel;
     const isZeroWeight = isRealNoShow || isBulldozedOnly;
 
@@ -192,7 +206,8 @@ export function computeMatchFuelAttribution(
       hasActionData = true;
       const fuel = computeRobotFuelFromActions(actions);
       totalMoved = fuel.totalMoved;
-      if (isDedicatedPasser) {
+      if (isTrulyDedicatedPasser) {
+        // Only zero shots if robot truly never scores (no FUEL_SCORE events at all)
         passes = fuel.totalMoved;
         shots = 0;
         autoShots = 0;
@@ -204,6 +219,7 @@ export function computeMatchFuelAttribution(
         autoShots = 0;
         teleopShots = 0;
       } else {
+        // Normal path — also handles robots flagged PASSER/BULLDOZE that have scoring data
         passes = fuel.totalPasses;
         shots = fuel.totalShots;
         autoShots = fuel.autoShots;
@@ -213,7 +229,7 @@ export function computeMatchFuelAttribution(
       // Summary fallback
       const est = estimateMatchFuel(entry);
       totalMoved = est.total;
-      if (isDedicatedPasser) {
+      if (isTrulyDedicatedPasser) {
         passes = est.total;
         shots = 0;
         autoShots = 0;
