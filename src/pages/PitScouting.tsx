@@ -530,7 +530,7 @@ function PitScouting() {
               filterPrepFor={watchPrepFilter || undefined}
               ninjaByTeam={ninjaByTeam}
               compact
-              onTeamClick={setSelectedTeam}
+              onTeamClick={(num) => { setSelectedTeam(num); setFormTab('notes'); }}
             />
           </div>
         </div>

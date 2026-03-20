@@ -321,23 +321,46 @@ function Dashboard() {
       )}
 
       {/* Watch now banner */}
-      {watchNow.length > 0 && currentMatchLabel && (
-        <div className="bg-blueAlliance/10 border border-blueAlliance/25 rounded-lg px-4 py-2.5">
-          <div className="flex items-center gap-2 text-sm">
-            <Binoculars size={16} className="text-blueAlliance flex-shrink-0" />
-            <span className="text-textSecondary font-medium">Match {currentMatchLabel}:</span>
-            <div className="flex items-center gap-3 flex-wrap">
-              {watchNow.map(tw => (
-                <span key={tw.teamNumber} className="inline-flex items-center gap-1">
-                  <Link to={`/pit-scouting?team=${tw.teamNumber}&tab=notes`} className={`font-bold hover:underline ${tw.onRed ? 'text-redAlliance' : 'text-blueAlliance'}`}>{tw.teamNumber}</Link>
-                  <span className={`text-[10px] ${tw.role === 'partner' ? 'text-success' : 'text-danger'}`}>{tw.role}</span>
-                  <span className="text-textMuted text-xs">for {tw.forMatch}</span>
-                </span>
-              ))}
+      {watchNow.length > 0 && currentMatchLabel && (() => {
+        const redTeams = watchNow.filter(tw => tw.onRed);
+        const blueTeams = watchNow.filter(tw => !tw.onRed);
+        return (
+          <div className="bg-surface border border-border rounded-lg overflow-hidden">
+            <div className="flex items-center gap-2 px-4 py-2 border-b border-border/50">
+              <Binoculars size={16} className="text-textSecondary flex-shrink-0" />
+              <span className="text-sm font-bold">Watch {currentMatchLabel}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 px-3 py-2">
+              <div className="bg-redAlliance/5 rounded px-2 py-1.5 border-l-2 border-redAlliance/40">
+                {redTeams.length > 0 ? redTeams.map(tw => (
+                  <div key={tw.teamNumber} className="flex items-center justify-between gap-2 py-0.5 text-xs">
+                    <div className="flex items-center gap-1.5">
+                      <Link to={`/pit-scouting?team=${tw.teamNumber}&tab=notes`} className="font-bold font-mono text-redAlliance underline decoration-dotted">{tw.teamNumber}</Link>
+                      <span className={`text-[10px] ${tw.role === 'partner' ? 'text-success' : 'text-textMuted'}`}>
+                        {tw.role === 'partner' ? 'partner' : 'opp'}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-warning font-semibold">{tw.forMatch}</span>
+                  </div>
+                )) : <span className="text-textMuted text-[10px]">—</span>}
+              </div>
+              <div className="bg-blueAlliance/5 rounded px-2 py-1.5 border-l-2 border-blueAlliance/40">
+                {blueTeams.length > 0 ? blueTeams.map(tw => (
+                  <div key={tw.teamNumber} className="flex items-center justify-between gap-2 py-0.5 text-xs">
+                    <div className="flex items-center gap-1.5">
+                      <Link to={`/pit-scouting?team=${tw.teamNumber}&tab=notes`} className="font-bold font-mono text-blueAlliance underline decoration-dotted">{tw.teamNumber}</Link>
+                      <span className={`text-[10px] ${tw.role === 'partner' ? 'text-success' : 'text-textMuted'}`}>
+                        {tw.role === 'partner' ? 'partner' : 'opp'}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-warning font-semibold">{tw.forMatch}</span>
+                  </div>
+                )) : <span className="text-textMuted text-[10px]">—</span>}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Playoffs banner */}
       {inPlayoffs && (

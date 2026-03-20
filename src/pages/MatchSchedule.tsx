@@ -105,12 +105,85 @@ export function WatchScheduleTable({ watchSchedule, getDriveType, filterNinjaEma
     return <p className="text-textSecondary text-sm py-4 text-center">No prior matches to watch yet.</p>;
   }
 
-  const showNinjaCols = !!ninjaByTeam;
+  // ── Helpers ──
+  const makeTeamEl = (teamNumber: number, colorClass: string) =>
+    onTeamClick ? (
+      <button onClick={() => onTeamClick(teamNumber)} className={`font-bold font-mono underline decoration-dotted ${colorClass}`}>
+        {teamNumber}
+      </button>
+    ) : (
+      <Link to={`/ninja/${teamNumber}`} className={`font-bold font-mono underline decoration-dotted ${colorClass}`}>
+        {teamNumber}
+      </Link>
+    );
 
+  // ── Compact: 2-column alliance layout for mobile ──
+  if (compact) {
+    return (
+      <div className="divide-y divide-border/50">
+        {filteredSchedule.map(({ match: m, teamsToWatch }) => {
+          const played = m.alliances.red.score >= 0;
+          const redSet = new Set(m.alliances.red.team_keys.map(teamKeyToNumber));
+          const redTeams = teamsToWatch.filter(tw => redSet.has(tw.teamNumber));
+          const blueTeams = teamsToWatch.filter(tw => !redSet.has(tw.teamNumber));
+          const prepLabels = [...new Set(teamsToWatch.map(tw => tw.forMatch))];
+
+          const renderCompactTeam = (tw: typeof teamsToWatch[0], isRed: boolean) => {
+            const isHighlighted = filterNinjaEmail && ninjaByTeam?.get(tw.teamNumber)?.ninjaEmail === filterNinjaEmail;
+            return (
+              <div
+                key={tw.teamNumber}
+                className={`flex items-center justify-between gap-2 py-0.5 ${isHighlighted ? 'ring-1 ring-warning/50 rounded px-1' : ''}`}
+              >
+                <div className="flex items-center gap-1.5">
+                  {makeTeamEl(tw.teamNumber, isRed ? 'text-redAlliance' : 'text-blueAlliance')}
+                  <span className={`text-[10px] ${tw.role === 'partner' ? 'text-success' : 'text-textMuted'}`}>
+                    {tw.role === 'partner' ? 'partner' : 'opp'}
+                  </span>
+                </div>
+                <span className="text-[10px] text-warning font-semibold">{tw.forMatch}</span>
+              </div>
+            );
+          };
+
+          return (
+            <div key={m.key} className={`px-3 py-2 ${played ? 'opacity-40' : ''}`}>
+              {/* Match header */}
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className={`text-xs font-bold ${played ? 'text-textMuted' : 'text-textPrimary'}`}>
+                  {matchLabel(m)}
+                </span>
+                <span className="text-[10px] text-textMuted">→</span>
+                <div className="flex gap-1">
+                  {prepLabels.map(fm => (
+                    <span key={fm} className="text-[10px] font-bold text-warning bg-warning/10 px-1.5 py-0.5 rounded">{fm}</span>
+                  ))}
+                </div>
+              </div>
+              {/* Two alliance columns */}
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="bg-redAlliance/5 rounded px-2 py-1.5 border-l-2 border-redAlliance/40">
+                  {redTeams.length > 0
+                    ? redTeams.map(tw => renderCompactTeam(tw, true))
+                    : <span className="text-textMuted text-[10px]">—</span>}
+                </div>
+                <div className="bg-blueAlliance/5 rounded px-2 py-1.5 border-l-2 border-blueAlliance/40">
+                  {blueTeams.length > 0
+                    ? blueTeams.map(tw => renderCompactTeam(tw, false))
+                    : <span className="text-textMuted text-[10px]">—</span>}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // ── Full: 4-column grid for desktop ──
   return (
     <div className="space-y-0">
-      {/* Column headers */}
-      <div className={`grid gap-2 px-3 py-1.5 text-[10px] font-bold text-textMuted uppercase tracking-wide border-b border-border ${showNinjaCols ? 'grid-cols-[50px_70px_1fr_1fr]' : 'grid-cols-[50px_70px_1fr_1fr]'}`}>
+      <div className="grid grid-cols-[50px_70px_1fr_1fr] gap-2 px-3 py-1.5 text-[10px] font-bold text-textMuted uppercase tracking-wide border-b border-border">
         <span>Match</span>
         <span>Prep For</span>
         <span>Partners</span>
@@ -122,31 +195,16 @@ export function WatchScheduleTable({ watchSchedule, getDriveType, filterNinjaEma
         const redSet = new Set(m.alliances.red.team_keys.map(teamKeyToNumber));
         const partnerTeams = teamsToWatch.filter(tw => tw.role === 'partner');
         const opponentTeams = teamsToWatch.filter(tw => tw.role === 'opponent');
-
-        // Group prep-for labels with spacing if multiple
         const prepLabels = [...new Set(teamsToWatch.map(tw => tw.forMatch))];
 
         const renderTeam = (tw: typeof teamsToWatch[0], i: number) => {
           const onRed = redSet.has(tw.teamNumber);
-          const drive = !compact ? getDriveType(tw.teamNumber) : null;
-          const ninja = !compact ? ninjaByTeam?.get(tw.teamNumber) : null;
-          const isHighlighted = filterNinjaEmail && ninjaByTeam?.get(tw.teamNumber)?.ninjaEmail === filterNinjaEmail;
-          const teamEl = onTeamClick ? (
-            <button
-              onClick={() => onTeamClick(tw.teamNumber)}
-              className={`font-bold font-mono underline decoration-dotted ${onRed ? 'text-redAlliance' : 'text-blueAlliance'}`}
-            >
-              {tw.teamNumber}
-            </button>
-          ) : (
-            <Link to={`/ninja/${tw.teamNumber}`} className={`font-bold font-mono underline decoration-dotted ${onRed ? 'text-redAlliance' : 'text-blueAlliance'}`}>
-              {tw.teamNumber}
-            </Link>
-          );
-
+          const drive = getDriveType(tw.teamNumber);
+          const ninja = ninjaByTeam?.get(tw.teamNumber);
+          const isHighlighted = filterNinjaEmail && ninja?.ninjaEmail === filterNinjaEmail;
           return (
             <span key={`${tw.teamNumber}-${i}`} className={`inline-flex items-center gap-1 ${isHighlighted ? 'ring-1 ring-warning/50 rounded px-0.5' : ''}`}>
-              {teamEl}
+              {makeTeamEl(tw.teamNumber, onRed ? 'text-redAlliance' : 'text-blueAlliance')}
               {drive && (
                 <span className={`text-[9px] px-1 py-0 rounded ${onRed ? 'bg-redAlliance/10 text-redAlliance' : 'bg-blueAlliance/10 text-blueAlliance'}`}>
                   {drive}
@@ -169,7 +227,6 @@ export function WatchScheduleTable({ watchSchedule, getDriveType, filterNinjaEma
             <span className={`font-bold pt-0.5 ${played ? 'text-textMuted' : 'text-textPrimary'}`}>
               {matchLabel(m)}
             </span>
-
             <div className="flex flex-col gap-0.5 pt-0.5">
               {prepLabels.map((fm, idx) => (
                 <span key={fm}>
@@ -178,12 +235,10 @@ export function WatchScheduleTable({ watchSchedule, getDriveType, filterNinjaEma
                 </span>
               ))}
             </div>
-
             <div className="flex flex-wrap items-center gap-2">
               {partnerTeams.map(renderTeam)}
               {partnerTeams.length === 0 && <span className="text-textMuted">—</span>}
             </div>
-
             <div className="flex flex-wrap items-center gap-2">
               {opponentTeams.map(renderTeam)}
               {opponentTeams.length === 0 && <span className="text-textMuted">—</span>}
