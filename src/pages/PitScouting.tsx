@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Camera, Save, Loader2, CheckCircle, ChevronLeft, Download, Printer, ClipboardCheck, MessageSquare, UserPlus, X, Clipboard, WifiOff, RefreshCw } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { Camera, Save, Loader2, CheckCircle, ChevronLeft, Download, Printer, ClipboardCheck, MessageSquare, UserPlus, X, Clipboard, WifiOff, RefreshCw, Binoculars } from 'lucide-react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { usePitScoutStore } from '../store/usePitScoutStore';
 import { useFirebaseAuth } from '../hooks/useFirebaseAuth';
@@ -8,6 +9,8 @@ import { createEmptyPitScoutEntry } from '../types/pitScouting';
 import type { PitScoutEntry, DriveType, ClimbLevel, VibeCheck, ProgrammingLanguage, DriverExperience, DriveTeamRole } from '../types/pitScouting';
 import { exportPitScoutCSV, printPitScoutTable } from '../utils/pitExport';
 import { useNinjaStore } from '../store/useNinjaStore';
+import { useWatchSchedule } from '../hooks/useWatchSchedule';
+import { WatchScheduleTable } from './MatchSchedule';
 import { NINJA_TAG_LABELS, NINJA_TAG_COLORS } from '../types/ninja';
 import type { NinjaTag, NinjaCategory } from '../types/ninja';
 
@@ -36,6 +39,21 @@ function PitScouting() {
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [formTab, setFormTab] = useState<'pit' | 'inspection' | 'notes'>('pit');
 
+  // Auto-select team from URL query param (e.g. /pit-scouting?team=148)
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const teamParam = searchParams.get('team');
+    if (teamParam) {
+      const num = parseInt(teamParam, 10);
+      if (!isNaN(num) && num > 0) {
+        setSelectedTeam(num);
+        // Clear the param so it doesn't re-trigger
+        searchParams.delete('team');
+        setSearchParams(searchParams, { replace: true });
+      }
+    }
+  }, [searchParams, setSearchParams]);
+
   // Ninja notes integration
   const ninjaStore = useNinjaStore();
   const [noteText, setNoteText] = useState('');
@@ -46,6 +64,40 @@ function PitScouting() {
   // Assignment state
   const [assigningTeam, setAssigningTeam] = useState<number | null>(null);
   const [selectedNinjaEmail, setSelectedNinjaEmail] = useState('');
+
+  // Watch schedule
+  const watchSchedule = useWatchSchedule();
+  const [watchNinjaFilter, setWatchNinjaFilter] = useState<string>('');
+  const [watchPrepFilter, setWatchPrepFilter] = useState<string>('');
+
+  const ninjaByTeam = useMemo(() => {
+    const map = new Map<number, { ninjaName: string; ninjaEmail: string }>();
+    for (const [teamStr, a] of Object.entries(ninjaStore.assignments)) {
+      map.set(Number(teamStr), { ninjaName: a.ninjaName, ninjaEmail: a.ninjaEmail });
+    }
+    return map;
+  }, [ninjaStore.assignments]);
+
+  const watchNinjaOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const a of Object.values(ninjaStore.assignments)) {
+      seen.set(a.ninjaEmail, a.ninjaName);
+    }
+    return [...seen.entries()].map(([email, name]) => ({ email, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [ninjaStore.assignments]);
+
+  const getDriveType = (teamNumber: number) =>
+    entries.find(e => e.teamNumber === teamNumber)?.driveType || null;
+
+  const effectiveWatchFilter = isAdmin ? watchNinjaFilter : userEmail;
+
+  const watchPrepOptions = useMemo(() => {
+    const labels = new Set<string>();
+    for (const entry of watchSchedule) {
+      for (const tw of entry.teamsToWatch) labels.add(tw.forMatch);
+    }
+    return [...labels];
+  }, [watchSchedule]);
 
   // Build allowed users list for assignment dropdown
   const allowedUsers = useMemo(() => {
@@ -426,6 +478,56 @@ function PitScouting() {
           <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-card border border-border inline-block" /> Neither</span>
           <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-warning/15 border border-warning/40 inline-block" /> Partial (scout or photos)</span>
           <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-success/10 border border-success/30 inline-block" /> Complete (both)</span>
+        </div>
+
+        {/* Watch Schedule */}
+        <div className="bg-surface rounded-lg border border-border overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-border flex-wrap gap-2">
+            <h2 className="font-bold flex items-center gap-2">
+              <Binoculars size={16} />
+              Watch Schedule
+            </h2>
+            <div className="flex items-center gap-2">
+              {watchPrepOptions.length > 0 && (
+                <select
+                  value={watchPrepFilter}
+                  onChange={e => setWatchPrepFilter(e.target.value)}
+                  className="text-xs px-2 py-1 bg-card border border-border rounded text-textPrimary focus:outline-none focus:border-success"
+                >
+                  <option value="">All Matches</option>
+                  {watchPrepOptions.map(label => (
+                    <option key={label} value={label}>{label}</option>
+                  ))}
+                </select>
+              )}
+              {isAdmin && watchNinjaOptions.length > 0 && (
+                <select
+                  value={watchNinjaFilter}
+                  onChange={e => setWatchNinjaFilter(e.target.value)}
+                  className="text-xs px-2 py-1 bg-card border border-border rounded text-textPrimary focus:outline-none focus:border-success"
+                >
+                  <option value="">All Ninjas</option>
+                  {watchNinjaOptions.map(n => (
+                    <option key={n.email} value={n.email}>{n.name}</option>
+                  ))}
+                </select>
+              )}
+              {!isAdmin && (
+                <span className="text-xs text-textMuted">Your teams</span>
+              )}
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <WatchScheduleTable
+              watchSchedule={watchSchedule}
+              getDriveType={getDriveType}
+              filterNinjaEmail={effectiveWatchFilter || undefined}
+              filterPrepFor={watchPrepFilter || undefined}
+              ninjaByTeam={ninjaByTeam}
+              compact
+              onTeamClick={setSelectedTeam}
+            />
+          </div>
         </div>
       </div>
     );

@@ -322,21 +322,21 @@ function Dashboard() {
 
       {/* Watch now banner */}
       {watchNow.length > 0 && currentMatchLabel && (
-        <Link to="/schedule" className="block bg-blueAlliance/10 border border-blueAlliance/25 rounded-lg px-4 py-2.5 hover:bg-blueAlliance/15 transition-colors">
+        <div className="bg-blueAlliance/10 border border-blueAlliance/25 rounded-lg px-4 py-2.5">
           <div className="flex items-center gap-2 text-sm">
             <Binoculars size={16} className="text-blueAlliance flex-shrink-0" />
             <span className="text-textSecondary font-medium">Match {currentMatchLabel}:</span>
             <div className="flex items-center gap-3 flex-wrap">
               {watchNow.map(tw => (
                 <span key={tw.teamNumber} className="inline-flex items-center gap-1">
-                  <span className={`font-bold ${tw.onRed ? 'text-redAlliance' : 'text-blueAlliance'}`}>{tw.teamNumber}</span>
+                  <Link to={`/pit-scouting?team=${tw.teamNumber}`} className={`font-bold hover:underline ${tw.onRed ? 'text-redAlliance' : 'text-blueAlliance'}`}>{tw.teamNumber}</Link>
                   <span className={`text-[10px] ${tw.role === 'partner' ? 'text-success' : 'text-danger'}`}>{tw.role}</span>
                   <span className="text-textMuted text-xs">for {tw.forMatch}</span>
                 </span>
               ))}
             </div>
           </div>
-        </Link>
+        </div>
       )}
 
       {/* Playoffs banner */}
