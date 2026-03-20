@@ -4,6 +4,7 @@ import { BarChart3, Users, ClipboardList, Menu, X, Calendar, Swords, Handshake, 
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { useAuth } from '../contexts/AuthContext';
 import ActiveSessionBanner from './ActiveSessionBanner';
+import { matchLabel, matchSortKey } from '../utils/formatting';
 
 const AUTO_REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
 
@@ -211,6 +212,7 @@ function UserDropdown() {
 
 function AppLayout() {
   const eventCode = useAnalyticsStore(state => state.eventCode);
+  const tbaData = useAnalyticsStore(state => state.tbaData);
   const fetchTBAData = useAnalyticsStore(state => state.fetchTBAData);
   const triggerSync = useAnalyticsStore(state => state.triggerSync);
   const { user, isAdmin, signOut, eventConfig } = useAuth();
@@ -228,6 +230,15 @@ function AppLayout() {
     }, AUTO_REFRESH_INTERVAL);
     return () => clearInterval(id);
   }, [eventConfig?.autoSyncEnabled, fetchTBAData, triggerSync, eventCode]);
+
+  // Current match at the event (first upcoming match overall)
+  const currentMatchLabel = (() => {
+    if (!tbaData?.matches) return null;
+    const upcoming = tbaData.matches
+      .filter(m => m.alliances.red.score < 0)
+      .sort((a, b) => matchSortKey(a) - matchSortKey(b));
+    return upcoming.length ? matchLabel(upcoming[0]) : null;
+  })();
 
   const isDashboardActive = location.pathname === '/' || location.pathname === '/bracket';
   const isScoutingActive = scoutingItems.filter(item => !item.external).some(item => location.pathname === item.to || location.pathname.startsWith(item.to + '/'));
@@ -253,7 +264,12 @@ function AppLayout() {
               <img src={`${import.meta.env.BASE_URL}team-logo.png`} alt="Team 148 Logo" className="h-10 w-10 md:h-12 md:w-12 object-contain" />
               <div>
                 <h1 className="text-lg md:text-2xl font-bold">Team 148 - Data Wrangler</h1>
-                <p className="text-textSecondary text-xs md:text-sm">REBUILT 2026 • {eventCode}</p>
+                <p className="text-textSecondary text-xs md:text-sm">
+                  REBUILT 2026 • {eventCode}
+                  {currentMatchLabel && (
+                    <span> • Now: <span className="font-semibold text-text">{currentMatchLabel}</span></span>
+                  )}
+                </p>
               </div>
             </div>
 
