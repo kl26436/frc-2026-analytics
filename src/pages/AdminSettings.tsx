@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Shield, UserPlus, Trash2, Crown, UserCheck, UserX, Clock, Settings, Hash, Pencil, Check, X, Loader, Database, RefreshCw, Play, ToggleLeft, ToggleRight, Rss } from 'lucide-react';
+import { Shield, UserPlus, Trash2, Crown, UserCheck, UserX, Clock, Settings, Hash, Pencil, Check, X, Loader, Database, RefreshCw, Play, ToggleLeft, ToggleRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import type { EventConfig } from '../contexts/AuthContext';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
@@ -25,8 +25,6 @@ function AdminSettings() {
 
   const fetchTBAData = useAnalyticsStore(s => s.fetchTBAData);
   const tbaLoading = useAnalyticsStore(s => s.tbaLoading);
-  const autoRefreshEnabled = useAnalyticsStore(s => s.autoRefreshEnabled);
-  const setAutoRefresh = useAnalyticsStore(s => s.setAutoRefresh);
   const clearPickList = usePickListStore(s => s.clearPickList);
   const initializePickList = usePickListStore(s => s.initializePickList);
   const importFromTBARankings = usePickListStore(s => s.importFromTBARankings);
@@ -241,47 +239,15 @@ function AdminSettings() {
         </div>
       </div>
 
-      {/* ── TBA Data Refresh ──────────────────────────────────────────────── */}
-      <div className="bg-surface rounded-lg border border-border p-4 md:p-6">
-        <h2 className="text-lg font-bold mb-1 flex items-center gap-2">
-          <Rss size={20} />
-          TBA Data Refresh
-        </h2>
-        <p className="text-xs text-textSecondary mb-4">
-          Pulls latest match results, rankings, and alliance selections from The Blue Alliance.
-          Auto-refresh runs every 5 minutes in the background for all users (TBA + scouting DB).
-        </p>
-        <div className="flex items-center gap-4 flex-wrap">
-          <button
-            onClick={() => fetchTBAData()}
-            disabled={tbaLoading || !eventConfig?.eventCode}
-            className="flex items-center gap-2 px-5 py-2 bg-surfaceElevated hover:bg-interactive font-semibold rounded-lg transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <RefreshCw size={16} className={tbaLoading ? 'animate-spin' : ''} />
-            {tbaLoading ? 'Refreshing…' : 'Refresh Now'}
-          </button>
-          <button
-            onClick={() => setAutoRefresh(!autoRefreshEnabled)}
-            className="flex items-center gap-2 text-sm text-textSecondary hover:text-textPrimary transition-colors"
-          >
-            {autoRefreshEnabled ? (
-              <ToggleRight size={24} className="text-success" />
-            ) : (
-              <ToggleLeft size={24} className="text-textMuted" />
-            )}
-            Auto-refresh {autoRefreshEnabled ? 'on (5 min)' : 'off'}
-          </button>
-        </div>
-      </div>
-
-      {/* ── Data Sync Status ──────────────────────────────────────────────── */}
+      {/* ── Data Sync ─────────────────────────────────────────────────── */}
       <div className="bg-surface rounded-lg border border-border p-4 md:p-6">
         <h2 className="text-lg font-bold mb-1 flex items-center gap-2">
           <Database size={20} />
-          Scout Data Sync
+          Data Sync
         </h2>
         <p className="text-xs text-textSecondary mb-4">
-          Scouting data synced from Postgres to Firestore via Cloud Function.
+          Syncs scouting data from Postgres and TBA match results, rankings, and alliance selections.
+          Auto-sync runs every 5 minutes for all users when enabled.
         </p>
 
         {/* Sync status cards */}
@@ -328,7 +294,10 @@ function AdminSettings() {
               setSyncing(true);
               setSyncError(null);
               try {
-                const result = await triggerSync(code);
+                const [result] = await Promise.all([
+                  triggerSync(code),
+                  fetchTBAData(code),
+                ]);
                 flash(`Synced ${result.scoutEntriesCount} entries, ${result.tbaMatchesCount} matches in ${(result.syncDurationMs / 1000).toFixed(1)}s`);
               } catch (err: any) {
                 setSyncError(err?.message || 'Sync failed');
@@ -336,7 +305,7 @@ function AdminSettings() {
                 setSyncing(false);
               }
             }}
-            disabled={syncing || !eventConfig?.eventCode}
+            disabled={syncing || tbaLoading || !eventConfig?.eventCode}
             className="flex items-center gap-2 px-5 py-2 bg-blueAlliance text-white font-semibold rounded-lg hover:bg-blueAlliance/90 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {syncing ? <Loader size={16} className="animate-spin" /> : <Play size={16} />}
@@ -348,7 +317,7 @@ function AdminSettings() {
               if (!eventConfig) return;
               const newVal = !eventConfig.autoSyncEnabled;
               await setEventConfig({ ...eventConfig, autoSyncEnabled: newVal });
-              flash(newVal ? 'Auto-sync enabled (every 15 min)' : 'Auto-sync disabled');
+              flash(newVal ? 'Auto-sync enabled (every 5 min)' : 'Auto-sync disabled');
             }}
             className="flex items-center gap-2 text-sm text-textSecondary hover:text-textPrimary transition-colors"
           >
@@ -357,7 +326,7 @@ function AdminSettings() {
             ) : (
               <ToggleLeft size={24} className="text-textMuted" />
             )}
-            Auto-sync {eventConfig?.autoSyncEnabled ? 'on' : 'off'}
+            Auto-sync {eventConfig?.autoSyncEnabled ? 'on (5 min)' : 'off'}
           </button>
         </div>
 

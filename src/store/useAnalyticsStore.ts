@@ -46,8 +46,6 @@ interface AnalyticsState {
   localOPR: OPRResults | null;
   tbaLoading: boolean;
   tbaError: string | null;
-  autoRefreshEnabled: boolean;
-
   // ── UI state ──
   selectedTeams: number[];
   eventCode: string;
@@ -68,7 +66,6 @@ interface AnalyticsState {
   fetchTBAData: (eventCode?: string) => Promise<TBAEventData | null>;
   fetchTBAOPRs: (eventCode?: string) => Promise<void>;
   calculateLocalOPR: () => void;
-  setAutoRefresh: (enabled: boolean) => void;
   clearTBAData: () => void;
   triggerSync: (eventKey: string) => Promise<SyncMeta>;
   toggleExcludeEntry: (matchNumber: number, teamNumber: number) => Promise<void>;
@@ -112,8 +109,6 @@ export const useAnalyticsStore = create<AnalyticsState>()(
       localOPR: null,
       tbaLoading: false,
       tbaError: null,
-      autoRefreshEnabled: false,
-
       // ── Real Data Subscriptions ──────────────────────────────────────
 
       subscribeToData: (eventKey: string) => {
@@ -442,10 +437,6 @@ export const useAnalyticsStore = create<AnalyticsState>()(
         set({ localOPR: results });
       },
 
-      setAutoRefresh: (enabled: boolean) => {
-        set({ autoRefreshEnabled: enabled });
-      },
-
       clearTBAData: () => {
         set({ tbaData: null, tbaError: null });
       },
@@ -492,7 +483,6 @@ export const useAnalyticsStore = create<AnalyticsState>()(
         homeTeamNumber: state.homeTeamNumber,
         selectedTeams: state.selectedTeams,
         tbaApiKey: state.tbaApiKey,
-        autoRefreshEnabled: state.autoRefreshEnabled,
         attributionModel: state.attributionModel,
         // NOTE: tbaData intentionally NOT persisted — always fetched fresh from
         // TBA API to prevent stale event data surviving across event resets.

@@ -211,24 +211,23 @@ function UserDropdown() {
 
 function AppLayout() {
   const eventCode = useAnalyticsStore(state => state.eventCode);
-  const autoRefreshEnabled = useAnalyticsStore(state => state.autoRefreshEnabled);
   const fetchTBAData = useAnalyticsStore(state => state.fetchTBAData);
   const triggerSync = useAnalyticsStore(state => state.triggerSync);
-  const { user, isAdmin, signOut } = useAuth();
+  const { user, isAdmin, signOut, eventConfig } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
 
   const closeMobileMenu = () => setMobileMenuOpen(false);
 
-  // Auto-refresh TBA + scouting DB every 5 minutes when enabled
+  // Auto-sync TBA + scouting DB every 5 minutes when enabled (shared toggle via Firestore)
   useEffect(() => {
-    if (!autoRefreshEnabled) return;
+    if (!eventConfig?.autoSyncEnabled) return;
     const id = setInterval(() => {
       fetchTBAData();
       if (eventCode) triggerSync(eventCode).catch(() => {});
     }, AUTO_REFRESH_INTERVAL);
     return () => clearInterval(id);
-  }, [autoRefreshEnabled, fetchTBAData, triggerSync, eventCode]);
+  }, [eventConfig?.autoSyncEnabled, fetchTBAData, triggerSync, eventCode]);
 
   const isDashboardActive = location.pathname === '/' || location.pathname === '/bracket';
   const isScoutingActive = scoutingItems.filter(item => !item.external).some(item => location.pathname === item.to || location.pathname.startsWith(item.to + '/'));

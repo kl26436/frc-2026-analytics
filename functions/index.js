@@ -2,7 +2,7 @@
  * Firebase Cloud Functions for FRC 2026 Analytics
  *
  * - syncScoutData: Callable function — triggered from Admin UI "Sync Now" button
- * - scheduledSync: Scheduled function — runs every 15 minutes when auto-sync is enabled
+ * - scheduledSync: Scheduled function — runs every 5 minutes when auto-sync is enabled
  *
  * Postgres credentials are stored as Firebase secrets:
  *   firebase functions:secrets:set PG_HOST
@@ -577,7 +577,7 @@ exports.claudeProxy = claudeProxy;
 
 exports.scheduledSync = onSchedule(
   {
-    schedule: "every 15 minutes",
+    schedule: "every 5 minutes",
     secrets: [PG_HOST, PG_PASSWORD],
     timeoutSeconds: 120,
     memory: "256MiB",
