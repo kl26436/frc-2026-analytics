@@ -329,7 +329,7 @@ function Dashboard() {
             <div className="flex items-center gap-3 flex-wrap">
               {watchNow.map(tw => (
                 <span key={tw.teamNumber} className="inline-flex items-center gap-1">
-                  <Link to={`/pit-scouting?team=${tw.teamNumber}`} className={`font-bold hover:underline ${tw.onRed ? 'text-redAlliance' : 'text-blueAlliance'}`}>{tw.teamNumber}</Link>
+                  <Link to={`/pit-scouting?team=${tw.teamNumber}&tab=notes`} className={`font-bold hover:underline ${tw.onRed ? 'text-redAlliance' : 'text-blueAlliance'}`}>{tw.teamNumber}</Link>
                   <span className={`text-[10px] ${tw.role === 'partner' ? 'text-success' : 'text-danger'}`}>{tw.role}</span>
                   <span className="text-textMuted text-xs">for {tw.forMatch}</span>
                 </span>

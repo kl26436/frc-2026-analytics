@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { Printer } from 'lucide-react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { usePitScoutStore } from '../store/usePitScoutStore';
@@ -77,16 +78,28 @@ export interface WatchScheduleTableProps {
   getDriveType: (teamNumber: number) => string | null;
   /** If provided, only show rows where at least one team is assigned to this ninja email */
   filterNinjaEmail?: string;
+  /** If provided, only show rows that prep for this match label */
+  filterPrepFor?: string;
   /** Map of teamNumber → { ninjaName, ninjaEmail } */
   ninjaByTeam?: Map<number, { ninjaName: string; ninjaEmail: string }>;
+  /** Compact mode: team numbers only, no drive/ninja badges — optimized for mobile */
+  compact?: boolean;
+  /** If provided, team numbers become clickable. Called with team number. */
+  onTeamClick?: (teamNumber: number) => void;
 }
 
-export function WatchScheduleTable({ watchSchedule, getDriveType, filterNinjaEmail, ninjaByTeam }: WatchScheduleTableProps) {
-  const filteredSchedule = filterNinjaEmail
+export function WatchScheduleTable({ watchSchedule, getDriveType, filterNinjaEmail, filterPrepFor, ninjaByTeam, compact, onTeamClick }: WatchScheduleTableProps) {
+  let filteredSchedule = filterNinjaEmail
     ? watchSchedule.filter(({ teamsToWatch }) =>
         teamsToWatch.some(tw => ninjaByTeam?.get(tw.teamNumber)?.ninjaEmail === filterNinjaEmail)
       )
     : watchSchedule;
+
+  if (filterPrepFor) {
+    filteredSchedule = filteredSchedule.filter(({ teamsToWatch }) =>
+      teamsToWatch.some(tw => tw.forMatch === filterPrepFor)
+    );
+  }
 
   if (filteredSchedule.length === 0) {
     return <p className="text-textSecondary text-sm py-4 text-center">No prior matches to watch yet.</p>;
@@ -115,14 +128,25 @@ export function WatchScheduleTable({ watchSchedule, getDriveType, filterNinjaEma
 
         const renderTeam = (tw: typeof teamsToWatch[0], i: number) => {
           const onRed = redSet.has(tw.teamNumber);
-          const drive = getDriveType(tw.teamNumber);
-          const ninja = ninjaByTeam?.get(tw.teamNumber);
-          const isHighlighted = filterNinjaEmail && ninja?.ninjaEmail === filterNinjaEmail;
+          const drive = !compact ? getDriveType(tw.teamNumber) : null;
+          const ninja = !compact ? ninjaByTeam?.get(tw.teamNumber) : null;
+          const isHighlighted = filterNinjaEmail && ninjaByTeam?.get(tw.teamNumber)?.ninjaEmail === filterNinjaEmail;
+          const teamEl = onTeamClick ? (
+            <button
+              onClick={() => onTeamClick(tw.teamNumber)}
+              className={`font-bold font-mono underline decoration-dotted ${onRed ? 'text-redAlliance' : 'text-blueAlliance'}`}
+            >
+              {tw.teamNumber}
+            </button>
+          ) : (
+            <Link to={`/ninja/${tw.teamNumber}`} className={`font-bold font-mono underline decoration-dotted ${onRed ? 'text-redAlliance' : 'text-blueAlliance'}`}>
+              {tw.teamNumber}
+            </Link>
+          );
+
           return (
             <span key={`${tw.teamNumber}-${i}`} className={`inline-flex items-center gap-1 ${isHighlighted ? 'ring-1 ring-warning/50 rounded px-0.5' : ''}`}>
-              <span className={`font-bold font-mono ${onRed ? 'text-redAlliance' : 'text-blueAlliance'}`}>
-                {tw.teamNumber}
-              </span>
+              {teamEl}
               {drive && (
                 <span className={`text-[9px] px-1 py-0 rounded ${onRed ? 'bg-redAlliance/10 text-redAlliance' : 'bg-blueAlliance/10 text-blueAlliance'}`}>
                   {drive}

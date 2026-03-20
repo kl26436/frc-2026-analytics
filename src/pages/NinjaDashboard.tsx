@@ -499,8 +499,7 @@ function NinjaDashboard() {
       )}
 
       {/* Watch Schedule */}
-      {watchSchedule.length > 0 && (
-        <div className="bg-surface rounded-lg border border-border overflow-hidden">
+      <div className="bg-surface rounded-lg border border-border overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-border">
             <h2 className="font-bold flex items-center gap-2">
               <Binoculars size={16} />
@@ -530,8 +529,7 @@ function NinjaDashboard() {
               ninjaByTeam={ninjaByTeam}
             />
           </div>
-        </div>
-      )}
+      </div>
     </div>
   );
 }

@@ -43,12 +43,17 @@ function PitScouting() {
   const [searchParams, setSearchParams] = useSearchParams();
   useEffect(() => {
     const teamParam = searchParams.get('team');
+    const tabParam = searchParams.get('tab');
     if (teamParam) {
       const num = parseInt(teamParam, 10);
       if (!isNaN(num) && num > 0) {
         setSelectedTeam(num);
-        // Clear the param so it doesn't re-trigger
+        if (tabParam === 'pit' || tabParam === 'inspection' || tabParam === 'notes') {
+          setFormTab(tabParam);
+        }
+        // Clear the params so they don't re-trigger
         searchParams.delete('team');
+        searchParams.delete('tab');
         setSearchParams(searchParams, { replace: true });
       }
     }
