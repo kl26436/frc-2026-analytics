@@ -51,6 +51,13 @@ function PredictionContent({
             <div className="text-center flex-1">
               <p className="text-sm font-medium text-redAlliance mb-1">{redLabel}</p>
               <p className="text-5xl md:text-6xl font-bold text-redAlliance">{matchup.red.totalScore.toFixed(1)}</p>
+              <div className="flex items-center justify-center gap-1.5 mt-1.5 text-xs text-redAlliance/70">
+                <span>{matchup.redRP.scorePercentiles.p10.toFixed(0)}</span>
+                <span className="text-textMuted">–</span>
+                <span className="font-semibold text-redAlliance">{matchup.redRP.scorePercentiles.p50.toFixed(0)}</span>
+                <span className="text-textMuted">–</span>
+                <span>{matchup.redRP.scorePercentiles.p90.toFixed(0)}</span>
+              </div>
               <div className="flex items-center justify-center gap-1 mt-1">
                 <span className={`text-xs px-2 py-0.5 rounded ${confidenceBg(matchup.red.confidence)}`}>
                   {matchup.red.confidence} confidence
@@ -61,6 +68,13 @@ function PredictionContent({
             <div className="text-center flex-1">
               <p className="text-sm font-medium text-blueAlliance mb-1">{blueLabel}</p>
               <p className="text-5xl md:text-6xl font-bold text-blueAlliance">{matchup.blue.totalScore.toFixed(1)}</p>
+              <div className="flex items-center justify-center gap-1.5 mt-1.5 text-xs text-blueAlliance/70">
+                <span>{matchup.blueRP.scorePercentiles.p10.toFixed(0)}</span>
+                <span className="text-textMuted">–</span>
+                <span className="font-semibold text-blueAlliance">{matchup.blueRP.scorePercentiles.p50.toFixed(0)}</span>
+                <span className="text-textMuted">–</span>
+                <span>{matchup.blueRP.scorePercentiles.p90.toFixed(0)}</span>
+              </div>
               <div className="flex items-center justify-center gap-1 mt-1">
                 <span className={`text-xs px-2 py-0.5 rounded ${confidenceBg(matchup.blue.confidence)}`}>
                   {matchup.blue.confidence} confidence
@@ -68,6 +82,8 @@ function PredictionContent({
               </div>
             </div>
           </div>
+
+          <p className="text-[10px] text-textMuted tracking-wide uppercase">min – expected – max</p>
 
           {matchup.favoredAlliance !== 'even' ? (
             <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${
