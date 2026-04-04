@@ -24,6 +24,14 @@ interface PickListState {
   pickList: PickList | null;
   redFlagThresholds: RedFlagThresholds;
 
+  // Auto-shadow state (personal ↔ live sync)
+  liveVersion: number;
+  locallyDiverged: boolean;
+  shadowFromLive: (liveTeams: PickListTeam[], liveConfig: PickListConfig) => void;
+  markDiverged: () => void;
+  publishToLive: () => PickList | null;
+  pullFromLive: (liveTeams: PickListTeam[], liveConfig: PickListConfig) => void;
+
   // Actions
   initializePickList: (eventKey: string, tier1Name?: string, tier2Name?: string, tier3Name?: string, tier4Name?: string) => void;
   setTierNames: (tier1: string, tier2: string, tier3: string, tier4: string) => void;
@@ -66,6 +74,34 @@ export const usePickListStore = create<PickListState>()(
     (set, get) => ({
       pickList: null,
       redFlagThresholds: DEFAULT_RED_FLAG_THRESHOLDS,
+      liveVersion: 0,
+      locallyDiverged: false,
+
+      // Auto-shadow: silently update personal list from live (if not diverged)
+      shadowFromLive: (liveTeams, liveConfig) => {
+        if (get().locallyDiverged) return;
+        set({
+          pickList: { teams: liveTeams, config: liveConfig },
+          liveVersion: get().liveVersion + 1,
+        });
+      },
+
+      markDiverged: () => {
+        set({ locallyDiverged: true });
+      },
+
+      publishToLive: () => {
+        set({ locallyDiverged: false });
+        return get().pickList;
+      },
+
+      pullFromLive: (liveTeams, liveConfig) => {
+        set({
+          pickList: { teams: liveTeams, config: liveConfig },
+          locallyDiverged: false,
+          liveVersion: get().liveVersion + 1,
+        });
+      },
 
       // Initialize a new pick list
       initializePickList: (eventKey, tier1Name = 'Steak', tier2Name = 'Potatoes', tier3Name = 'Chicken Nuggets', tier4Name = 'Do Not Pick') => {
@@ -141,6 +177,7 @@ export const usePickListStore = create<PickListState>()(
             },
           },
         });
+        get().markDiverged();
       },
 
       // Move team to new tier/rank
@@ -169,6 +206,7 @@ export const usePickListStore = create<PickListState>()(
             },
           },
         });
+        get().markDiverged();
       },
 
       // Swap ranks between two teams (must be in same tier)
@@ -201,6 +239,7 @@ export const usePickListStore = create<PickListState>()(
             },
           },
         });
+        get().markDiverged();
       },
 
       // Move winner team above loser team (for comparison feature)
@@ -250,6 +289,7 @@ export const usePickListStore = create<PickListState>()(
             ),
           },
         });
+        get().markDiverged();
       },
 
       // Toggle red flag
@@ -265,6 +305,7 @@ export const usePickListStore = create<PickListState>()(
             ),
           },
         });
+        get().markDiverged();
       },
 
       // Set red flag auto-detection thresholds
@@ -345,6 +386,7 @@ export const usePickListStore = create<PickListState>()(
               ),
             },
           });
+          get().markDiverged();
         } else {
           // Add to watchlist - assign next rank
           const watchlistTeams = pickList.teams.filter(t => t.onWatchlist);
@@ -360,6 +402,7 @@ export const usePickListStore = create<PickListState>()(
               ),
             },
           });
+          get().markDiverged();
         }
       },
 
@@ -471,6 +514,7 @@ export const usePickListStore = create<PickListState>()(
             },
           },
         });
+        get().markDiverged();
       },
 
       // Clear all teams from watchlist
@@ -570,6 +614,7 @@ export const usePickListStore = create<PickListState>()(
             },
           },
         });
+        get().markDiverged();
       },
 
       // Bulk-set all teams (used by drag-and-drop to commit pre-computed ranks)
@@ -583,6 +628,7 @@ export const usePickListStore = create<PickListState>()(
             config: { ...pickList.config, lastUpdated: new Date().toISOString() },
           },
         });
+        get().markDiverged();
       },
 
       // Clear entire pick list
@@ -610,6 +656,8 @@ export const usePickListStore = create<PickListState>()(
       name: 'frc-picklist-storage',
       partialize: (state) => ({
         pickList: state.pickList,
+        locallyDiverged: state.locallyDiverged,
+        liveVersion: state.liveVersion,
       }),
     }
   )

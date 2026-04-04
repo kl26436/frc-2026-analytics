@@ -1758,6 +1758,10 @@ function PickList() {
   const autoFlagTeams = usePickListStore(state => state.autoFlagTeams);
   const clearAllFlags = usePickListStore(state => state.clearAllFlags);
   const importFromTBARankings = usePickListStore(state => state.importFromTBARankings);
+  const locallyDiverged = usePickListStore(state => state.locallyDiverged);
+  const shadowFromLive = usePickListStore(state => state.shadowFromLive);
+  const publishToLive = usePickListStore(state => state.publishToLive);
+  const pullFromLive = usePickListStore(state => state.pullFromLive);
 
   // Watchlist functions
   const toggleWatchlist = usePickListStore(state => state.toggleWatchlist);
@@ -1876,6 +1880,29 @@ function PickList() {
       setFilterConfigs(liveSync.liveFilterConfigs);
     }
   }, [mode, liveSync.liveFilterConfigs]);
+
+  // Auto-shadow: when live list changes and personal hasn't diverged, sync personal from live
+  useEffect(() => {
+    if (liveSync.liveList && !locallyDiverged) {
+      shadowFromLive(liveSync.liveList.teams, liveSync.liveList.config);
+    }
+  }, [liveSync.liveList, locallyDiverged, shadowFromLive]);
+
+  // Publish personal list to live
+  const handlePublishToLive = async () => {
+    if (!confirm('This will overwrite the shared live list with your personal list. Continue?')) return;
+    const list = publishToLive();
+    if (list && liveSync.canEdit) {
+      await liveSync.pushTeams(list.teams);
+      await liveSync.pushConfig(list.config);
+    }
+  };
+
+  // Pull from live to personal
+  const handlePullFromLive = () => {
+    if (!liveSync.liveList) return;
+    pullFromLive(liveSync.liveList.teams, liveSync.liveList.config);
+  };
 
   // Count picked teams in tier1 + tier2
   const tier1And2Count = pickList?.teams.filter(t =>
@@ -2106,6 +2133,29 @@ function PickList() {
               )}
             </button>
           </div>
+
+          {/* Auto-shadow controls */}
+          {locallyDiverged && liveSync.exists && (
+            <span className="px-2 py-1 bg-warning/20 text-warning text-xs font-semibold rounded-md">
+              Diverged from live
+            </span>
+          )}
+          {mode === 'personal' && locallyDiverged && liveSync.canEdit && (
+            <button
+              onClick={handlePublishToLive}
+              className="px-3 py-1.5 bg-success/20 text-success hover:bg-success/30 rounded-lg text-sm font-medium transition-colors"
+            >
+              Publish to Live
+            </button>
+          )}
+          {mode === 'personal' && liveSync.liveList && (
+            <button
+              onClick={handlePullFromLive}
+              className="px-3 py-1.5 bg-blueAlliance/20 text-blueAlliance hover:bg-blueAlliance/30 rounded-lg text-sm font-medium transition-colors"
+            >
+              Pull from Live
+            </button>
+          )}
 
           <Link
             to="/alliance-selection"
