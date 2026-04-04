@@ -361,6 +361,8 @@ function transformRanking(row) {
 
 async function batchWrite(collectionPath, docs, idField) {
   let written = 0;
+  let failedBatches = 0;
+
   for (let i = 0; i < docs.length; i += BATCH_SIZE) {
     const batch = db.batch();
     const chunk = docs.slice(i, i + BATCH_SIZE);
@@ -369,10 +371,16 @@ async function batchWrite(collectionPath, docs, idField) {
       const ref = db.doc(`${collectionPath}/${docId}`);
       batch.set(ref, doc);
     }
-    await batch.commit();
-    written += chunk.length;
+    try {
+      await batch.commit();
+      written += chunk.length;
+    } catch (err) {
+      failedBatches++;
+      console.error(`Batch failed at offset ${i} for ${collectionPath}: ${err.message}`);
+      // Continue attempting remaining batches — partial data is better than none for scouting
+    }
   }
-  return written;
+  return { written, total: docs.length, failedBatches };
 }
 
 // ── Action Data Queries ─────────────────────────────────────────────────────
@@ -495,33 +503,37 @@ async function performSync(eventKey, triggeredBy) {
     const pictures = pictureRows.map(transformRobotPicture);
 
     // Write to Firestore
-    const scoutWritten = await batchWrite(
+    const scoutResult = await batchWrite(
       `scoutData/${eventKey}/entries`, scoutEntries, "id"
     );
-    const matchesWritten = await batchWrite(
+    const matchesResult = await batchWrite(
       `tbaData/${eventKey}/matches`, tbaMatches, "match_key"
     );
-    const rankingsWritten = await batchWrite(
+    const rankingsResult = await batchWrite(
       `tbaData/${eventKey}/rankings`, rankings, "team_key"
     );
-    const actionsWritten = await batchWrite(
+    const actionsResult = await batchWrite(
       `scoutActions/${eventKey}/actions`, actionDocs, "id"
     );
-    const picturesWritten = await batchWrite(
+    const picturesResult = await batchWrite(
       `robotPictures/2026/pictures`, pictures,
       (doc) => `${doc.team_number}_${doc.timestamp}`
     );
+
+    const totalFailedBatches = scoutResult.failedBatches + matchesResult.failedBatches
+      + rankingsResult.failedBatches + actionsResult.failedBatches + picturesResult.failedBatches;
 
     // Update sync metadata
     const durationMs = Date.now() - startTime;
     const syncMeta = {
       lastSyncAt: new Date().toISOString(),
       lastSyncBy: triggeredBy,
-      scoutEntriesCount: scoutWritten,
-      tbaMatchesCount: matchesWritten,
-      tbaRankingsCount: rankingsWritten,
-      scoutActionsCount: actionsWritten,
-      robotPicturesCount: picturesWritten,
+      scoutEntriesCount: scoutResult.written,
+      tbaMatchesCount: matchesResult.written,
+      tbaRankingsCount: rankingsResult.written,
+      scoutActionsCount: actionsResult.written,
+      robotPicturesCount: picturesResult.written,
+      partialSync: totalFailedBatches > 0,
       eventKey,
       syncDurationMs: durationMs,
     };

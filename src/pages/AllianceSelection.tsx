@@ -162,7 +162,7 @@ function AllianceSelection() {
   useEffect(() => {
     if (!session || !isHost || !liveList || session.status !== 'active') return;
     // Serialize to detect actual changes (avoid spurious updates)
-    const key = liveList.teams.map(t => `${t.teamNumber}:${t.tier}:${t.rank}`).join(',');
+    const key = liveList.teams.map(t => `${t.teamNumber}:${t.tier}:${t.rank}:${t.flagged}:${t.notes}:${(t.tags ?? []).join('|')}`).join(',');
     if (liveListTeamsRef.current === key) return;
     liveListTeamsRef.current = key;
     reorderFromPickList(liveList.teams);

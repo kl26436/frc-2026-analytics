@@ -1870,6 +1870,13 @@ function PickList() {
 
   const hasActiveFilters = filterConfigs.some(f => f.active);
 
+  // Auto-sync live filters to personal so switching modes preserves filter state
+  useEffect(() => {
+    if (mode === 'live' && liveSync.liveFilterConfigs) {
+      setFilterConfigs(liveSync.liveFilterConfigs);
+    }
+  }, [mode, liveSync.liveFilterConfigs]);
+
   // Count picked teams in tier1 + tier2
   const tier1And2Count = pickList?.teams.filter(t =>
     t.tier === 'tier1' || t.tier === 'tier2'

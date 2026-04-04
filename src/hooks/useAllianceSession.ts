@@ -518,16 +518,26 @@ export function useAllianceSession(userId: string | null) {
       rankMap.set(t.teamNumber, { globalRank: i + 1, tier: t.tier, rank: t.rank });
     });
 
-    // Update session teams: re-rank from pick list, preserve status/pickedByAlliance
+    // Build a lookup for notes/tags/flags from the pick list
+    const pickDataMap = new Map(pickListTeams.map(t => [t.teamNumber, t]));
+
+    // Update session teams: re-rank + sync metadata from pick list, preserve status/pickedByAlliance
     let nextGlobalRank = orderedPickTeams.length + 1;
     const teams = session.teams.map(t => {
       const pl = rankMap.get(t.teamNumber);
+      const pickData = pickDataMap.get(t.teamNumber);
       if (pl) {
         return {
           ...t,
           globalRank: pl.globalRank,
           originalTier: pl.tier as SelectionTeam['originalTier'],
           originalRank: pl.rank,
+          // Sync notes, tags, and flags from the latest pick list
+          ...(pickData && {
+            notes: pickData.notes,
+            tags: pickData.tags,
+            flagged: pickData.flagged,
+          }),
         };
       }
       // Unranked team — keep at the end

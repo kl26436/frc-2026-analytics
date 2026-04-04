@@ -375,7 +375,10 @@ export const useAnalyticsStore = create<AnalyticsState>()(
       setEventCode: (code: string) => {
         const prev = get().eventCode;
         if (prev && prev !== code) {
-          // Event changed — clear all stale data so old event doesn't bleed through
+          // 1. Unsubscribe from old event listeners FIRST (synchronous)
+          get().unsubscribeFromData();
+
+          // 2. Clear all stale data so old event doesn't bleed through
           set({
             eventCode: code,
             tbaData: null,
@@ -391,13 +394,12 @@ export const useAnalyticsStore = create<AnalyticsState>()(
             teamFuelStats: [],
             predictionInputs: [],
             teamTrends: [],
+            robotPictures: [],
             syncMeta: null,
             selectedTeams: [],
           });
 
-          // Clear other stores' localStorage to prevent stale data on hydration.
-          // The in-memory state will be refreshed by their own Firestore listeners
-          // or page-level useEffect hooks when they re-subscribe with the new event code.
+          // 3. Clear other stores' localStorage to prevent stale data on hydration.
           try {
             localStorage.removeItem('frc-picklist-storage');
             localStorage.removeItem('pit-scout-storage');
@@ -406,7 +408,7 @@ export const useAnalyticsStore = create<AnalyticsState>()(
             // localStorage may be unavailable (private browsing, etc.)
           }
 
-          // Clear in-memory state of other stores (lazy import to avoid circular deps)
+          // 4. Clear in-memory state of other stores (lazy import to avoid circular deps)
           import('./usePickListStore').then(m => m.usePickListStore.getState().clearPickList());
           import('./usePitScoutStore').then(m => m.usePitScoutStore.setState({ entries: [] }));
           import('./useNinjaStore').then(m => m.useNinjaStore.setState({ assignments: {}, notes: [] }));
