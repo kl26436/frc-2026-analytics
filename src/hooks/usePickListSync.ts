@@ -200,11 +200,18 @@ export function usePickListSync(
       }
     }
 
-    await updateDoc(doc(db, 'pick-lists', eventKey), {
-      teams,
-      updatedAt: serverTimestamp(),
-      updatedBy: userEmail ?? '',
-    });
+    try {
+      await updateDoc(doc(db, 'pick-lists', eventKey), {
+        teams,
+        updatedAt: serverTimestamp(),
+        updatedBy: userEmail ?? '',
+      });
+    } catch (err: unknown) {
+      if (err instanceof Error && 'code' in err && (err as { code: string }).code === 'permission-denied') {
+        console.error('Lock conflict: another admin may hold the lock. Refreshing...');
+      }
+      throw err;
+    }
     return true;
   }, [eventKey, canEdit, userEmail]);
 

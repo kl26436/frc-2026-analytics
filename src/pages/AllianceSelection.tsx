@@ -76,6 +76,10 @@ function AllianceSelection() {
     const teamsSource = liveList ?? pickList;
     if (!teamsSource) return;
 
+    if (!liveList && pickList) {
+      if (!confirm('No live list exists yet. Your personal list will be used. Consider publishing to live first. Continue anyway?')) return;
+    }
+
     // Get all event team numbers from teamStatistics
     const allEventTeamNumbers = teamStatistics.map(t => t.teamNumber);
 

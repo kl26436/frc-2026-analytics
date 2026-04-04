@@ -140,6 +140,7 @@ export const usePickListStore = create<PickListState>()(
             },
           },
         });
+        get().markDiverged();
       },
 
       // Add team to a tier
@@ -345,6 +346,7 @@ export const usePickListStore = create<PickListState>()(
             teams: updatedTeams,
           },
         });
+        get().markDiverged();
 
         return newlyFlaggedCount;
       },
@@ -360,6 +362,7 @@ export const usePickListStore = create<PickListState>()(
             teams: pickList.teams.map(t => ({ ...t, flagged: false })),
           },
         });
+        get().markDiverged();
       },
 
       // ========== WATCHLIST FUNCTIONS ==========
@@ -419,6 +422,7 @@ export const usePickListStore = create<PickListState>()(
             ),
           },
         });
+        get().markDiverged();
       },
 
       // Reorder watchlist team to new rank
@@ -452,6 +456,7 @@ export const usePickListStore = create<PickListState>()(
             ),
           },
         });
+        get().markDiverged();
       },
 
       // Finalize watchlist - insert teams into Potatoes (tier2) at specified position
@@ -533,6 +538,7 @@ export const usePickListStore = create<PickListState>()(
             })),
           },
         });
+        get().markDiverged();
       },
 
       // Get watchlist teams sorted by rank
