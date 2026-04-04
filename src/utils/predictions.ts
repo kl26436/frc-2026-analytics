@@ -43,9 +43,8 @@ export function buildPredictionInputs(
     const fuel = fuelMap.get(scout.teamNumber);
     const useFms = fuel && fuel.matchesPlayed >= 1;
 
-    // Reliability from scout flags (both paths use this)
-    const unreliabilityPct = (scout.lostConnectionRate + scout.noRobotRate);
-    const reliability = 1 - Math.min(unreliabilityPct / 100, 0.5);
+    // Reliability from scout flags — use deduplicated rate (both paths use this)
+    const reliability = Math.max(0, 1 - scout.overallUnreliabilityRate / 100);
 
     if (useFms) {
       return {

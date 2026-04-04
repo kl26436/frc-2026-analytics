@@ -417,11 +417,11 @@ export interface TeamFuelStats {
   zeroWeightMatches: number;
 }
 
-/** Sample standard deviation (Bessel-corrected). Returns 0 for < 2 values. */
-function sampleStddev(values: number[], mean: number): number {
+/** Population standard deviation — used as parameters for Monte Carlo simulation. Returns 0 for < 2 values. */
+function populationStddev(values: number[], mean: number): number {
   if (values.length < 2) return 0;
   const sumSqDiff = values.reduce((s, v) => s + (v - mean) ** 2, 0);
-  return Math.sqrt(sumSqDiff / (values.length - 1));
+  return Math.sqrt(sumSqDiff / values.length);
 }
 
 /**
@@ -465,17 +465,19 @@ export function aggregateTeamFuel(matchRows: RobotMatchFuel[]): TeamFuelStats[] 
     const avgTowerPoints = avgAutoTowerPoints + avgEndgameTowerPoints;
 
     // Variance (per-match std devs for Monte Carlo)
-    const stdAutoPointsScored = sampleStddev(rows.map(r => r.autoPointsScored), avgAutoPointsScored);
-    const stdTeleopPointsScored = sampleStddev(rows.map(r => r.teleopPointsScored), avgTeleopPointsScored);
-    const stdFuelPointsScored = sampleStddev(rows.map(r => r.totalPointsScored), avgFuelPointsScored);
-    const stdAutoTowerPoints = sampleStddev(rows.map(r => r.autoTowerPoints), avgAutoTowerPoints);
-    const stdEndgameTowerPoints = sampleStddev(rows.map(r => r.endgameTowerPoints), avgEndgameTowerPoints);
-    const stdTowerPoints = sampleStddev(rows.map(r => r.totalTowerPoints), avgTowerPoints);
+    const stdAutoPointsScored = populationStddev(rows.map(r => r.autoPointsScored), avgAutoPointsScored);
+    const stdTeleopPointsScored = populationStddev(rows.map(r => r.teleopPointsScored), avgTeleopPointsScored);
+    const stdFuelPointsScored = populationStddev(rows.map(r => r.totalPointsScored), avgFuelPointsScored);
+    const stdAutoTowerPoints = populationStddev(rows.map(r => r.autoTowerPoints), avgAutoTowerPoints);
+    const stdEndgameTowerPoints = populationStddev(rows.map(r => r.endgameTowerPoints), avgEndgameTowerPoints);
+    const stdTowerPoints = populationStddev(rows.map(r => r.totalTowerPoints), avgTowerPoints);
 
     // Reliability
     const noShowMatches = rows.filter(r => r.isNoShow).length;
     const lostConnectionMatches = rows.filter(r => r.isLostConnection).length;
-    const reliabilityRate = 1 - Math.min((noShowMatches + lostConnectionMatches) / n, 0.5);
+    // Deduplicate: a match flagged with both no-show AND lost-connection counts once
+    const unreliableMatches = rows.filter(r => r.isNoShow || r.isLostConnection).length;
+    const reliabilityRate = Math.max(0, 1 - unreliableMatches / n);
 
     results.push({
       teamNumber,

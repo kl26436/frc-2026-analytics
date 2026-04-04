@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  doc, setDoc, updateDoc, onSnapshot, addDoc, deleteDoc,
+  doc, setDoc, updateDoc, onSnapshot, addDoc, deleteDoc, getDoc,
   collection, query, where, serverTimestamp, arrayUnion, Timestamp,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -46,6 +46,7 @@ export function usePickListSync(
   const [snapshotTakenAt, setSnapshotTakenAt] = useState<string | null>(null);
   const [snapshotTakenBy, setSnapshotTakenBy] = useState<string | null>(null);
   const [pendingControlFor, setPendingControlFor] = useState<string | null>(null);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
   const [comments, setComments] = useState<LiveComment[]>([]);
   const [suggestions, setSuggestions] = useState<LiveSuggestion[]>([]);
   const [liveFilterConfigs, setLiveFilterConfigs] = useState<FilterConfig[] | null>(null);
@@ -78,13 +79,15 @@ export function usePickListSync(
     const listRef = doc(db, 'pick-lists', eventKey);
     unsubListRef.current = onSnapshot(listRef, (snap) => {
       if (snap.exists()) {
-        const { list, lockStatus: ls, snapshotTakenAt: sta, snapshotTakenBy: stb, pendingControlFor: pcf, liveFilterConfigs: lfc } = docToLiveList(snap.data() as Record<string, unknown>);
+        const data = snap.data() as Record<string, unknown>;
+        const { list, lockStatus: ls, snapshotTakenAt: sta, snapshotTakenBy: stb, pendingControlFor: pcf, liveFilterConfigs: lfc } = docToLiveList(data);
         setLiveList(list);
         setLockStatus(ls);
         setSnapshotTakenAt(sta);
         setSnapshotTakenBy(stb);
         setPendingControlFor(pcf);
         setLiveFilterConfigs(lfc);
+        setLastUpdatedAt(data.updatedAt ? tsToIso(data.updatedAt) : null);
         setExists(true);
       } else {
         setLiveList(null);
@@ -147,10 +150,17 @@ export function usePickListSync(
 
   const takeControl = useCallback(async () => {
     if (!eventKey || !uid || !isAdmin) return;
-    const listRef = doc(db, 'pick-lists', eventKey);
-    await updateDoc(listRef, {
-      lockedBy: { uid, email: userEmail ?? '', displayName: displayName ?? userEmail ?? '', lockedAt: serverTimestamp() },
-    });
+    try {
+      const listRef = doc(db, 'pick-lists', eventKey);
+      await updateDoc(listRef, {
+        lockedBy: { uid, email: userEmail ?? '', displayName: displayName ?? userEmail ?? '', lockedAt: serverTimestamp() },
+      });
+    } catch (err: unknown) {
+      if (err instanceof Error && 'code' in err && (err as { code: string }).code === 'permission-denied') {
+        console.error('Lock conflict: another admin holds an active lock.');
+      }
+      throw err;
+    }
   }, [eventKey, uid, isAdmin, userEmail, displayName]);
 
   const releaseControl = useCallback(async () => {
@@ -160,11 +170,42 @@ export function usePickListSync(
 
   const pushTeams = useCallback(async (teams: PickListTeam[]) => {
     if (!eventKey || !canEdit) return;
+    try {
+      await updateDoc(doc(db, 'pick-lists', eventKey), {
+        teams,
+        updatedAt: serverTimestamp(),
+        updatedBy: userEmail ?? '',
+      });
+    } catch (err: unknown) {
+      if (err instanceof Error && 'code' in err && (err as { code: string }).code === 'permission-denied') {
+        console.error('Lock conflict: another admin may hold the lock. Refreshing...');
+      }
+      throw err;
+    }
+  }, [eventKey, canEdit, userEmail]);
+
+  /** Push teams only if the doc hasn't changed since expectedUpdatedAt (drag-drop protection) */
+  const pushTeamsIfUnchanged = useCallback(async (teams: PickListTeam[], expectedUpdatedAt: string | null): Promise<boolean> => {
+    if (!eventKey || !canEdit) return false;
+
+    // Read current doc to check if it changed since drag started
+    const snap = await getDoc(doc(db, 'pick-lists', eventKey));
+    if (snap.exists()) {
+      const currentUpdatedAt = snap.data().updatedAt;
+      const currentIso = currentUpdatedAt instanceof Timestamp
+        ? currentUpdatedAt.toDate().toISOString()
+        : String(currentUpdatedAt ?? '');
+      if (expectedUpdatedAt && currentIso !== expectedUpdatedAt) {
+        return false; // Document changed since drag started
+      }
+    }
+
     await updateDoc(doc(db, 'pick-lists', eventKey), {
       teams,
       updatedAt: serverTimestamp(),
       updatedBy: userEmail ?? '',
     });
+    return true;
   }, [eventKey, canEdit, userEmail]);
 
   const initializeLiveList = useCallback(async (
@@ -250,11 +291,18 @@ export function usePickListSync(
 
   const pushConfig = useCallback(async (config: PickListConfig) => {
     if (!eventKey || !isAdmin) return;
-    await updateDoc(doc(db, 'pick-lists', eventKey), {
-      config,
-      updatedAt: serverTimestamp(),
-      updatedBy: userEmail ?? '',
-    });
+    try {
+      await updateDoc(doc(db, 'pick-lists', eventKey), {
+        config,
+        updatedAt: serverTimestamp(),
+        updatedBy: userEmail ?? '',
+      });
+    } catch (err: unknown) {
+      if (err instanceof Error && 'code' in err && (err as { code: string }).code === 'permission-denied') {
+        console.error('Lock conflict: another admin may hold the lock. Refreshing...');
+      }
+      throw err;
+    }
   }, [eventKey, isAdmin, userEmail]);
 
   const deleteLiveList = useCallback(async () => {
@@ -281,8 +329,15 @@ export function usePickListSync(
 
   const acceptSuggestion = useCallback(async (suggestionId: string, teams: PickListTeam[]) => {
     if (!eventKey || !canEdit) return;
-    await updateDoc(doc(db, 'pick-lists', eventKey), { teams, updatedAt: serverTimestamp(), updatedBy: userEmail ?? '' });
-    await updateDoc(doc(db, 'pick-lists', eventKey, 'suggestions', suggestionId), { status: 'accepted' });
+    try {
+      await updateDoc(doc(db, 'pick-lists', eventKey), { teams, updatedAt: serverTimestamp(), updatedBy: userEmail ?? '' });
+      await updateDoc(doc(db, 'pick-lists', eventKey, 'suggestions', suggestionId), { status: 'accepted' });
+    } catch (err: unknown) {
+      if (err instanceof Error && 'code' in err && (err as { code: string }).code === 'permission-denied') {
+        console.error('Lock conflict: another admin may hold the lock. Refreshing...');
+      }
+      throw err;
+    }
   }, [eventKey, canEdit, userEmail]);
 
   const dismissSuggestion = useCallback(async (suggestionId: string) => {
@@ -350,10 +405,12 @@ export function usePickListSync(
     isLockHolder,
     isLockStale,
     canEdit,
+    lastUpdatedAt,
     // Admin actions
     takeControl,
     releaseControl,
     pushTeams,
+    pushTeamsIfUnchanged,
     pushConfig,
     initializeLiveList,
     acceptSuggestion,

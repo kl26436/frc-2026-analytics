@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { usePickListStore, DEFAULT_RED_FLAG_THRESHOLDS, type RedFlagThresholds } from '../store/usePickListStore';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
@@ -407,6 +407,8 @@ interface LivePickListViewProps {
   takeControl: () => Promise<void>;
   releaseControl: () => Promise<void>;
   pushTeams: (teams: PickListTeam[]) => Promise<void>;
+  pushTeamsIfUnchanged: (teams: PickListTeam[], expectedUpdatedAt: string | null) => Promise<boolean>;
+  lastUpdatedAt: string | null;
   pushConfig: (config: PickListConfig) => Promise<void>;
   initializeLiveList: (...args: Parameters<ReturnType<typeof usePickListSync>['initializeLiveList']>) => Promise<void>;
   acceptSuggestion: (id: string, teams: PickListTeam[]) => Promise<void>;
@@ -439,7 +441,7 @@ function LivePickListView({
   liveList, lockStatus, snapshotTakenAt, snapshotTakenBy, pendingControlFor,
   comments, suggestions, syncing, exists,
   isLockHolder, isLockStale, canEdit,
-  takeControl, releaseControl, pushTeams, pushConfig,
+  takeControl, releaseControl, pushTeams, pushTeamsIfUnchanged, lastUpdatedAt, pushConfig,
   initializeLiveList, acceptSuggestion, dismissSuggestion, deleteLiveList,
   passControl, claimPendingControl,
   addComment, deleteComment, addSuggestion, voteSuggestion,
@@ -463,6 +465,7 @@ function LivePickListView({
   const [showPassControl, setShowPassControl] = useState(false);
   const [liveActiveId, setLiveActiveId] = useState<string | null>(null);
   const [dragItems, setDragItems] = useState<PickListTeam[] | null>(null);
+  const dragStartUpdatedAt = useRef<string | null>(null);
   const [showWatchlist, setShowWatchlist] = useState(true);
   const [insertAtLiveRank, setInsertAtLiveRank] = useState(1);
   const [showTrendGlow, setShowTrendGlow] = useState(false);
@@ -484,6 +487,7 @@ function LivePickListView({
 
   const handleLiveDragStart = (event: DragStartEvent) => {
     setLiveActiveId(event.active.id.toString());
+    dragStartUpdatedAt.current = lastUpdatedAt;
     // Snapshot current teams into local drag state for optimistic updates
     if (liveList) setDragItems([...liveList.teams]);
   };
@@ -523,11 +527,16 @@ function LivePickListView({
     });
   };
 
-  // On drop: commit local drag state to Firestore in one write
-  const handleLiveDragEnd = (_event: DragEndEvent) => {
+  // On drop: commit local drag state to Firestore in one write (with conflict check)
+  const handleLiveDragEnd = async (_event: DragEndEvent) => {
     setLiveActiveId(null);
     if (!canEdit) { setDragItems(null); return; }
-    if (dragItems) pushTeams(dragItems);
+    if (dragItems) {
+      const success = await pushTeamsIfUnchanged(dragItems, dragStartUpdatedAt.current);
+      if (!success) {
+        alert('The live list was updated by another admin while you were dragging. Your changes were not saved. The list has been refreshed.');
+      }
+    }
     setDragItems(null);
   };
 
@@ -2165,6 +2174,8 @@ function PickList() {
           takeControl={liveSync.takeControl}
           releaseControl={liveSync.releaseControl}
           pushTeams={liveSync.pushTeams}
+          pushTeamsIfUnchanged={liveSync.pushTeamsIfUnchanged}
+          lastUpdatedAt={liveSync.lastUpdatedAt}
           pushConfig={liveSync.pushConfig}
           initializeLiveList={liveSync.initializeLiveList}
           acceptSuggestion={liveSync.acceptSuggestion}

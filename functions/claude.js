@@ -30,7 +30,25 @@ const ALLOWED_ORIGINS = [
 
 function getCorsOrigin(req) {
   const origin = req.headers.origin || "";
-  return ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return ALLOWED_ORIGINS.includes(origin) ? origin : "";
+}
+
+// Simple in-memory rate limiter (resets on cold start, good enough)
+const rateLimits = new Map(); // uid -> { count, resetTime }
+const MAX_REQUESTS_PER_MINUTE = 10;
+
+function checkRateLimit(uid) {
+  const now = Date.now();
+  const entry = rateLimits.get(uid);
+  if (!entry || now > entry.resetTime) {
+    rateLimits.set(uid, { count: 1, resetTime: now + 60000 });
+    return true;
+  }
+  if (entry.count >= MAX_REQUESTS_PER_MINUTE) {
+    return false;
+  }
+  entry.count++;
+  return true;
 }
 
 exports.claudeProxy = onRequest(
@@ -49,6 +67,12 @@ exports.claudeProxy = onRequest(
       return;
     }
 
+    const corsOrigin = getCorsOrigin(req);
+    if (!corsOrigin) {
+      res.status(403).json({ error: "Origin not allowed" });
+      return;
+    }
+
     // Verify Firebase Auth token
     const authHeader = req.headers.authorization || "";
     const match = authHeader.match(/^Bearer (.+)$/);
@@ -57,10 +81,16 @@ exports.claudeProxy = onRequest(
       return;
     }
 
+    let decodedToken;
     try {
-      await getAuth().verifyIdToken(match[1]);
+      decodedToken = await getAuth().verifyIdToken(match[1]);
     } catch {
       res.status(401).json({ error: "Invalid authorization token" });
+      return;
+    }
+
+    if (!checkRateLimit(decodedToken.uid)) {
+      res.status(429).json({ error: "Rate limit exceeded. Max 10 requests per minute." });
       return;
     }
 

@@ -32,6 +32,24 @@ const PG_USER = "grafana_user";
 
 const BATCH_SIZE = 500;
 
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+/** Validate eventKey format: lowercase alphanumeric + underscores, max 30 chars */
+function validateEventKey(eventKey) {
+  if (!/^[a-z0-9_]+$/.test(eventKey)) {
+    return "eventKey contains invalid characters. Expected format: lowercase alphanumeric with underscores (e.g., '2026txfor').";
+  }
+  if (eventKey.length > 30) {
+    return "eventKey is too long (max 30 characters).";
+  }
+  return null;
+}
+
+/** Postgres identifier quoting to prevent SQL injection in table names */
+function sanitizeTableName(name) {
+  return '"' + name.replace(/"/g, '""') + '"';
+}
+
 // ── Postgres Queries ────────────────────────────────────────────────────────
 
 function getPgConfig() {
@@ -149,7 +167,7 @@ async function fetchTBAMatches(client, eventKey) {
         "tba.score_breakdown.blue.hubScore.totalCount" as "blue_hub_totalCount",
         "tba.score_breakdown.blue.hubScore.totalPoints" as "blue_hub_totalPoints",
         "tba.score_breakdown.blue.hubScore.uncounted" as "blue_hub_uncounted"
-      FROM tba."${tableName}"
+      FROM tba.${sanitizeTableName(tableName)}
       ORDER BY "tba.key"`
     );
     return result.rows;
@@ -173,7 +191,7 @@ async function fetchTBARankings(client, eventKey) {
         "tba.sort_orders" as sort_orders,
         "tba.extra_stats" as extra_stats,
         "tba.dq" as dq
-      FROM tba."${tableName}"
+      FROM tba.${sanitizeTableName(tableName)}
       ORDER BY "tba.rank"`
     );
     return result.rows;
@@ -558,6 +576,27 @@ exports.syncScoutData = onCall(
       throw new HttpsError("invalid-argument", "eventKey is required.");
     }
 
+    const eventKeyError = validateEventKey(eventKey);
+    if (eventKeyError) {
+      throw new HttpsError("invalid-argument", eventKeyError);
+    }
+
+    // Rate limit: minimum 60 seconds between syncs
+    const syncMetaDoc = await db.doc("config/syncMeta").get();
+    if (syncMetaDoc.exists) {
+      const lastSync = syncMetaDoc.data().lastSyncAt;
+      if (lastSync) {
+        const lastSyncTime = new Date(lastSync);
+        const secondsSinceLastSync = (Date.now() - lastSyncTime.getTime()) / 1000;
+        if (secondsSinceLastSync < 60) {
+          throw new HttpsError(
+            "resource-exhausted",
+            `Please wait ${Math.ceil(60 - secondsSinceLastSync)} seconds before syncing again.`
+          );
+        }
+      }
+    }
+
     try {
       console.log(`syncScoutData: starting sync for eventKey=${eventKey}`);
       const result = await performSync(eventKey, request.auth.token.email || "callable");
@@ -600,8 +639,8 @@ exports.scheduledSync = onSchedule(
     }
 
     const eventKey = config.eventCode;
-    if (!eventKey) {
-      console.log("No eventCode in config, skipping.");
+    if (!eventKey || !/^[a-z0-9_]+$/.test(eventKey)) {
+      console.log("Invalid or missing eventCode in config, skipping.");
       return;
     }
 
