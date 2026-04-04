@@ -54,8 +54,6 @@ function PredictionContent({
               <div className="flex items-center justify-center gap-1.5 mt-1.5 text-xs text-redAlliance/70">
                 <span>{matchup.redRP.scorePercentiles.p10.toFixed(0)}</span>
                 <span className="text-textMuted">–</span>
-                <span className="font-semibold text-redAlliance">{matchup.redRP.scorePercentiles.p50.toFixed(0)}</span>
-                <span className="text-textMuted">–</span>
                 <span>{matchup.redRP.scorePercentiles.p90.toFixed(0)}</span>
               </div>
               <div className="flex items-center justify-center gap-1 mt-1">
@@ -71,8 +69,6 @@ function PredictionContent({
               <div className="flex items-center justify-center gap-1.5 mt-1.5 text-xs text-blueAlliance/70">
                 <span>{matchup.blueRP.scorePercentiles.p10.toFixed(0)}</span>
                 <span className="text-textMuted">–</span>
-                <span className="font-semibold text-blueAlliance">{matchup.blueRP.scorePercentiles.p50.toFixed(0)}</span>
-                <span className="text-textMuted">–</span>
                 <span>{matchup.blueRP.scorePercentiles.p90.toFixed(0)}</span>
               </div>
               <div className="flex items-center justify-center gap-1 mt-1">
@@ -83,7 +79,7 @@ function PredictionContent({
             </div>
           </div>
 
-          <p className="text-[10px] text-textMuted tracking-wide uppercase">min – expected – max</p>
+          <p className="text-[10px] text-textMuted tracking-wide uppercase">min – max range</p>
 
           {matchup.favoredAlliance !== 'even' ? (
             <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${

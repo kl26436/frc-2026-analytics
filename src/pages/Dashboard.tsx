@@ -456,8 +456,6 @@ function Dashboard() {
                       <div className="flex items-center justify-center gap-1 mt-1 text-[11px] text-redAlliance/70">
                         <span>{redRP.scorePercentiles.p10.toFixed(0)}</span>
                         <span className="text-textMuted">–</span>
-                        <span className="font-semibold text-redAlliance">{redRP.scorePercentiles.p50.toFixed(0)}</span>
-                        <span className="text-textMuted">–</span>
                         <span>{redRP.scorePercentiles.p90.toFixed(0)}</span>
                       </div>
                       <span className={`inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-semibold ${
@@ -482,8 +480,6 @@ function Dashboard() {
                       <div className="flex items-center justify-center gap-1 mt-1 text-[11px] text-blueAlliance/70">
                         <span>{blueRP.scorePercentiles.p10.toFixed(0)}</span>
                         <span className="text-textMuted">–</span>
-                        <span className="font-semibold text-blueAlliance">{blueRP.scorePercentiles.p50.toFixed(0)}</span>
-                        <span className="text-textMuted">–</span>
                         <span>{blueRP.scorePercentiles.p90.toFixed(0)}</span>
                       </div>
                       <span className={`inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-semibold ${
@@ -491,7 +487,7 @@ function Dashboard() {
                       }`}>{blue.confidence} confidence</span>
                     </div>
                   </div>
-                  <p className="text-center mt-2 text-[10px] text-textMuted tracking-wide uppercase">min – expected – max</p>
+                  <p className="text-center mt-2 text-[10px] text-textMuted tracking-wide uppercase">min – max range</p>
                   <p className={`text-center mt-2 text-sm font-semibold ${
                     favored === 'even' ? 'text-textMuted' : weFavored ? 'text-success' : 'text-danger'
                   }`}>→ {favoredLabel}</p>
