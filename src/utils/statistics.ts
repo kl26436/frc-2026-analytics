@@ -83,11 +83,13 @@ export function calculateTeamStatistics(
   const totalAutoPlus3 = sum(entries.map(e => e.auton_SCORE_PLUS_3));
   const totalAutoPlus5 = sum(entries.map(e => e.auton_SCORE_PLUS_5));
   const totalAutoPlus10 = sum(entries.map(e => e.auton_SCORE_PLUS_10));
+  const totalAutoPlus20 = sum(entries.map(e => e.auton_SCORE_PLUS_20));
   const totalTeleopPlus1 = sum(entries.map(e => e.teleop_SCORE_PLUS_1));
   const totalTeleopPlus2 = sum(entries.map(e => e.teleop_SCORE_PLUS_2));
   const totalTeleopPlus3 = sum(entries.map(e => e.teleop_SCORE_PLUS_3));
   const totalTeleopPlus5 = sum(entries.map(e => e.teleop_SCORE_PLUS_5));
   const totalTeleopPlus10 = sum(entries.map(e => e.teleop_SCORE_PLUS_10));
+  const totalTeleopPlus20 = sum(entries.map(e => e.teleop_SCORE_PLUS_20));
 
   // ── Fuel estimate totals ──
   const totalAutoFuelEstimate = sum(fuelPerMatch.map(f => f.auto));
@@ -148,11 +150,13 @@ export function calculateTeamStatistics(
     totalAutoPlus3,
     totalAutoPlus5,
     totalAutoPlus10,
+    totalAutoPlus20,
     totalTeleopPlus1,
     totalTeleopPlus2,
     totalTeleopPlus3,
     totalTeleopPlus5,
     totalTeleopPlus10,
+    totalTeleopPlus20,
     totalAutoFuelEstimate,
     totalTeleopFuelEstimate,
     totalTotalFuelEstimate,
@@ -203,11 +207,13 @@ export function calculateTeamStatistics(
     avgAutoPlus3: totalAutoPlus3 / n,
     avgAutoPlus5: totalAutoPlus5 / n,
     avgAutoPlus10: totalAutoPlus10 / n,
+    avgAutoPlus20: totalAutoPlus20 / n,
     avgTeleopPlus1: totalTeleopPlus1 / n,
     avgTeleopPlus2: totalTeleopPlus2 / n,
     avgTeleopPlus3: totalTeleopPlus3 / n,
     avgTeleopPlus5: totalTeleopPlus5 / n,
     avgTeleopPlus10: totalTeleopPlus10 / n,
+    avgTeleopPlus20: totalTeleopPlus20 / n,
 
     // ── Derived: Points Averages ──
     avgAutoPoints: totalAutoPoints / n,
@@ -270,11 +276,13 @@ function emptyStats(teamNumber: number, teamName?: string): TeamStatistics {
     totalAutoPlus3: 0,
     totalAutoPlus5: 0,
     totalAutoPlus10: 0,
+    totalAutoPlus20: 0,
     totalTeleopPlus1: 0,
     totalTeleopPlus2: 0,
     totalTeleopPlus3: 0,
     totalTeleopPlus5: 0,
     totalTeleopPlus10: 0,
+    totalTeleopPlus20: 0,
     totalAutoFuelEstimate: 0,
     totalTeleopFuelEstimate: 0,
     totalTotalFuelEstimate: 0,
@@ -315,11 +323,13 @@ function emptyStats(teamNumber: number, teamName?: string): TeamStatistics {
     avgAutoPlus3: 0,
     avgAutoPlus5: 0,
     avgAutoPlus10: 0,
+    avgAutoPlus20: 0,
     avgTeleopPlus1: 0,
     avgTeleopPlus2: 0,
     avgTeleopPlus3: 0,
     avgTeleopPlus5: 0,
     avgTeleopPlus10: 0,
+    avgTeleopPlus20: 0,
     avgAutoPoints: 0,
     avgTeleopPoints: 0,
     avgEndgamePoints: 0,

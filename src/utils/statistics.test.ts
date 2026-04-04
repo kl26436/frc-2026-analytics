@@ -30,6 +30,7 @@ function makeEntry(overrides: Partial<ScoutEntry> & { match_number: number; team
     auton_SCORE_PLUS_3: 0,
     auton_SCORE_PLUS_5: 0,
     auton_SCORE_PLUS_10: 0,
+    auton_SCORE_PLUS_20: 0,
     auton_did_nothing: false,
     auton_went_to_neutral: false,
     teleop_FUEL_SCORE: 0,
@@ -39,6 +40,7 @@ function makeEntry(overrides: Partial<ScoutEntry> & { match_number: number; team
     teleop_SCORE_PLUS_3: 0,
     teleop_SCORE_PLUS_5: 0,
     teleop_SCORE_PLUS_10: 0,
+    teleop_SCORE_PLUS_20: 0,
     climb_level: '1. None',
     eff_rep_bulldozed_fuel: false,
     poor_fuel_scoring_accuracy: false,
@@ -75,14 +77,14 @@ describe('calculateTeamStatistics', () => {
         team_number: 148,
         auton_SCORE_PLUS_1: 2,  // 2
         auton_SCORE_PLUS_5: 1,  // 5
-        teleop_SCORE_PLUS_3: 3, // 9
+        teleop_SCORE_PLUS_20: 3, // 60
         teleop_SCORE_PLUS_10: 1, // 10
       }),
     ];
     const result = calculateTeamStatistics(148, entries);
     expect(result.avgAutoFuelEstimate).toBe(7);   // 2 + 5
-    expect(result.avgTeleopFuelEstimate).toBe(19); // 9 + 10
-    expect(result.avgTotalFuelEstimate).toBe(26);  // 7 + 19
+    expect(result.avgTeleopFuelEstimate).toBe(70); // 60 + 10
+    expect(result.avgTotalFuelEstimate).toBe(77);  // 7 + 70
   });
 
   it('computes climb rates correctly', () => {
@@ -106,16 +108,16 @@ describe('calculateTeamStatistics', () => {
         team_number: 148,
         auton_AUTON_CLIMBED: 1,
         auton_SCORE_PLUS_5: 2, // 10 auto fuel
-        teleop_SCORE_PLUS_3: 1, // 3 teleop fuel
+        teleop_SCORE_PLUS_20: 1, // 20 teleop fuel
         climb_level: '3. Level 2', // 20 endgame points
       }),
     ];
     const result = calculateTeamStatistics(148, entries);
     // auto = 10 fuel + 15 auto climb = 25
     expect(result.avgAutoPoints).toBe(25);
-    expect(result.avgTeleopPoints).toBe(3);
+    expect(result.avgTeleopPoints).toBe(20);
     expect(result.avgEndgamePoints).toBe(20);
-    expect(result.avgTotalPoints).toBe(48); // 25 + 3 + 20
+    expect(result.avgTotalPoints).toBe(65); // 25 + 20 + 20
   });
 
   it('computes flag rates', () => {

@@ -147,7 +147,7 @@ function MatchDetailModal({ match, teamStats, robotActions, onClose }: MatchDeta
             {/* SCORE_PLUS breakdown */}
             <div className="bg-surfaceElevated rounded p-3 mb-3">
               <p className="text-xs text-textSecondary mb-2">Bonus Buckets</p>
-              <div className="grid grid-cols-5 gap-3 text-center">
+              <div className="grid grid-cols-6 gap-2 text-center">
                 <div>
                   <p className="text-xs text-textMuted">+1</p>
                   <p className="font-bold">{match.auton_SCORE_PLUS_1}</p>
@@ -167,6 +167,10 @@ function MatchDetailModal({ match, teamStats, robotActions, onClose }: MatchDeta
                 <div>
                   <p className="text-xs text-textMuted">+10</p>
                   <p className="font-bold">{match.auton_SCORE_PLUS_10}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-textMuted">+20</p>
+                  <p className="font-bold">{match.auton_SCORE_PLUS_20}</p>
                 </div>
               </div>
             </div>
@@ -192,7 +196,7 @@ function MatchDetailModal({ match, teamStats, robotActions, onClose }: MatchDeta
             {/* SCORE_PLUS breakdown */}
             <div className="bg-surfaceElevated rounded p-3 mb-3">
               <p className="text-xs text-textSecondary mb-2">Bonus Buckets</p>
-              <div className="grid grid-cols-5 gap-3 text-center">
+              <div className="grid grid-cols-6 gap-2 text-center">
                 <div>
                   <p className="text-xs text-textMuted">+1</p>
                   <p className="font-bold">{match.teleop_SCORE_PLUS_1}</p>
@@ -212,6 +216,10 @@ function MatchDetailModal({ match, teamStats, robotActions, onClose }: MatchDeta
                 <div>
                   <p className="text-xs text-textMuted">+10</p>
                   <p className="font-bold">{match.teleop_SCORE_PLUS_10}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-textMuted">+20</p>
+                  <p className="font-bold">{match.teleop_SCORE_PLUS_20}</p>
                 </div>
               </div>
             </div>

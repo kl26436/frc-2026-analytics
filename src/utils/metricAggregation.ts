@@ -35,11 +35,13 @@ const RAW_METRICS: Record<string, Extractor> = {
   autoPlus3: (e) => e.auton_SCORE_PLUS_3,
   autoPlus5: (e) => e.auton_SCORE_PLUS_5,
   autoPlus10: (e) => e.auton_SCORE_PLUS_10,
+  autoPlus20: (e) => e.auton_SCORE_PLUS_20,
   teleopPlus1: (e) => e.teleop_SCORE_PLUS_1,
   teleopPlus2: (e) => e.teleop_SCORE_PLUS_2,
   teleopPlus3: (e) => e.teleop_SCORE_PLUS_3,
   teleopPlus5: (e) => e.teleop_SCORE_PLUS_5,
   teleopPlus10: (e) => e.teleop_SCORE_PLUS_10,
+  teleopPlus20: (e) => e.teleop_SCORE_PLUS_20,
 
   // Climb (numeric level 0-3)
   climbLevel: (e) => parseClimbLevel(e.climb_level),
@@ -75,11 +77,13 @@ export const RAW_METRIC_OPTIONS: RawMetricOption[] = [
   { id: 'autoPlus3', label: 'Auto +3 Buckets', shortLabel: 'Auto +3', category: 'fuel' },
   { id: 'autoPlus5', label: 'Auto +5 Buckets', shortLabel: 'Auto +5', category: 'fuel' },
   { id: 'autoPlus10', label: 'Auto +10 Buckets', shortLabel: 'Auto +10', category: 'fuel' },
+  { id: 'autoPlus20', label: 'Auto +20 Buckets', shortLabel: 'Auto +20', category: 'fuel' },
   { id: 'teleopPlus1', label: 'Teleop +1 Buckets', shortLabel: 'Teleop +1', category: 'fuel' },
   { id: 'teleopPlus2', label: 'Teleop +2 Buckets', shortLabel: 'Teleop +2', category: 'fuel' },
   { id: 'teleopPlus3', label: 'Teleop +3 Buckets', shortLabel: 'Teleop +3', category: 'fuel' },
   { id: 'teleopPlus5', label: 'Teleop +5 Buckets', shortLabel: 'Teleop +5', category: 'fuel' },
   { id: 'teleopPlus10', label: 'Teleop +10 Buckets', shortLabel: 'Teleop +10', category: 'fuel' },
+  { id: 'teleopPlus20', label: 'Teleop +20 Buckets', shortLabel: 'Teleop +20', category: 'fuel' },
   // Endgame
   { id: 'climbLevel', label: 'Climb Level (0-3)', shortLabel: 'Climb', category: 'endgame' },
 ];

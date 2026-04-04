@@ -43,6 +43,7 @@ export interface ScoutEntry {
   auton_SCORE_PLUS_3: number;
   auton_SCORE_PLUS_5: number;
   auton_SCORE_PLUS_10: number;
+  auton_SCORE_PLUS_20: number;
   auton_did_nothing: boolean;
   auton_went_to_neutral: boolean;
 
@@ -54,6 +55,7 @@ export interface ScoutEntry {
   teleop_SCORE_PLUS_3: number;
   teleop_SCORE_PLUS_5: number;
   teleop_SCORE_PLUS_10: number;
+  teleop_SCORE_PLUS_20: number;
 
   // ── Endgame ──
   /** Raw string from Postgres: "1. None", "2. Level 1", "3. Level 2", "4. Level 3" */
@@ -203,7 +205,8 @@ export interface RobotActions {
  *
  * Tablet UI workflow: scouter taps quantity buttons (SCORE_PLUS_X) first,
  * then confirms with FUEL_SCORE or FUEL_PASS. So the sequence is:
- *   [SCORE_PLUS_5, SCORE_PLUS_3] → FUEL_SCORE = 8 balls scored
+ *   [SCORE_PLUS_5, SCORE_PLUS_20] → FUEL_SCORE = 25 balls scored
+ *   [SCORE_PLUS_5, SCORE_PLUS_3] → FUEL_SCORE = 8 balls scored  (historical events)
  *   [SCORE_PLUS_10] → FUEL_PASS = 10 balls passed
  *
  * A FUEL_SCORE/FUEL_PASS with no preceding SCORE_PLUS counts as 1 ball.
@@ -355,11 +358,13 @@ export interface TeamStatistics {
   totalAutoPlus3: number;
   totalAutoPlus5: number;
   totalAutoPlus10: number;
+  totalAutoPlus20: number;
   totalTeleopPlus1: number;
   totalTeleopPlus2: number;
   totalTeleopPlus3: number;
   totalTeleopPlus5: number;
   totalTeleopPlus10: number;
+  totalTeleopPlus20: number;
 
   // ── Fuel Estimate Totals (sum of per-match SCORE_PLUS formula results) ──
   totalAutoFuelEstimate: number;
@@ -420,11 +425,13 @@ export interface TeamStatistics {
   avgAutoPlus3: number;
   avgAutoPlus5: number;
   avgAutoPlus10: number;
+  avgAutoPlus20: number;
   avgTeleopPlus1: number;
   avgTeleopPlus2: number;
   avgTeleopPlus3: number;
   avgTeleopPlus5: number;
   avgTeleopPlus10: number;
+  avgTeleopPlus20: number;
 
   // ── Points Averages ──
   avgAutoPoints: number;
@@ -481,14 +488,16 @@ export function estimateMatchFuel(entry: ScoutEntry): {
     entry.auton_SCORE_PLUS_2 * 2 +
     entry.auton_SCORE_PLUS_3 * 3 +
     entry.auton_SCORE_PLUS_5 * 5 +
-    entry.auton_SCORE_PLUS_10 * 10;
+    entry.auton_SCORE_PLUS_10 * 10 +
+    entry.auton_SCORE_PLUS_20 * 20;
 
   const teleop =
     entry.teleop_SCORE_PLUS_1 * 1 +
     entry.teleop_SCORE_PLUS_2 * 2 +
     entry.teleop_SCORE_PLUS_3 * 3 +
     entry.teleop_SCORE_PLUS_5 * 5 +
-    entry.teleop_SCORE_PLUS_10 * 10;
+    entry.teleop_SCORE_PLUS_10 * 10 +
+    entry.teleop_SCORE_PLUS_20 * 20;
 
   return { auto, teleop, total: auto + teleop };
 }

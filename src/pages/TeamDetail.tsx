@@ -544,6 +544,7 @@ function TeamDetail() {
                     { label: '+3', val: teamStats.totalAutoPlus3 },
                     { label: '+5', val: teamStats.totalAutoPlus5 },
                     { label: '+10', val: teamStats.totalAutoPlus10 },
+                    { label: '+20', val: teamStats.totalAutoPlus20 },
                   ].map(b => (
                     <div key={b.label}>
                       <p className="text-xs text-textMuted">{b.label}</p>
@@ -561,6 +562,7 @@ function TeamDetail() {
                     { label: '+3', val: teamStats.totalTeleopPlus3 },
                     { label: '+5', val: teamStats.totalTeleopPlus5 },
                     { label: '+10', val: teamStats.totalTeleopPlus10 },
+                    { label: '+20', val: teamStats.totalTeleopPlus20 },
                   ].map(b => (
                     <div key={b.label}>
                       <p className="text-xs text-textMuted">{b.label}</p>

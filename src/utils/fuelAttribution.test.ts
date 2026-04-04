@@ -34,6 +34,7 @@ function makeEntry(overrides: Partial<ScoutEntry> & {
     auton_SCORE_PLUS_3: 0,
     auton_SCORE_PLUS_5: 0,
     auton_SCORE_PLUS_10: 0,
+    auton_SCORE_PLUS_20: 0,
     auton_did_nothing: false,
     auton_went_to_neutral: false,
     teleop_FUEL_SCORE: 0,
@@ -43,6 +44,7 @@ function makeEntry(overrides: Partial<ScoutEntry> & {
     teleop_SCORE_PLUS_3: 0,
     teleop_SCORE_PLUS_5: 0,
     teleop_SCORE_PLUS_10: 0,
+    teleop_SCORE_PLUS_20: 0,
     climb_level: '1. None',
     eff_rep_bulldozed_fuel: false,
     poor_fuel_scoring_accuracy: false,
@@ -109,12 +111,12 @@ describe('computeMatchFuelAttribution', () => {
   });
 
   it('attributes FMS scored balls proportionally via power curve', () => {
-    // Two red robots: one shoots 8 balls, other shoots 2
+    // Two red robots: one shoots 25 balls, other shoots 2
     // FMS says 10 total scored for the alliance
     const entries = [
       makeEntry({
         match_number: 1, team_number: 148, configured_team: 'red_1',
-        teleop_SCORE_PLUS_5: 1, teleop_SCORE_PLUS_3: 1, // 8 teleop fuel
+        teleop_SCORE_PLUS_5: 1, teleop_SCORE_PLUS_20: 1, // 25 teleop fuel
         teleop_FUEL_SCORE: 2, // not used for count, just event marker
       }),
       makeEntry({
@@ -141,11 +143,11 @@ describe('computeMatchFuelAttribution', () => {
     const team118 = results.find(r => r.teamNumber === 118)!;
     const team1477 = results.find(r => r.teamNumber === 1477)!;
 
-    // Power curve (β=0.7): team 148 has 8 shots, team 118 has 2 shots
-    // weights: 8^0.7 ≈ 5.278, 2^0.7 ≈ 1.624, 0^0.7 = 0
-    // total weight ≈ 6.902
-    // 148: (5.278 / 6.902) * 10 ≈ 7.65
-    // 118: (1.624 / 6.902) * 10 ≈ 2.35
+    // Power curve (β=0.7): team 148 has 25 shots, team 118 has 2 shots
+    // weights: 25^0.7 ≈ 11.180, 2^0.7 ≈ 1.624, 0^0.7 = 0
+    // total weight ≈ 12.804
+    // 148: (11.180 / 12.804) * 10 ≈ 8.73
+    // 118: (1.624 / 12.804) * 10 ≈ 1.27
     expect(team148.shotsScored).toBeGreaterThan(team118.shotsScored);
     expect(team148.shotsScored + team118.shotsScored).toBeCloseTo(10, 5);
     expect(team1477.shotsScored).toBe(0);
@@ -216,7 +218,7 @@ describe('computeMatchFuelAttribution', () => {
       match_number: 1,
       team_number: 148,
       auto: [
-        { x: 0, y: 0, time_stamp: 0, type: 'SCORE_PLUS_3', value: 1, score: 0 },
+        { x: 0, y: 0, time_stamp: 0, type: 'SCORE_PLUS_20', value: 1, score: 0 },
         { x: 0, y: 0, time_stamp: 1, type: 'FUEL_SCORE', value: 1, score: 3 },
       ],
       teleop: [
@@ -231,11 +233,11 @@ describe('computeMatchFuelAttribution', () => {
     const robot = results[0];
 
     expect(robot.hasActionData).toBe(true);
-    expect(robot.shots).toBe(8);  // 3 auto + 5 teleop
+    expect(robot.shots).toBe(25);  // 20 auto + 5 teleop
     expect(robot.passes).toBe(2); // 2 teleop passes
-    expect(robot.autoShots).toBe(3);
+    expect(robot.autoShots).toBe(20);
     expect(robot.teleopShots).toBe(5);
-    expect(robot.totalMoved).toBe(10); // 3 + 5 + 2
+    expect(robot.totalMoved).toBe(27); // 20 + 5 + 2
   });
 
   it('reads tower data from TBA match', () => {

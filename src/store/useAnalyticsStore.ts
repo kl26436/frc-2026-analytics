@@ -141,10 +141,26 @@ export const useAnalyticsStore = create<AnalyticsState>()(
         _unsubScout = onSnapshot(
           entriesRef,
           (snapshot) => {
-            const entries: ScoutEntry[] = snapshot.docs.map(d => ({
-              ...d.data(),
-              id: d.id,
-            })) as ScoutEntry[];
+            const entries: ScoutEntry[] = snapshot.docs.map(d => {
+              const raw = d.data();
+              return {
+                ...raw,
+                id: d.id,
+                // Ensure all SCORE_PLUS fields default to 0 (old docs may lack newer fields)
+                auton_SCORE_PLUS_1: raw.auton_SCORE_PLUS_1 || 0,
+                auton_SCORE_PLUS_2: raw.auton_SCORE_PLUS_2 || 0,
+                auton_SCORE_PLUS_3: raw.auton_SCORE_PLUS_3 || 0,
+                auton_SCORE_PLUS_5: raw.auton_SCORE_PLUS_5 || 0,
+                auton_SCORE_PLUS_10: raw.auton_SCORE_PLUS_10 || 0,
+                auton_SCORE_PLUS_20: raw.auton_SCORE_PLUS_20 || 0,
+                teleop_SCORE_PLUS_1: raw.teleop_SCORE_PLUS_1 || 0,
+                teleop_SCORE_PLUS_2: raw.teleop_SCORE_PLUS_2 || 0,
+                teleop_SCORE_PLUS_3: raw.teleop_SCORE_PLUS_3 || 0,
+                teleop_SCORE_PLUS_5: raw.teleop_SCORE_PLUS_5 || 0,
+                teleop_SCORE_PLUS_10: raw.teleop_SCORE_PLUS_10 || 0,
+                teleop_SCORE_PLUS_20: raw.teleop_SCORE_PLUS_20 || 0,
+              } as ScoutEntry;
+            });
             set({ scoutEntries: entries, dataLoading: false, dataError: null });
             get().calculateRealStats();
           },

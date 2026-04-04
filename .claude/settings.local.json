@@ -6,7 +6,13 @@
       "Bash(node:*)",
       "Bash(npm run:*)",
       "Bash(npx firebase:*)",
-      "Bash(npx vite:*)"
+      "Bash(npx vite:*)",
+      "Bash(grep -rn \"level3Climb\\\\|L3\\\\|poor.*[Aa]ccuracy\" \"c:\\\\Users\\\\klape\\\\Downloads\\\\FRC 2026\\\\frc-2026-analytics\\\\src\\\\pages\"\" --include=\"*.tsx\" | grep -v \".test. \")",
+      "WebFetch(domain:guides.frc.nexus)",
+      "WebFetch(domain:firstfrc.blob.core.windows.net)",
+      "WebFetch(domain:www.frcmanual.com)",
+      "WebFetch(domain:www.chiefdelphi.com)",
+      "WebFetch(domain:www.thebluealliance.com)"
     ]
   }
 }
