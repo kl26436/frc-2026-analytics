@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Camera, Save, Loader2, CheckCircle, ChevronLeft, Download, Printer, ClipboardCheck, MessageSquare, UserPlus, X, Clipboard, WifiOff, RefreshCw, Binoculars, Search } from 'lucide-react';
+import { Camera, Save, Loader2, CheckCircle, ChevronLeft, Download, Printer, ClipboardCheck, MessageSquare, UserPlus, X, Clipboard, WifiOff, RefreshCw, Binoculars, Search, Pencil, Trash2, Check } from 'lucide-react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { usePitScoutStore } from '../store/usePitScoutStore';
 import { useFirebaseAuth } from '../hooks/useFirebaseAuth';
@@ -66,6 +66,8 @@ function PitScouting() {
   const [noteCategory, setNoteCategory] = useState<NinjaCategory>('general');
   const [noteTags, setNoteTags] = useState<NinjaTag[]>([]);
   const [noteMatchNum, setNoteMatchNum] = useState('');
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editNoteText, setEditNoteText] = useState('');
 
   // Assignment state
   const [assigningTeam, setAssigningTeam] = useState<number | null>(null);
@@ -1215,8 +1217,59 @@ function PitScouting() {
                   {note.matchNumber && <span className="text-xs text-blueAlliance font-medium">Q{note.matchNumber}</span>}
                   {note.id.startsWith('offline_') && <WifiOff size={11} className="text-warning" aria-label="Pending sync" />}
                   <span className="text-xs text-textMuted ml-auto">{new Date(note.createdAt).toLocaleString()}</span>
+                  {(isAdmin || note.authorEmail === userEmail) && editingNoteId !== note.id && (
+                    <div className="flex gap-1 ml-1">
+                      <button
+                        onClick={() => { setEditingNoteId(note.id); setEditNoteText(note.text); }}
+                        className="p-1 text-textMuted hover:text-blueAlliance transition-colors"
+                        title="Edit note"
+                      >
+                        <Pencil size={13} />
+                      </button>
+                      <button
+                        onClick={() => { if (confirm('Delete this note?')) ninjaStore.deleteNote(eventCode, note.id); }}
+                        className="p-1 text-textMuted hover:text-danger transition-colors"
+                        title="Delete note"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  )}
                 </div>
-                <p className="text-sm text-textPrimary whitespace-pre-wrap">{note.text}</p>
+                {editingNoteId === note.id ? (
+                  <div className="space-y-2">
+                    <textarea
+                      value={editNoteText}
+                      onChange={e => setEditNoteText(e.target.value)}
+                      rows={3}
+                      className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm text-textPrimary resize-none focus:outline-none focus:border-blueAlliance"
+                      autoFocus
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={async () => {
+                          if (editNoteText.trim()) {
+                            await ninjaStore.updateNote(eventCode, note.id, { text: editNoteText.trim() });
+                          }
+                          setEditingNoteId(null);
+                          setEditNoteText('');
+                        }}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-success text-background rounded-lg text-sm font-medium hover:bg-success/90 transition-colors"
+                      >
+                        <Check size={14} />
+                        Save
+                      </button>
+                      <button
+                        onClick={() => { setEditingNoteId(null); setEditNoteText(''); }}
+                        className="px-3 py-1.5 bg-card border border-border rounded-lg text-sm text-textSecondary hover:bg-interactive transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-textPrimary whitespace-pre-wrap">{note.text}</p>
+                )}
                 {note.photos && note.photos.length > 0 && (
                   <div className="flex gap-2 mt-2">
                     {note.photos.map((photo, i) => (
