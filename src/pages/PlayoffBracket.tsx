@@ -55,6 +55,149 @@ const BRACKET_SLOTS: BracketSlotDef[] = [
 
 // Finals slot handled separately (comp_level='f')
 
+// ─── Desktop Bracket Layout (absolute positions + SVG connectors) ────────────
+// Slots live in a 1024 × 600 canvas. M5/M10 are paired top, M6/M9 paired bottom
+// so the lower-bracket winner advances are clean horizontals (no crossing lines).
+// The upper→lower loser drops are dashed and routed through column gaps.
+const SLOT_W = 160;
+const SLOT_H = 80;  // matches BracketSlot's natural rendered height (header + 2 rows)
+const BRACKET_CANVAS_W = 1024;
+const BRACKET_CANVAS_H = 600;
+
+interface SlotPos { x: number; y: number }
+const SLOT_LAYOUT: Record<number, SlotPos> = {
+  // Upper Bracket — R1 stacked, R2 centered between pairs, UF centered between R2 slots
+  1:  { x: 8,    y: 0   },
+  2:  { x: 8,    y: 96  },
+  3:  { x: 8,    y: 192 },
+  4:  { x: 8,    y: 288 },
+  7:  { x: 220,  y: 48  },
+  8:  { x: 220,  y: 240 },
+  11: { x: 432,  y: 144 },
+  // Lower Bracket — slot order chosen to avoid crossing winner-advance lines
+  5:  { x: 8,    y: 408 },
+  6:  { x: 8,    y: 504 },
+  10: { x: 220,  y: 408 },
+  9:  { x: 220,  y: 504 },
+  12: { x: 432,  y: 456 },
+  13: { x: 644,  y: 456 },
+};
+
+const FINALS_POS: SlotPos = { x: 856, y: 290 };
+const FINALS_W = 160;
+const FINALS_H = 110;
+
+interface ConnectorDef { d: string; dashed?: boolean }
+const CONNECTORS: ConnectorDef[] = [
+  // Upper Bracket winner advancement
+  { d: 'M 168 40 H 194 V 88 H 220' },     // M1 → M7
+  { d: 'M 168 136 H 194 V 88' },          // M2 merges into M7 vertical
+  { d: 'M 168 232 H 194 V 280 H 220' },   // M3 → M8
+  { d: 'M 168 328 H 194 V 280' },         // M4 merges into M8 vertical
+  { d: 'M 380 88 H 406 V 184 H 432' },    // M7 → M11
+  { d: 'M 380 280 H 406 V 184' },         // M8 merges into M11 vertical
+  { d: 'M 592 184 H 724 V 345 H 856' },   // M11 → Finals (red side from above)
+
+  // Lower Bracket winner advancement
+  { d: 'M 168 448 H 220' },               // M5 → M10
+  { d: 'M 168 544 H 220' },               // M6 → M9
+  { d: 'M 380 448 H 406 V 496 H 432' },   // M10 → M12
+  { d: 'M 380 544 H 406 V 496' },         // M9 merges into M12 vertical
+  { d: 'M 592 496 H 644' },               // M12 → M13
+  { d: 'M 804 496 H 820 V 345 H 856' },   // M13 → Finals (blue side from below)
+
+  // Loser drops (dashed) — routed via column gaps to avoid overlap
+  { d: 'M 220 88 H 200 V 544 H 220',  dashed: true },  // M7 loser → M9 (left gap x=200)
+  { d: 'M 380 280 H 420 V 448 H 380', dashed: true },  // M8 loser → M10 (right gap x=420)
+  { d: 'M 592 224 H 618 V 496 H 644', dashed: true },  // M11 loser → M13 (right gap x=618)
+];
+
+// ─── Finals Series Card (BO3) ───────────────────────────────────────────────
+
+interface FinalsSeriesCardProps {
+  redTeams: number[];
+  blueTeams: number[];
+  redAllianceNum: number | null;
+  blueAllianceNum: number | null;
+  homeTeam: number;
+  finalsMatches: TBAMatch[];
+  prediction: { redWinProb: number } | null;
+}
+
+function FinalsSeriesCard({ redTeams, blueTeams, redAllianceNum, blueAllianceNum, homeTeam, finalsMatches, prediction }: FinalsSeriesCardProps) {
+  let redWins = 0, blueWins = 0, played = 0;
+  for (const fm of finalsMatches) {
+    if (fm.alliances.red.score < 0) continue;
+    played++;
+    if (fm.alliances.red.score > fm.alliances.blue.score) redWins++;
+    else if (fm.alliances.blue.score > fm.alliances.red.score) blueWins++;
+  }
+  const homeOnRed = redTeams.includes(homeTeam);
+  const homeOnBlue = blueTeams.includes(homeTeam);
+  const hasHome = homeOnRed || homeOnBlue;
+  const redChampion = redWins >= 2;
+  const blueChampion = blueWins >= 2;
+
+  const Pip = ({ filled, side }: { filled: boolean; side: 'red' | 'blue' }) => (
+    <span
+      className={`inline-block w-3 h-3 rounded-full text-[9px] text-center leading-3 font-bold ${
+        filled
+          ? side === 'red' ? 'bg-redAlliance text-white' : 'bg-blueAlliance text-white'
+          : 'bg-surfaceElevated text-textMuted border border-border'
+      }`}
+    >
+      {filled ? '✓' : '·'}
+    </span>
+  );
+
+  return (
+    <div className={`bg-surface rounded-lg border shadow-card overflow-hidden text-xs ${
+      hasHome ? 'border-warning ring-1 ring-warning/40' : 'border-border'
+    }`} style={{ width: FINALS_W, height: FINALS_H }}>
+      {/* Header */}
+      <div className="bg-warning/10 px-2 py-1 flex items-center justify-between border-b border-warning/30">
+        <span className="text-[10px] font-bold text-warning uppercase tracking-wider">Finals · BO3</span>
+        <span className="text-[10px] text-textMuted">{played}/3</span>
+      </div>
+
+      {/* Red row */}
+      <div className={`px-2 py-1.5 flex items-center gap-1.5 ${redChampion ? 'bg-success/10' : ''}`}>
+        <span className="w-2 h-2 rounded-full bg-redAlliance flex-shrink-0" />
+        <span className="text-redAlliance font-bold w-5 text-center text-[10px]">
+          {redAllianceNum ? `A${redAllianceNum}` : '?'}
+        </span>
+        <span className={`flex-1 truncate text-[10px] ${homeOnRed ? 'text-warning font-bold' : 'text-textSecondary'}`}>
+          {redTeams.length ? redTeams.join(', ') : 'TBD'}
+        </span>
+        <div className="flex gap-0.5">
+          {[0, 1, 2].map(i => <Pip key={i} filled={i < redWins} side="red" />)}
+        </div>
+      </div>
+
+      {/* Blue row */}
+      <div className={`px-2 py-1.5 flex items-center gap-1.5 border-t border-border/50 ${blueChampion ? 'bg-success/10' : ''}`}>
+        <span className="w-2 h-2 rounded-full bg-blueAlliance flex-shrink-0" />
+        <span className="text-blueAlliance font-bold w-5 text-center text-[10px]">
+          {blueAllianceNum ? `A${blueAllianceNum}` : '?'}
+        </span>
+        <span className={`flex-1 truncate text-[10px] ${homeOnBlue ? 'text-warning font-bold' : 'text-textSecondary'}`}>
+          {blueTeams.length ? blueTeams.join(', ') : 'TBD'}
+        </span>
+        <div className="flex gap-0.5">
+          {[0, 1, 2].map(i => <Pip key={i} filled={i < blueWins} side="blue" />)}
+        </div>
+      </div>
+
+      {/* Prediction footer */}
+      {prediction && played < 2 && (
+        <div className="px-2 py-1 text-[9px] text-textMuted border-t border-border/50 text-center">
+          Red {formatProb(prediction.redWinProb)} to win series
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function findMatch(matches: TBAMatch[], compLevel: string, setNumber: number): TBAMatch | undefined {
@@ -741,145 +884,80 @@ function PlayoffBracket() {
         </div>
       )}
 
-      {/* ═══ Desktop Bracket ═══ */}
+      {/* ═══ Desktop Bracket — absolute layout with SVG connectors ═══ */}
       <div className="hidden lg:block overflow-x-auto">
-        <div className="min-w-[1100px]">
-          {/* Upper Bracket */}
-          <p className="text-sm font-bold text-textMuted uppercase tracking-widest mb-2">Upper Bracket</p>
-          <div className="grid grid-cols-[repeat(3,200px)] gap-x-8 gap-y-3 mb-8" style={{ gridAutoRows: 'auto' }}>
-            {/* R1 */}
-            <div className="space-y-2">
-              {resolvedSlots.filter(s => [1,2,3,4].includes(s.setNumber)).map(s => (
-                <BracketSlot
-                  key={s.setNumber}
-                  match={s.match}
-                  redAllianceNum={s.redAllianceNum}
-                  blueAllianceNum={s.blueAllianceNum}
-                  redTeams={s.redTeams}
-                  blueTeams={s.blueTeams}
-                  homeTeam={HOME}
-                  prediction={s.prediction}
-                  roundLabel={`M${s.setNumber}`}
-                />
-              ))}
-            </div>
-            {/* R2 */}
-            <div className="space-y-2 pt-8">
-              {resolvedSlots.filter(s => [7,8].includes(s.setNumber)).map(s => (
-                <BracketSlot
-                  key={s.setNumber}
-                  match={s.match}
-                  redAllianceNum={s.redAllianceNum}
-                  blueAllianceNum={s.blueAllianceNum}
-                  redTeams={s.redTeams}
-                  blueTeams={s.blueTeams}
-                  homeTeam={HOME}
-                  prediction={s.prediction}
-                  roundLabel={`M${s.setNumber}`}
-                />
-              ))}
-            </div>
-            {/* Upper Final */}
-            <div className="pt-16">
-              {resolvedSlots.filter(s => s.setNumber === 11).map(s => (
-                <BracketSlot
-                  key={s.setNumber}
-                  match={s.match}
-                  redAllianceNum={s.redAllianceNum}
-                  blueAllianceNum={s.blueAllianceNum}
-                  redTeams={s.redTeams}
-                  blueTeams={s.blueTeams}
-                  homeTeam={HOME}
-                  prediction={s.prediction}
-                  roundLabel={`M${s.setNumber} · Upper Final`}
-                />
-              ))}
-            </div>
+        <div
+          className="relative mx-auto"
+          style={{ width: BRACKET_CANVAS_W, height: BRACKET_CANVAS_H }}
+        >
+          {/* Section labels */}
+          <div className="absolute left-0 top-0 -mt-6 text-[11px] font-bold text-textMuted uppercase tracking-widest">
+            Upper Bracket
+          </div>
+          <div className="absolute left-0 text-[11px] font-bold text-textMuted uppercase tracking-widest" style={{ top: 388 }}>
+            Lower Bracket
+          </div>
+          <div className="absolute text-[11px] font-bold text-textMuted uppercase tracking-widest" style={{ left: FINALS_POS.x, top: FINALS_POS.y - 20 }}>
+            Grand Finals
           </div>
 
-          {/* Lower Bracket */}
-          <p className="text-sm font-bold text-textMuted uppercase tracking-widest mb-2">Lower Bracket</p>
-          <div className="grid grid-cols-[repeat(4,200px)] gap-x-8 gap-y-3 mb-8">
-            {/* LR2 */}
-            <div className="space-y-2">
-              {resolvedSlots.filter(s => [5,6].includes(s.setNumber)).map(s => (
-                <BracketSlot
-                  key={s.setNumber}
-                  match={s.match}
-                  redAllianceNum={s.redAllianceNum}
-                  blueAllianceNum={s.blueAllianceNum}
-                  redTeams={s.redTeams}
-                  blueTeams={s.blueTeams}
-                  homeTeam={HOME}
-                  prediction={s.prediction}
-                  roundLabel={`M${s.setNumber}`}
-                />
-              ))}
-            </div>
-            {/* LR3 */}
-            <div className="space-y-2">
-              {resolvedSlots.filter(s => [9,10].includes(s.setNumber)).map(s => (
-                <BracketSlot
-                  key={s.setNumber}
-                  match={s.match}
-                  redAllianceNum={s.redAllianceNum}
-                  blueAllianceNum={s.blueAllianceNum}
-                  redTeams={s.redTeams}
-                  blueTeams={s.blueTeams}
-                  homeTeam={HOME}
-                  prediction={s.prediction}
-                  roundLabel={`M${s.setNumber}`}
-                />
-              ))}
-            </div>
-            {/* LR4 */}
-            <div>
-              {resolvedSlots.filter(s => s.setNumber === 12).map(s => (
-                <BracketSlot
-                  key={s.setNumber}
-                  match={s.match}
-                  redAllianceNum={s.redAllianceNum}
-                  blueAllianceNum={s.blueAllianceNum}
-                  redTeams={s.redTeams}
-                  blueTeams={s.blueTeams}
-                  homeTeam={HOME}
-                  prediction={s.prediction}
-                  roundLabel={`M${s.setNumber} · Lower R4`}
-                />
-              ))}
-            </div>
-            {/* Lower Final */}
-            <div>
-              {resolvedSlots.filter(s => s.setNumber === 13).map(s => (
-                <BracketSlot
-                  key={s.setNumber}
-                  match={s.match}
-                  redAllianceNum={s.redAllianceNum}
-                  blueAllianceNum={s.blueAllianceNum}
-                  redTeams={s.redTeams}
-                  blueTeams={s.blueTeams}
-                  homeTeam={HOME}
-                  prediction={s.prediction}
-                  roundLabel={`M${s.setNumber} · Lower Final`}
-                />
-              ))}
-            </div>
-          </div>
+          {/* Connector overlay */}
+          <svg
+            className="absolute inset-0 pointer-events-none"
+            width={BRACKET_CANVAS_W}
+            height={BRACKET_CANVAS_H}
+            viewBox={`0 0 ${BRACKET_CANVAS_W} ${BRACKET_CANVAS_H}`}
+          >
+            {CONNECTORS.map((c, i) => (
+              <path
+                key={i}
+                d={c.d}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.5}
+                strokeDasharray={c.dashed ? '4 4' : undefined}
+                className={c.dashed ? 'text-textMuted/60' : 'text-textMuted'}
+              />
+            ))}
+          </svg>
 
-          {/* Grand Finals */}
-          <p className="text-sm font-bold text-textMuted uppercase tracking-widest mb-2">Grand Finals (Best of 3)</p>
-          <div className="max-w-[200px]">
-            <BracketSlot
-              match={firstFinal}
-              redAllianceNum={finalsInfo.redAllianceNum}
-              blueAllianceNum={finalsInfo.blueAllianceNum}
+          {/* Bracket slots */}
+          {resolvedSlots.map(s => {
+            const pos = SLOT_LAYOUT[s.setNumber];
+            if (!pos) return null;
+            return (
+              <div
+                key={s.setNumber}
+                className="absolute"
+                style={{ left: pos.x, top: pos.y, width: SLOT_W, height: SLOT_H }}
+              >
+                <BracketSlot
+                  match={s.match}
+                  redAllianceNum={s.redAllianceNum}
+                  blueAllianceNum={s.blueAllianceNum}
+                  redTeams={s.redTeams}
+                  blueTeams={s.blueTeams}
+                  homeTeam={HOME}
+                  prediction={s.prediction}
+                  roundLabel={`M${s.setNumber}`}
+                />
+              </div>
+            );
+          })}
+
+          {/* Finals (BO3 series card) */}
+          <div
+            className="absolute"
+            style={{ left: FINALS_POS.x, top: FINALS_POS.y }}
+          >
+            <FinalsSeriesCard
               redTeams={finalsInfo.redTeams}
               blueTeams={finalsInfo.blueTeams}
+              redAllianceNum={finalsInfo.redAllianceNum}
+              blueAllianceNum={finalsInfo.blueAllianceNum}
               homeTeam={HOME}
-              prediction={finalsPrediction}
-              roundLabel="Finals"
-              isFinal
               finalsMatches={finalsMatches}
+              prediction={finalsPrediction}
             />
           </div>
         </div>
