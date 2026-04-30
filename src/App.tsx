@@ -24,6 +24,7 @@ import RobotPictures from './pages/RobotPictures';
 import PitAnalysis from './pages/PitAnalysis';
 import MatchSchedule from './pages/MatchSchedule';
 import PlayoffBracket from './pages/PlayoffBracket';
+import PerformanceComparison from './pages/PerformanceComparison';
 
 function AppContent() {
   const setEventCode = useAnalyticsStore(state => state.setEventCode);
@@ -91,6 +92,7 @@ function AppContent() {
         <Route path="/calibration" element={<FuelCalibration />} />
         <Route path="/insights" element={<AIInsights />} />
         <Route path="/robot-pictures" element={<RobotPictures />} />
+        <Route path="/performance-comparison" element={<PerformanceComparison />} />
       </Route>
     </Routes>
   );

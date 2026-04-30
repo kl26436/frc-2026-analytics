@@ -7,6 +7,7 @@ import { teamKeyToNumber } from '../utils/tbaApi';
 import { getMetricValue } from '../utils/metricAggregation';
 import { formatMetricValue } from '../utils/formatting';
 import ComparisonModal from '../components/ComparisonModal';
+import DataSourceToggle from '../components/DataSourceToggle';
 
 type SortDirection = 'asc' | 'desc';
 type ViewMode = 'table' | 'cards';
@@ -15,8 +16,33 @@ type SortCriteria = { field: string; direction: SortDirection };
 function TeamList() {
   const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
   const scoutEntries = useAnalyticsStore(state => state.scoutEntries);
+  const preScoutEntries = useAnalyticsStore(state => state.preScoutEntries);
+  const usePreScout = useAnalyticsStore(state => state.usePreScout);
+  const predictionMode = useAnalyticsStore(state => state.predictionMode);
+  const smartFallbackThreshold = useAnalyticsStore(state => state.smartFallbackThreshold);
   const tbaData = useAnalyticsStore(state => state.tbaData);
   const teamFuelStats = useAnalyticsStore(state => state.teamFuelStats);
+
+  // Entries to feed metric aggregators — must respect the same mode as calculateRealStats
+  // so the columns shown on this page match the toggle in the header.
+  const entriesForMetrics = useMemo(() => {
+    const rosterTeams = new Set((tbaData?.teams ?? []).map(t => t.team_number));
+    const preInRoster = rosterTeams.size > 0
+      ? preScoutEntries.filter(e => rosterTeams.has(e.team_number))
+      : preScoutEntries;
+
+    if (!usePreScout || predictionMode === 'live-only') return scoutEntries;
+    if (predictionMode === 'pre-scout-only') return preInRoster;
+    if (predictionMode === 'blended') return [...scoutEntries, ...preInRoster];
+    // smart-fallback: live-first, fall back to pre-scout for thin-data teams
+    const liveCount = new Map<number, number>();
+    for (const e of scoutEntries) liveCount.set(e.team_number, (liveCount.get(e.team_number) ?? 0) + 1);
+    const teamsWithEnoughLive = new Set<number>();
+    for (const [team, count] of liveCount) {
+      if (count >= smartFallbackThreshold) teamsWithEnoughLive.add(team);
+    }
+    return [...scoutEntries, ...preInRoster.filter(e => !teamsWithEnoughLive.has(e.team_number))];
+  }, [scoutEntries, preScoutEntries, usePreScout, predictionMode, smartFallbackThreshold, tbaData]);
   const columns = useMetricsStore(state => state.config.columns);
 
   const teamRankMap = useMemo(() => {
@@ -82,12 +108,12 @@ function TeamList() {
     for (const team of teamStatistics) {
       const teamMap = new Map<string, number>();
       for (const col of enabledColumns) {
-        teamMap.set(col.field, getMetricValue(col, team, scoutEntries, teamFuelStats));
+        teamMap.set(col.field, getMetricValue(col, team, entriesForMetrics, teamFuelStats));
       }
       cache.set(team.teamNumber, teamMap);
     }
     return cache;
-  }, [teamStatistics, enabledColumns, scoutEntries, teamFuelStats]);
+  }, [teamStatistics, enabledColumns, entriesForMetrics, teamFuelStats]);
 
   const toggleCompare = (teamNumber: number) => {
     setCompareTeams(prev => {
@@ -231,7 +257,10 @@ function TeamList() {
     <div className="space-y-4 md:space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <h1 className="text-2xl md:text-3xl font-bold">Team List</h1>
+        <div className="flex items-center gap-3 flex-wrap">
+          <h1 className="text-2xl md:text-3xl font-bold">Team List</h1>
+          <DataSourceToggle />
+        </div>
         <div className="flex flex-wrap items-center gap-2 md:gap-4">
           {/* Compare Mode Toggle */}
           <button

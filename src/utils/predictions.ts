@@ -133,8 +133,8 @@ export interface MonteCarloResult {
   winProbability: number;
   expectedTotalRP: number;
   expectedWinRP: number;
-  energizedProb: number;        // P(hub points ≥ 100)
-  superchargedProb: number;     // P(hub points ≥ 360)
+  energizedProb: number;        // P(hub points ≥ 360) — Championship threshold
+  superchargedProb: number;     // P(hub points ≥ 500) — Championship threshold
   traversalProb: number;        // P(tower points ≥ 50)
   scorePercentiles: {
     p10: number;
@@ -285,8 +285,8 @@ function buildMonteCarloResult(
     if (my.totalScore > opp.totalScore) wins++;
     else if (Math.abs(my.totalScore - opp.totalScore) < 0.5) ties++;
 
-    if (my.hubPoints >= 100) energized++;
-    if (my.hubPoints >= 360) supercharged++;
+    if (my.hubPoints >= 360) energized++;
+    if (my.hubPoints >= 500) supercharged++;
     if (my.towerPoints >= 50) traversal++;
   }
 

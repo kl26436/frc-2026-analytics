@@ -5,6 +5,8 @@ import { Trophy, Target, TrendingUp, RefreshCw, ChevronDown, ChevronUp, Hash, Wi
 import { teamKeyToNumber } from '../utils/tbaApi';
 import { computeMatchup } from '../utils/predictions';
 import { matchLabel, matchSortKey } from '../utils/formatting';
+import SourceMixFooter from '../components/SourceMixFooter';
+import DataSourceToggle from '../components/DataSourceToggle';
 
 const OUR_TEAM = 148;
 const RANKINGS_TO_SHOW = 5;
@@ -267,6 +269,11 @@ function Dashboard() {
 
   return (
     <div className="space-y-4 md:space-y-6">
+      {/* Data source flip — visible above the hero so it's the first thing the user sees */}
+      <div className="flex justify-end">
+        <DataSourceToggle />
+      </div>
+
       {/* ═══ Home Team Hero ═══ */}
       {tbaData && (
         <div className="bg-gradient-to-r from-warning/15 to-transparent rounded-xl border border-warning/20 p-4 md:p-6 shadow-card">
@@ -457,6 +464,7 @@ function Dashboard() {
                       <span className={`inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-semibold ${
                         red.confidence === 'high' ? 'bg-success/20 text-success' : red.confidence === 'medium' ? 'bg-warning/20 text-warning' : 'bg-danger/20 text-danger'
                       }`}>{red.confidence} confidence</span>
+                      <SourceMixFooter teamNumbers={targetMatch.alliances.red.team_keys.map(teamKeyToNumber)} color="red" className="mt-1" />
                     </div>
                     <span className="text-textMuted text-lg font-semibold px-4">vs</span>
                     <div className="text-center flex-1">
@@ -477,6 +485,7 @@ function Dashboard() {
                       <span className={`inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-semibold ${
                         blue.confidence === 'high' ? 'bg-success/20 text-success' : blue.confidence === 'medium' ? 'bg-warning/20 text-warning' : 'bg-danger/20 text-danger'
                       }`}>{blue.confidence} confidence</span>
+                      <SourceMixFooter teamNumbers={targetMatch.alliances.blue.team_keys.map(teamKeyToNumber)} color="blue" className="mt-1" />
                     </div>
                   </div>
                   <p className={`text-center mt-3 text-sm font-semibold ${

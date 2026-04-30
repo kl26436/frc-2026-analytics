@@ -16,8 +16,10 @@ const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { defineSecret } = require("firebase-functions/params");
 const { initializeApp } = require("firebase-admin/app");
-const { getFirestore } = require("firebase-admin/firestore");
+const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { Client } = require("pg");
+const Papa = require("papaparse");
+const { parseCsv } = require("./preScoutMapping");
 
 initializeApp();
 const db = getFirestore();
@@ -661,3 +663,107 @@ exports.scheduledSync = onSchedule(
     console.log(`Scheduled sync complete: ${result.scoutEntriesCount} entries, ${result.tbaMatchesCount} matches in ${result.syncDurationMs}ms`);
   }
 );
+
+// ── Pre-Scout Import ────────────────────────────────────────────────────────
+
+const DEFAULT_PRESCOUT_SHEET_URL =
+  "https://docs.google.com/spreadsheets/d/1VPI_tbGBMFsU_LhqYODV3GWlHXWwASGTJZugIIsf-2Q/export?format=csv&gid=0";
+
+/**
+ * Import pre-scout data from a Google Sheet (CSV export) into Firestore.
+ *
+ * Storage: flat collection `preScoutEntries/{event_key}_{match_number}_{team_number}`.
+ * Origin event is preserved on each doc for attribution; the app pools by
+ * team_number at read time and filters to the active event's TBA roster.
+ *
+ * Re-imports are idempotent (merge: true on the same doc id).
+ *
+ * Args:
+ *   request.data.sheetUrl  optional — overrides config/preScout.sheetUrl, falls back to DEFAULT
+ *   request.data.dryRun    optional — parse + summarize only, no writes
+ */
+exports.importPreScoutData = onCall({ cors: true }, async (request) => {
+  const db = getFirestore();
+
+  // Admin gate (same pattern as the rest of the app — config/access.adminEmails)
+  const accessSnap = await db.doc("config/access").get();
+  const adminEmails = accessSnap.data()?.adminEmails || [];
+  const userEmail = request.auth?.token?.email;
+  if (!userEmail || !adminEmails.includes(userEmail)) {
+    throw new HttpsError("permission-denied", "Admin only");
+  }
+
+  // Resolve sheet URL: explicit arg → saved config → default
+  const configSnap = await db.doc("config/preScout").get();
+  const sheetUrl =
+    (request.data?.sheetUrl || "").trim() ||
+    configSnap.data()?.sheetUrl ||
+    DEFAULT_PRESCOUT_SHEET_URL;
+  const dryRun = !!request.data?.dryRun;
+
+  // Fetch CSV
+  let csvText;
+  try {
+    const response = await fetch(sheetUrl);
+    if (!response.ok) {
+      throw new HttpsError(
+        "unavailable",
+        `Failed to fetch sheet (${response.status} ${response.statusText})`
+      );
+    }
+    csvText = await response.text();
+  } catch (err) {
+    if (err instanceof HttpsError) throw err;
+    throw new HttpsError("unavailable", `Sheet fetch error: ${err.message}`);
+  }
+
+  // Parse + map (shared logic with CLI script)
+  const { entries, skipped, originEvents } = parseCsv(csvText, Papa);
+
+  if (dryRun) {
+    return {
+      dryRun: true,
+      totalEntries: entries.length,
+      skippedRows: skipped,
+      originEvents,
+    };
+  }
+
+  // Batch writes — Firestore caps batches at 500 ops; we use 450 for headroom
+  let batch = db.batch();
+  let opsInBatch = 0;
+  for (const entry of entries) {
+    const ref = db.doc(`preScoutEntries/${entry.id}`);
+    batch.set(ref, entry, { merge: true });
+    opsInBatch++;
+    if (opsInBatch >= 450) {
+      await batch.commit();
+      batch = db.batch();
+      opsInBatch = 0;
+    }
+  }
+  if (opsInBatch > 0) {
+    await batch.commit();
+  }
+
+  // Save import metadata for the admin panel + diagnostics
+  await db.doc("config/preScout").set(
+    {
+      sheetUrl,
+      lastImportAt: FieldValue.serverTimestamp(),
+      lastImportBy: userEmail,
+      lastImportStats: {
+        totalEntries: entries.length,
+        skippedRows: skipped,
+        originEvents,
+      },
+    },
+    { merge: true }
+  );
+
+  return {
+    totalEntries: entries.length,
+    skippedRows: skipped,
+    originEvents,
+  };
+});

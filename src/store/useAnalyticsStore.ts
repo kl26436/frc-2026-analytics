@@ -9,6 +9,8 @@ import { calculateAllTeamStatistics, calculateTeamStatistics } from '../utils/st
 import { computeMatchFuelAttribution, aggregateTeamFuel, DEFAULT_BETA } from '../utils/fuelAttribution';
 import type { RobotMatchFuel, TeamFuelStats, AttributionFn } from '../utils/fuelAttribution';
 import { logCurveAttribution, equalAttribution, rankBasedAttribution, reattributeWithBayesian } from '../utils/modelComparison';
+import { buildCrossEventPriors } from '../utils/crossEventPriors';
+import type { CrossEventPriors } from '../utils/crossEventPriors';
 import { buildPredictionInputs } from '../utils/predictions';
 import type { PredictionTeamInput } from '../utils/predictions';
 import { computeAllTeamTrends } from '../utils/trendAnalysis';
@@ -23,9 +25,12 @@ export interface AttributionModelConfig {
   beta: number; // only used for power family
 }
 
+export type PredictionMode = 'live-only' | 'pre-scout-only' | 'blended' | 'smart-fallback';
+
 interface AnalyticsState {
   // ── Scout data ──
   scoutEntries: ScoutEntry[];
+  preScoutEntries: ScoutEntry[];
   excludedEntries: ExcludedEntry[];
   teamStatistics: TeamStatistics[];
   pgTbaMatches: PgTBAMatch[];
@@ -51,10 +56,24 @@ interface AnalyticsState {
   eventCode: string;
   homeTeamNumber: number;
   attributionModel: AttributionModelConfig;
+  // ── Cross-event priors (Bayesian) ──
+  priorEventKeys: string[];
+  crossEventPriors: CrossEventPriors | null;
+  crossEventPriorsLoading: boolean;
+
+  // ── Pre-scout config ──
+  usePreScout: boolean;
+  predictionMode: PredictionMode;
+  smartFallbackThreshold: number;
 
   // ── Actions ──
   subscribeToData: (eventKey: string) => void;
   unsubscribeFromData: () => void;
+  subscribeToPreScoutData: () => void;
+  unsubscribeFromPreScoutData: () => void;
+  setUsePreScout: (on: boolean) => void;
+  setPredictionMode: (mode: PredictionMode) => void;
+  setSmartFallbackThreshold: (n: number) => void;
   calculateRealStats: () => void;
   calculateFuelAttribution: () => void;
   calculatePredictionInputs: () => void;
@@ -70,6 +89,8 @@ interface AnalyticsState {
   triggerSync: (eventKey: string) => Promise<SyncMeta>;
   toggleExcludeEntry: (matchNumber: number, teamNumber: number) => Promise<void>;
   setAttributionModel: (config: AttributionModelConfig) => void;
+  setPriorEventKeys: (keys: string[]) => void;
+  loadCrossEventPriors: () => Promise<void>;
 }
 
 // Store unsubscribe functions outside the store to avoid serialization issues
@@ -80,6 +101,8 @@ let _unsubActions: (() => void) | null = null;
 let _unsubExcluded: (() => void) | null = null;
 let _unsubAttrModel: (() => void) | null = null;
 let _unsubPictures: (() => void) | null = null;
+let _unsubPriorKeys: (() => void) | null = null;
+let _unsubPreScout: (() => void) | null = null;
 let _subscribedEventKey: string | null = null;
 
 export const useAnalyticsStore = create<AnalyticsState>()(
@@ -87,6 +110,7 @@ export const useAnalyticsStore = create<AnalyticsState>()(
     (set, get) => ({
       // Initial state
       scoutEntries: [],
+      preScoutEntries: [],
       excludedEntries: [],
       teamStatistics: [],
       pgTbaMatches: [],
@@ -103,12 +127,21 @@ export const useAnalyticsStore = create<AnalyticsState>()(
       eventCode: '2026week0',
       homeTeamNumber: 148,
       attributionModel: { family: 'power', beta: DEFAULT_BETA },
+      priorEventKeys: [],
+      crossEventPriors: null,
+      crossEventPriorsLoading: false,
       tbaApiKey: '',
       tbaData: null,
       tbaOPRs: null,
       localOPR: null,
       tbaLoading: false,
       tbaError: null,
+      // Default: live-only so team totals/metrics aren't tainted by pre-scout out of the box.
+      // Users can flip to 'pre-scout-only' via the in-page toggle, or pick blended modes
+      // ('smart-fallback' / 'blended') in Admin Settings as advanced options.
+      usePreScout: true,
+      predictionMode: 'live-only',
+      smartFallbackThreshold: 3,
       // ── Real Data Subscriptions ──────────────────────────────────────
 
       subscribeToData: (eventKey: string) => {
@@ -245,6 +278,29 @@ export const useAnalyticsStore = create<AnalyticsState>()(
           },
           () => {}
         );
+
+        // 8. Subscribe to prior event keys: config/priorEventKeys
+        const priorKeysRef = doc(db, 'config', 'priorEventKeys');
+        _unsubPriorKeys = onSnapshot(
+          priorKeysRef,
+          (snapshot) => {
+            if (snapshot.exists()) {
+              const data = snapshot.data() as { keys: string[] };
+              const current = get().priorEventKeys;
+              if (JSON.stringify(data.keys) !== JSON.stringify(current)) {
+                set({ priorEventKeys: data.keys, crossEventPriors: null });
+                // Auto-load priors if Bayesian is active
+                if (get().attributionModel.family === 'bayesian') {
+                  get().loadCrossEventPriors();
+                }
+              }
+            }
+          },
+          () => {}
+        );
+
+        // 9. Subscribe to pre-scout entries (flat collection, filtered to roster at calc time)
+        get().subscribeToPreScoutData();
       },
 
       unsubscribeFromData: () => {
@@ -255,19 +311,128 @@ export const useAnalyticsStore = create<AnalyticsState>()(
         if (_unsubExcluded) { _unsubExcluded(); _unsubExcluded = null; }
         if (_unsubPictures) { _unsubPictures(); _unsubPictures = null; }
         if (_unsubAttrModel) { _unsubAttrModel(); _unsubAttrModel = null; }
+        if (_unsubPriorKeys) { _unsubPriorKeys(); _unsubPriorKeys = null; }
+        get().unsubscribeFromPreScoutData();
         _subscribedEventKey = null;
       },
 
+      // ── Pre-Scout Subscription ─────────────────────────────────────
+
+      subscribeToPreScoutData: () => {
+        // Tear down any prior listener (idempotent — safe to call repeatedly)
+        if (_unsubPreScout) { _unsubPreScout(); _unsubPreScout = null; }
+
+        const ref = collection(db, 'preScoutEntries');
+        _unsubPreScout = onSnapshot(
+          ref,
+          (snapshot) => {
+            const entries: ScoutEntry[] = snapshot.docs.map(d => {
+              const raw = d.data();
+              return {
+                ...raw,
+                id: d.id,
+                _source: raw._source || 'pre-scout',
+                // Defensive: ensure all SCORE_PLUS fields are numeric (older docs may lack them)
+                auton_SCORE_PLUS_1: raw.auton_SCORE_PLUS_1 || 0,
+                auton_SCORE_PLUS_2: raw.auton_SCORE_PLUS_2 || 0,
+                auton_SCORE_PLUS_3: raw.auton_SCORE_PLUS_3 || 0,
+                auton_SCORE_PLUS_5: raw.auton_SCORE_PLUS_5 || 0,
+                auton_SCORE_PLUS_10: raw.auton_SCORE_PLUS_10 || 0,
+                auton_SCORE_PLUS_20: raw.auton_SCORE_PLUS_20 || 0,
+                teleop_SCORE_PLUS_1: raw.teleop_SCORE_PLUS_1 || 0,
+                teleop_SCORE_PLUS_2: raw.teleop_SCORE_PLUS_2 || 0,
+                teleop_SCORE_PLUS_3: raw.teleop_SCORE_PLUS_3 || 0,
+                teleop_SCORE_PLUS_5: raw.teleop_SCORE_PLUS_5 || 0,
+                teleop_SCORE_PLUS_10: raw.teleop_SCORE_PLUS_10 || 0,
+                teleop_SCORE_PLUS_20: raw.teleop_SCORE_PLUS_20 || 0,
+              } as ScoutEntry;
+            });
+            // Roster filter happens in calculateRealStats so it stays in sync
+            // when tbaData arrives later or changes.
+            set({ preScoutEntries: entries });
+            get().calculateRealStats();
+          },
+          (error) => {
+            console.warn('[preScoutEntries] subscription error:', error.message);
+          }
+        );
+      },
+
+      unsubscribeFromPreScoutData: () => {
+        if (_unsubPreScout) { _unsubPreScout(); _unsubPreScout = null; }
+        set({ preScoutEntries: [] });
+      },
+
+      setUsePreScout: (on) => {
+        set({ usePreScout: on });
+        get().calculateRealStats();
+      },
+
+      setPredictionMode: (mode) => {
+        set({ predictionMode: mode });
+        get().calculateRealStats();
+      },
+
+      setSmartFallbackThreshold: (n) => {
+        const clamped = Math.max(1, Math.min(20, Math.round(n)));
+        set({ smartFallbackThreshold: clamped });
+        get().calculateRealStats();
+      },
+
       calculateRealStats: () => {
-        const { scoutEntries, excludedEntries, tbaData } = get();
+        const {
+          scoutEntries,
+          preScoutEntries,
+          excludedEntries,
+          tbaData,
+          usePreScout,
+          predictionMode,
+          smartFallbackThreshold,
+        } = get();
+
         const excludedSet = new Set(excludedEntries.map(e => `${e.matchNumber}_${e.teamNumber}`));
-        const filteredEntries = scoutEntries.filter(e => !excludedSet.has(`${e.match_number}_${e.team_number}`));
+        const liveFiltered = scoutEntries.filter(e => !excludedSet.has(`${e.match_number}_${e.team_number}`));
+
+        // Roster filter for pre-scout: drop entries for teams not at the active event.
+        // If TBA hasn't loaded yet, keep everything — this re-runs when fetchTBAData
+        // sets tbaData, so the filter eventually applies.
+        const rosterTeams = new Set((tbaData?.teams ?? []).map(t => t.team_number));
+        const preScoutInRoster = rosterTeams.size > 0
+          ? preScoutEntries.filter(e => rosterTeams.has(e.team_number))
+          : preScoutEntries;
+        const preScoutFiltered = preScoutInRoster.filter(e => !excludedSet.has(`${e.match_number}_${e.team_number}`));
+
+        // Combine entries based on prediction mode
+        let entriesForStats: ScoutEntry[];
+        if (!usePreScout || predictionMode === 'live-only') {
+          entriesForStats = liveFiltered;
+        } else if (predictionMode === 'pre-scout-only') {
+          entriesForStats = preScoutFiltered;
+        } else if (predictionMode === 'blended') {
+          entriesForStats = [...liveFiltered, ...preScoutFiltered];
+        } else {
+          // smart-fallback: live for teams with >= threshold matches; otherwise live + pre-scout
+          const liveCountByTeam = new Map<number, number>();
+          for (const e of liveFiltered) {
+            liveCountByTeam.set(e.team_number, (liveCountByTeam.get(e.team_number) ?? 0) + 1);
+          }
+          const teamsWithEnoughLive = new Set<number>();
+          for (const [team, count] of liveCountByTeam) {
+            if (count >= smartFallbackThreshold) teamsWithEnoughLive.add(team);
+          }
+          const merged: ScoutEntry[] = [...liveFiltered];
+          for (const e of preScoutFiltered) {
+            if (!teamsWithEnoughLive.has(e.team_number)) merged.push(e);
+          }
+          entriesForStats = merged;
+        }
+
         const teamNamesMap = new Map<number, string>(
           tbaData?.teams?.map(t => [t.team_number, t.nickname]) ?? []
         );
-        const teamStatistics = calculateAllTeamStatistics(filteredEntries, teamNamesMap.size > 0 ? teamNamesMap : undefined);
+        const teamStatistics = calculateAllTeamStatistics(entriesForStats, teamNamesMap.size > 0 ? teamNamesMap : undefined);
 
-        // Include TBA teams that have no scout entries yet (new event)
+        // Include TBA teams that have no entries yet (new event, no live OR pre-scout data)
         if (tbaData?.teams) {
           const scoutedTeams = new Set(teamStatistics.map(t => t.teamNumber));
           for (const tbaTeam of tbaData.teams) {
@@ -279,7 +444,7 @@ export const useAnalyticsStore = create<AnalyticsState>()(
           }
         }
 
-        const teamTrends = computeAllTeamTrends(filteredEntries);
+        const teamTrends = computeAllTeamTrends(entriesForStats);
         set({ teamStatistics, teamTrends });
         get().calculateFuelAttribution();
       },
@@ -322,8 +487,11 @@ export const useAnalyticsStore = create<AnalyticsState>()(
         );
 
         // Second pass for Bayesian: re-attribute using sequential priors
+        // Cross-event priors give teams from prior events informed attribution
+        // starting from match 1, instead of falling back to power curve.
         if (isBayesian) {
-          matchFuelAttribution = reattributeWithBayesian(matchFuelAttribution);
+          const xPriors = get().crossEventPriors ?? undefined;
+          matchFuelAttribution = reattributeWithBayesian(matchFuelAttribution, xPriors);
         }
 
         const teamFuelStats = aggregateTeamFuel(matchFuelAttribution);
@@ -386,6 +554,7 @@ export const useAnalyticsStore = create<AnalyticsState>()(
             localOPR: null,
             tbaError: null,
             scoutEntries: [],
+            preScoutEntries: [],
             excludedEntries: [],
             teamStatistics: [],
             pgTbaMatches: [],
@@ -502,10 +671,47 @@ export const useAnalyticsStore = create<AnalyticsState>()(
 
       setAttributionModel: (config: AttributionModelConfig) => {
         set({ attributionModel: config });
-        get().calculateFuelAttribution();
+        // Auto-load cross-event priors when switching to Bayesian
+        if (config.family === 'bayesian' && !get().crossEventPriors && get().priorEventKeys.length > 0) {
+          get().loadCrossEventPriors();
+        } else {
+          get().calculateFuelAttribution();
+        }
         // Persist to Firestore so all users share the same model
         const attrModelRef = doc(db, 'config', 'attributionModel');
         setDoc(attrModelRef, { family: config.family, beta: config.beta }).catch(() => {});
+      },
+
+      setPriorEventKeys: (keys: string[]) => {
+        set({ priorEventKeys: keys, crossEventPriors: null });
+        // Persist to Firestore so all users share the same config
+        const priorKeysRef = doc(db, 'config', 'priorEventKeys');
+        setDoc(priorKeysRef, { keys }).catch(() => {});
+        // Reload priors if Bayesian is active
+        if (get().attributionModel.family === 'bayesian') {
+          get().loadCrossEventPriors();
+        }
+      },
+
+      loadCrossEventPriors: async () => {
+        const { priorEventKeys } = get();
+        if (priorEventKeys.length === 0) {
+          set({ crossEventPriors: null, crossEventPriorsLoading: false });
+          get().calculateFuelAttribution();
+          return;
+        }
+
+        set({ crossEventPriorsLoading: true });
+        try {
+          const priors = await buildCrossEventPriors(priorEventKeys);
+          set({ crossEventPriors: priors, crossEventPriorsLoading: false });
+          // Recalculate with the new priors
+          get().calculateFuelAttribution();
+        } catch (err) {
+          console.error('[loadCrossEventPriors] Failed:', err);
+          set({ crossEventPriorsLoading: false });
+          get().calculateFuelAttribution();
+        }
       },
     }),
     {
@@ -518,8 +724,13 @@ export const useAnalyticsStore = create<AnalyticsState>()(
         selectedTeams: state.selectedTeams,
         tbaApiKey: state.tbaApiKey,
         attributionModel: state.attributionModel,
+        priorEventKeys: state.priorEventKeys,
+        usePreScout: state.usePreScout,
+        predictionMode: state.predictionMode,
+        smartFallbackThreshold: state.smartFallbackThreshold,
         // NOTE: tbaData intentionally NOT persisted — always fetched fresh from
         // TBA API to prevent stale event data surviving across event resets.
+        // preScoutEntries also not persisted — they come from Firestore on subscribe.
       }),
     }
   )

@@ -36,6 +36,12 @@ service cloud.firestore {
                    && request.auth.token.email in
                       get(/databases/$(database)/documents/config/access).data.adminEmails;
 
+      // preScout doc: admins only (sheet URL + last-import metadata)
+      allow write: if request.auth != null
+                   && docId == 'preScout'
+                   && request.auth.token.email in
+                      get(/databases/$(database)/documents/config/access).data.adminEmails;
+
       // userProfiles doc: any allowed user can write (sign-in upsert) or admin can write (manual name edit)
       allow write: if request.auth != null
                    && docId == 'userProfiles'
@@ -186,6 +192,16 @@ service cloud.firestore {
     // ── Robot Pictures (Postgres → Firestore) ──
     match /robotPictures/{year}/pictures/{picId} {
       allow read: if request.auth != null;
+      allow write: if request.auth != null
+                   && request.auth.token.email in
+                      get(/databases/$(database)/documents/config/access).data.adminEmails;
+    }
+
+    // ── Pre-Scout Entries (flat collection, written by importPreScoutData Cloud Function) ──
+    match /preScoutEntries/{entryId} {
+      allow read: if request.auth != null;
+      // Cloud Function (Admin SDK) bypasses these rules. The defensive admin-only
+      // rule below is for direct writes from the CLI script or manual edits.
       allow write: if request.auth != null
                    && request.auth.token.email in
                       get(/databases/$(database)/documents/config/access).data.adminEmails;

@@ -3,6 +3,7 @@ import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { teamKeyToNumber } from '../utils/tbaApi';
 import { matchLabel, matchSortKey } from '../utils/formatting';
 import { computeMatchup } from '../utils/predictions';
+import SourceMixFooter from '../components/SourceMixFooter';
 import { formatProb } from '../utils/formatting';
 import { RefreshCw, Trophy, ChevronDown } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -560,6 +561,7 @@ function PlayoffBracket() {
                   <span className={`inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-semibold ${
                     red.confidence === 'high' ? 'bg-success/20 text-success' : red.confidence === 'medium' ? 'bg-warning/20 text-warning' : 'bg-danger/20 text-danger'
                   }`}>{red.confidence} confidence</span>
+                  <SourceMixFooter teamNumbers={redNums} color="red" className="mt-1" />
                 </div>
                 <span className="text-textMuted text-lg font-semibold px-4">vs</span>
                 <div className="text-center flex-1">
@@ -576,6 +578,7 @@ function PlayoffBracket() {
                   <span className={`inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-semibold ${
                     blue.confidence === 'high' ? 'bg-success/20 text-success' : blue.confidence === 'medium' ? 'bg-warning/20 text-warning' : 'bg-danger/20 text-danger'
                   }`}>{blue.confidence} confidence</span>
+                  <SourceMixFooter teamNumbers={blueNums} color="blue" className="mt-1" />
                 </div>
               </div>
               <p className={`text-center mt-3 text-sm font-semibold ${

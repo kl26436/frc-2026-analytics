@@ -66,6 +66,12 @@ export interface ScoutEntry {
   poor_fuel_scoring_accuracy: boolean;
   relative_driver_performance: string;
   notes: string;
+
+  // ── Origin (pre-scout vs live) ──
+  /** "live" for tablet-scouted entries, "pre-scout" for video hand-counts. Missing on legacy docs → treat as "live". */
+  _source?: 'live' | 'pre-scout';
+  /** Pre-scout only: did the team play defense? Live entries don't have this signal. */
+  played_defense?: boolean;
 }
 
 // ============================================================================

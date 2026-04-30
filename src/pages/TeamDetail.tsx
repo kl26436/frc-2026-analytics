@@ -9,6 +9,7 @@ import type { ScoutEntry } from '../types/scouting';
 import type { TBAMatch } from '../types/tba';
 import { getTeamEventMatches, getMatchVideoUrl, teamNumberToKey } from '../utils/tbaApi';
 import MatchDetailModal from '../components/MatchDetailModal';
+import DataSourceToggle from '../components/DataSourceToggle';
 import { usePitScoutStore } from '../store/usePitScoutStore';
 import { useNinjaStore } from '../store/useNinjaStore';
 import { NINJA_CATEGORY_LABELS, NINJA_CATEGORY_COLORS, NINJA_TAG_LABELS, NINJA_TAG_COLORS } from '../types/ninja';
@@ -34,6 +35,7 @@ function TeamDetail() {
 
   const teamStatistics = useAnalyticsStore(s => s.teamStatistics);
   const scoutEntries = useAnalyticsStore(s => s.scoutEntries);
+  const preScoutEntries = useAnalyticsStore(s => s.preScoutEntries);
   const scoutActions = useAnalyticsStore(s => s.scoutActions);
   const matchFuelAttribution = useAnalyticsStore(s => s.matchFuelAttribution);
   const teamTrends = useAnalyticsStore(s => s.teamTrends);
@@ -51,7 +53,7 @@ function TeamDetail() {
   const unsubscribeNinja = useNinjaStore(s => s.unsubscribeAll);
 
   const [tbaMatches, setTbaMatches] = useState<TBAMatch[]>([]);
-  const [selectedVideo, setSelectedVideo] = useState<{ matchNumber: number; videoUrl: string } | null>(null);
+  const [selectedVideo, setSelectedVideo] = useState<{ matchNumber: number; videoUrl: string; eventKey?: string } | null>(null);
   const [selectedMatch, setSelectedMatch] = useState<ScoutEntry | null>(null);
   const [photoExpanded, setPhotoExpanded] = useState(false);
 
@@ -88,6 +90,50 @@ function TeamDetail() {
       .sort((a, b) => a.match_number - b.match_number),
     [scoutEntries, teamNum]
   );
+
+  // Pre-scout entries for this team, grouped by origin event
+  const preScoutByEvent = useMemo(() => {
+    const teamPreScout = preScoutEntries
+      .filter(e => e.team_number === teamNum)
+      .sort((a, b) => {
+        const evCmp = a.event_key.localeCompare(b.event_key);
+        return evCmp !== 0 ? evCmp : a.match_number - b.match_number;
+      });
+    const groups = new Map<string, typeof teamPreScout>();
+    for (const e of teamPreScout) {
+      if (!groups.has(e.event_key)) groups.set(e.event_key, []);
+      groups.get(e.event_key)!.push(e);
+    }
+    return Array.from(groups.entries()).map(([eventKey, entries]) => ({ eventKey, entries }));
+  }, [preScoutEntries, teamNum]);
+
+  // Fetch TBA matches for each origin event so we can show real video links
+  // (origin events aren't in the app's local tbaMatches — that's only the active event)
+  const [preScoutTbaMatches, setPreScoutTbaMatches] = useState<Map<string, TBAMatch>>(new Map());
+
+  useEffect(() => {
+    if (preScoutByEvent.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const teamKey = teamNumberToKey(teamNum);
+      const allMatches: TBAMatch[] = [];
+      for (const { eventKey } of preScoutByEvent) {
+        try {
+          const matches = await getTeamEventMatches(teamKey, eventKey, tbaApiKey || undefined);
+          allMatches.push(...matches);
+        } catch (err) {
+          console.warn(`[TeamDetail] Failed to fetch TBA matches for ${teamKey} @ ${eventKey}:`, err);
+        }
+      }
+      if (cancelled) return;
+      const map = new Map<string, TBAMatch>();
+      for (const m of allMatches) map.set(m.key, m);
+      setPreScoutTbaMatches(map);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [preScoutByEvent, teamNum, tbaApiKey]);
 
   // Calculate per-match data from real entries, with action-derived fuel when available
   const matchData = useMemo(() =>
@@ -223,11 +269,12 @@ function TeamDetail() {
           </button>
         )}
         <div className="flex-1">
-          <div className="flex items-center gap-3 md:gap-4">
+          <div className="flex items-center gap-3 md:gap-4 flex-wrap">
             <h1 className="text-3xl md:text-4xl font-bold">{teamStats.teamNumber}</h1>
             {trend === 'up' && <TrendingUp className="text-success" size={32} />}
             {trend === 'down' && <TrendingDown className="text-danger" size={32} />}
             {trend === 'stable' && <Minus className="text-textMuted" size={32} />}
+            <DataSourceToggle className="ml-auto" />
           </div>
           {teamStats.teamName && (
             <p className="text-xl text-textSecondary mt-1">{teamStats.teamName}</p>
@@ -294,11 +341,12 @@ function TeamDetail() {
         })()}
       </div>
 
-      {/* Match History (Real Data) */}
+      {/* Match History (Live) */}
       {matchData.length > 0 && (
         <div className="bg-surface rounded-lg border border-border">
-          <div className="p-6 border-b border-border">
+          <div className="p-6 border-b border-border flex items-center gap-3 flex-wrap">
             <h2 className="text-xl font-bold">Match History ({matchData.length} entries)</h2>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-success/15 text-success uppercase tracking-wider">Live</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -402,7 +450,7 @@ function TeamDetail() {
                         {entry.no_robot_on_field && <span className="text-danger">NO ROBOT</span>}
                         {entry.dedicated_passer && <span className="text-blueAlliance">PASSER</span>}
                         {entry.eff_rep_bulldozed_fuel && <span className="text-blueAlliance">BULLDOZE</span>}
-                        {entry.auton_did_nothing && <span className="text-textMuted">NO AUTO</span>}
+                        {entry.auton_did_nothing && <span className="text-warning">MID AUTO</span>}
                       </td>
                       <td className="px-3 py-3 text-sm text-textSecondary max-w-[200px] truncate">
                         {entry.notes}
@@ -415,6 +463,123 @@ function TeamDetail() {
           </div>
         </div>
       )}
+
+      {/* Pre-Scout Match History — same structure as live table */}
+      {preScoutByEvent.length > 0 && (() => {
+        const allEntries = preScoutByEvent.flatMap(g => g.entries);
+        const totalEntries = allEntries.length;
+        const eventCount = preScoutByEvent.length;
+        return (
+          <div className="bg-surface rounded-lg border border-border border-l-4 border-l-warning">
+            <div className="p-6 border-b border-border flex items-center gap-3 flex-wrap">
+              <h2 className="text-xl font-bold">
+                Pre-Scout History ({totalEntries} entries · {eventCount} event{eventCount === 1 ? '' : 's'})
+              </h2>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-warning/15 text-warning uppercase tracking-wider">Pre-Scout</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-surfaceElevated border-b border-border sticky top-0 z-10">
+                  <tr>
+                    <th className="px-3 py-3 text-left text-textSecondary text-sm font-semibold">Event</th>
+                    <th className="px-3 py-3 text-left text-textSecondary text-sm font-semibold">Match</th>
+                    <th className="px-3 py-3 text-center text-textSecondary text-sm font-semibold">Video</th>
+                    <th className="hidden md:table-cell px-3 py-3 text-center text-textSecondary text-sm font-semibold">Start</th>
+                    <th className="hidden md:table-cell px-3 py-3 text-right text-textSecondary text-sm font-semibold">Auto Scored</th>
+                    <th className="hidden md:table-cell px-3 py-3 text-center text-textSecondary text-sm font-semibold">Auto Climb</th>
+                    <th className="px-3 py-3 text-right text-textSecondary text-sm font-semibold">Auto Pts</th>
+                    <th className="hidden md:table-cell px-3 py-3 text-right text-textSecondary text-sm font-semibold">Teleop Scored</th>
+                    <th className="hidden md:table-cell px-3 py-3 text-right text-textSecondary text-sm font-semibold">Passes</th>
+                    <th className="px-3 py-3 text-right text-textSecondary text-sm font-semibold">Teleop Pts</th>
+                    <th className="px-3 py-3 text-center text-textSecondary text-sm font-semibold">Climb</th>
+                    <th className="hidden md:table-cell px-3 py-3 text-right text-textSecondary text-sm font-semibold">Endgame Pts</th>
+                    <th className="px-3 py-3 text-right text-textSecondary text-sm font-semibold">Total Pts</th>
+                    <th className="px-3 py-3 text-center text-textSecondary text-sm font-semibold">Flags</th>
+                    <th className="px-3 py-3 text-left text-textSecondary text-sm font-semibold">Notes</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {allEntries.map((entry, idx) => {
+                    const fuel = estimateMatchFuel(entry);
+                    const points = estimateMatchPoints(entry);
+                    const climb = parseClimbLevel(entry.climb_level);
+                    const startZone = getStartZone(entry);
+                    const passes = entry.auton_FUEL_PASS + entry.teleop_FUEL_PASS;
+                    const tbaMatch = preScoutTbaMatches.get(entry.match_key);
+                    const videoUrl = tbaMatch ? getMatchVideoUrl(tbaMatch) : null;
+                    const tbaPageUrl = `https://www.thebluealliance.com/match/${entry.match_key}`;
+                    return (
+                      <tr key={entry.id} className={`hover:bg-interactive transition-colors ${idx % 2 === 0 ? 'bg-surfaceAlt' : ''}`}>
+                        <td className="px-3 py-3">
+                          <span className="text-xs font-bold font-mono px-2 py-1 rounded bg-warning/15 text-warning uppercase tracking-wide">
+                            {entry.event_key}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 font-semibold">Q{entry.match_number}</td>
+                        <td className="px-3 py-3 text-center">
+                          {videoUrl ? (
+                            <button
+                              onClick={() => setSelectedVideo({ matchNumber: entry.match_number, videoUrl, eventKey: entry.event_key })}
+                              className="p-1 text-danger hover:bg-danger/10 rounded transition-colors"
+                              title="Watch match video"
+                            >
+                              <Play size={16} fill="currentColor" />
+                            </button>
+                          ) : (
+                            <a
+                              href={tbaPageUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1 inline-block text-textMuted hover:text-textSecondary hover:bg-surfaceElevated rounded transition-colors"
+                              title="View on The Blue Alliance"
+                            >
+                              <Play size={16} />
+                            </a>
+                          )}
+                        </td>
+                        <td className="hidden md:table-cell px-3 py-3 text-center text-textSecondary">
+                          {startZone > 0 ? `Z${startZone}` : '-'}
+                        </td>
+                        <td className="hidden md:table-cell px-3 py-3 text-right text-textSecondary">{fuel.auto}</td>
+                        <td className="hidden md:table-cell px-3 py-3 text-center">
+                          {entry.auton_AUTON_CLIMBED > 0 ? (
+                            <span className="text-success font-semibold">Y</span>
+                          ) : (
+                            <span className="text-textMuted">-</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-3 text-right font-semibold">{Math.round(points.autoPoints)}</td>
+                        <td className="hidden md:table-cell px-3 py-3 text-right text-textSecondary">{fuel.teleop}</td>
+                        <td className="hidden md:table-cell px-3 py-3 text-right text-textSecondary">{passes > 0 ? passes : '-'}</td>
+                        <td className="px-3 py-3 text-right font-semibold">{Math.round(points.teleopPoints)}</td>
+                        <td className="px-3 py-3 text-center">
+                          <span className={climb >= 2 ? 'font-semibold text-success' : climb === 1 ? 'font-semibold' : 'text-textMuted'}>
+                            {climbLabel(climb)}
+                          </span>
+                          {entry.teleop_climb_failed && <span className="ml-1 text-danger text-xs">(failed)</span>}
+                        </td>
+                        <td className="hidden md:table-cell px-3 py-3 text-right font-semibold">{points.endgamePoints}</td>
+                        <td className="px-3 py-3 text-right font-bold">{Math.round(points.total)}</td>
+                        <td className="px-3 py-3 text-center text-xs space-x-1">
+                          {entry.played_defense && <span className="text-blueAlliance">DEF</span>}
+                          {entry.eff_rep_bulldozed_fuel && <span className="text-blueAlliance">BULLDOZE</span>}
+                          {entry.poor_fuel_scoring_accuracy && <span className="text-warning">POOR ACC</span>}
+                          {entry.no_robot_on_field && <span className="text-danger">NO ROBOT</span>}
+                          {entry.lost_connection && <span className="text-danger">LOST</span>}
+                          {entry.auton_did_nothing && <span className="text-warning">MID AUTO</span>}
+                        </td>
+                        <td className="px-3 py-3 text-sm text-textSecondary max-w-[200px] truncate" title={entry.notes}>
+                          {entry.notes}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Match Performance Trend Chart */}
       {matchData.length >= 2 && (() => {
@@ -515,8 +680,7 @@ function TeamDetail() {
             <h3 className="text-sm font-bold text-textSecondary mb-2">Autonomous</h3>
             <TotalsRow items={[
               { label: 'Auto Climb', value: `${teamStats.autoClimbCount}/${n}` },
-              { label: 'Mid Field', value: `${teamStats.centerFieldAutoCount}/${n}` },
-              { label: 'Did Nothing', value: `${teamStats.autoDidNothingCount}/${n}`, color: teamStats.autoDidNothingCount > 0 ? 'text-danger' : '' },
+              { label: 'Mid Field Auto', value: `${teamStats.centerFieldAutoCount}/${n}`, color: teamStats.centerFieldAutoCount > 0 ? 'text-success' : '' },
               { label: 'Passer', value: `${teamStats.dedicatedPasserCount}/${n}` },
             ]} />
           </div>
@@ -623,9 +787,9 @@ function TeamDetail() {
               <span className="font-semibold">{teamStats.autoClimbCount}/{n} ({teamStats.autoClimbRate.toFixed(0)}%)</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-textSecondary">Did Nothing</span>
-              <span className={`font-semibold ${teamStats.autoDidNothingCount > 0 ? 'text-danger' : ''}`}>
-                {teamStats.autoDidNothingCount}/{n} ({teamStats.autoDidNothingRate.toFixed(0)}%)
+              <span className="text-textSecondary">Mid Field Auto</span>
+              <span className={`font-semibold ${teamStats.centerFieldAutoCount > 0 ? 'text-success' : ''}`}>
+                {teamStats.centerFieldAutoCount}/{n} ({((teamStats.centerFieldAutoCount / n) * 100).toFixed(0)}%)
               </span>
             </div>
           </div>
@@ -827,7 +991,7 @@ function TeamDetail() {
           >
             <div className="flex items-center justify-between p-4 border-b border-border">
               <h3 className="font-bold">
-                Match Q{selectedVideo.matchNumber} - Team {teamNum}
+                {selectedVideo.eventKey ? `${selectedVideo.eventKey} ` : ''}Match Q{selectedVideo.matchNumber} - Team {teamNum}
               </h3>
               <button
                 onClick={() => setSelectedVideo(null)}
@@ -901,6 +1065,7 @@ function TeamDetail() {
                         src={pic.robot_image_link}
                         alt={`Team ${teamNum} robot ${idx + 1}`}
                         className="w-full h-auto max-h-[50vh] object-contain rounded"
+                        onError={(e) => { (e.target as HTMLImageElement).parentElement!.style.display = 'none'; }}
                       />
                     </div>
                   ))}

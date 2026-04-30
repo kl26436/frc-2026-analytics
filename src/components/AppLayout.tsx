@@ -108,6 +108,7 @@ const analysisItems: NavItem[] = [
   { to: '/event', icon: Calendar, label: 'Event' },
   { to: '/replay/1', icon: PlayCircle, label: 'Match Replay' },
   { to: '/pit-analysis', icon: BarChart3, label: 'Pit Analysis' },
+  { to: '/performance-comparison', icon: LineChart, label: 'Pre-Scout vs Live' },
 ];
 
 const scoutingItems: NavItem[] = [

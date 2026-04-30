@@ -5,6 +5,7 @@ import { teamKeyToNumber } from '../utils/tbaApi';
 import { computeMatchup, type MatchupResult } from '../utils/predictions';
 import type { TBAMatch } from '../types/tba';
 import { formatProb } from '../utils/formatting';
+import SourceMixFooter from '../components/SourceMixFooter';
 
 // ─── Helpers (outside component so PredictionContent can use them) ────────────
 
@@ -30,6 +31,8 @@ interface PredictionContentProps {
   matchPlayed?: boolean | null;
   actualRedScore?: number | null;
   actualBlueScore?: number | null;
+  redTeams?: number[];
+  blueTeams?: number[];
 }
 
 function PredictionContent({
@@ -40,6 +43,8 @@ function PredictionContent({
   matchPlayed,
   actualRedScore,
   actualBlueScore,
+  redTeams = [],
+  blueTeams = [],
 }: PredictionContentProps) {
 
   return (
@@ -57,6 +62,7 @@ function PredictionContent({
                   {matchup.red.confidence} confidence
                 </span>
               </div>
+              {redTeams.length > 0 && <SourceMixFooter teamNumbers={redTeams} color="red" className="mt-1.5" />}
             </div>
             <div className="text-textMuted text-2xl font-bold">vs</div>
             <div className="text-center flex-1">
@@ -68,6 +74,7 @@ function PredictionContent({
                   {matchup.blue.confidence} confidence
                 </span>
               </div>
+              {blueTeams.length > 0 && <SourceMixFooter teamNumbers={blueTeams} color="blue" className="mt-1.5" />}
             </div>
           </div>
 
@@ -466,6 +473,8 @@ export default function AlliancePredictor() {
                     matchPlayed={matchPlayed}
                     actualRedScore={actualRedScore}
                     actualBlueScore={actualBlueScore}
+                    redTeams={redTeams}
+                    blueTeams={blueTeams}
                   />
                 </div>
               ) : (
@@ -624,6 +633,8 @@ export default function AlliancePredictor() {
                     redLabel={redLabel}
                     blueLabel={blueLabel}
                     showRP={false}
+                    redTeams={redTeams}
+                    blueTeams={blueTeams}
                   />
                 </div>
               )}
@@ -802,6 +813,8 @@ export default function AlliancePredictor() {
               redLabel={redLabel}
               blueLabel={blueLabel}
               showRP={true}
+              redTeams={redTeams}
+              blueTeams={blueTeams}
             />
           ) : (
             <div className="bg-surface border border-border rounded-lg p-8 text-center text-textSecondary">

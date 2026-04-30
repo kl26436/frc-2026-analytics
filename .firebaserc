@@ -1,5 +1,18 @@
 {
   "projects": {
     "default": "data-wrangler-2026"
-  }
+  },
+  "targets": {
+    "data-wrangler-2026": {
+      "hosting": {
+        "dev": [
+          "dev-data-wrangler"
+        ],
+        "prod": [
+          "data-wrangler-2026"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }
