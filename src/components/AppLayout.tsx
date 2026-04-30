@@ -4,6 +4,7 @@ import {
   Menu, X, ChevronDown, Shield, LogOut, FlaskConical, ExternalLink, MoreHorizontal,
 } from 'lucide-react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
+import { useWatchlistStore } from '../store/useWatchlistStore';
 import { useAuth } from '../contexts/AuthContext';
 import ActiveSessionBanner from './ActiveSessionBanner';
 import { matchLabel, matchSortKey } from '../utils/formatting';
@@ -213,8 +214,17 @@ function AppLayout() {
   const fetchTBAData = useAnalyticsStore(state => state.fetchTBAData);
   const triggerSync = useAnalyticsStore(state => state.triggerSync);
   const { user, isAdmin, signOut, eventConfig } = useAuth();
+  const subscribeToWatchlist = useWatchlistStore(s => s.subscribeToWatchlist);
+  const unsubscribeFromWatchlist = useWatchlistStore(s => s.unsubscribeFromWatchlist);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
+
+  // Sync the watchlist across devices for the same user.
+  useEffect(() => {
+    if (!user || user.isAnonymous) return;
+    subscribeToWatchlist();
+    return () => unsubscribeFromWatchlist();
+  }, [user, subscribeToWatchlist, unsubscribeFromWatchlist]);
 
   const { topLevel, moreGroups, isItemActive, isMoreActive } = useNavStructure();
 

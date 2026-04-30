@@ -1,17 +1,76 @@
-import { useState, useMemo, useRef, useCallback } from 'react';
+import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { useMetricsStore } from '../store/useMetricsStore';
-import { ArrowUp, ArrowDown, Search, Sliders, LayoutGrid, Table2, X, Users } from 'lucide-react';
+import { useWatchlistStore } from '../store/useWatchlistStore';
+import { ArrowUp, ArrowDown, Search, Sliders, LayoutGrid, Table2, X, Users, Star, Palette } from 'lucide-react';
 import { teamKeyToNumber } from '../utils/tbaApi';
 import { getMetricValue } from '../utils/metricAggregation';
 import { formatMetricValue } from '../utils/formatting';
 import ComparisonModal from '../components/ComparisonModal';
 import DataSourceToggle from '../components/DataSourceToggle';
+import Sparkline from '../components/Sparkline';
+import type { MetricColumn } from '../types/metrics';
 
 type SortDirection = 'asc' | 'desc';
 type ViewMode = 'table' | 'cards';
 type SortCriteria = { field: string; direction: SortDirection };
+type FilterChip =
+  | 'all' | 'top-scorers' | 'climbers' | 'defenders'
+  | 'hot-streaks' | 'inconsistent' | 'reliable' | 'pinned';
+
+// Field-name overrides for the heat-map "lower is better" check. Categories
+// `reliability` and `quality` are flipped automatically; these are the
+// stragglers in other categories (e.g. climbFailedRate lives in `endgame`).
+const LOWER_IS_BETTER_FIELDS = new Set<string>([
+  'climbFailedRate', 'climbFailedCount',
+  'climbNoneRate',
+  'autoDidNothingRate', 'autoDidNothingCount',
+  'bulldozedFuelRate',
+]);
+
+function isLowerBetter(col: MetricColumn): boolean {
+  if (col.category === 'reliability' || col.category === 'quality') return true;
+  return LOWER_IS_BETTER_FIELDS.has(col.field);
+}
+
+/** 0-1 percentile rank with linear interpolation over equal values. */
+function percentileRank(value: number, sorted: number[]): number {
+  if (sorted.length === 0) return 0.5;
+  // Binary search for first index >= value
+  let lo = 0, hi = sorted.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (sorted[mid] < value) lo = mid + 1;
+    else hi = mid;
+  }
+  // Count equal values
+  let equal = 0;
+  for (let i = lo; i < sorted.length && sorted[i] === value; i++) equal++;
+  return (lo + 0.5 * equal) / sorted.length;
+}
+
+function percentileTint(p: number, lowerIsBetter: boolean): string {
+  // p is 0-1 from raw value. Flip if lower is better so green = good in either case.
+  const eff = lowerIsBetter ? 1 - p : p;
+  if (eff < 0.2) return 'hsl(var(--danger) / 0.22)';
+  if (eff < 0.4) return 'hsl(var(--warning) / 0.18)';
+  if (eff < 0.6) return 'transparent';
+  if (eff < 0.8) return 'hsl(var(--success) / 0.18)';
+  return 'hsl(var(--success) / 0.32)';
+}
+
+const HEATMAP_PREF_KEY = 'frc-teamlist-heatmap';
+const FILTER_CHIPS: { id: FilterChip; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'top-scorers', label: 'Top scorers' },
+  { id: 'climbers', label: 'Climbers' },
+  { id: 'defenders', label: 'Defenders' },
+  { id: 'hot-streaks', label: 'Hot streaks' },
+  { id: 'inconsistent', label: 'Inconsistent' },
+  { id: 'reliable', label: 'Reliable' },
+  { id: 'pinned', label: 'Pinned' },
+];
 
 function TeamList() {
   const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
@@ -22,6 +81,11 @@ function TeamList() {
   const smartFallbackThreshold = useAnalyticsStore(state => state.smartFallbackThreshold);
   const tbaData = useAnalyticsStore(state => state.tbaData);
   const teamFuelStats = useAnalyticsStore(state => state.teamFuelStats);
+  const teamTrends = useAnalyticsStore(state => state.teamTrends);
+
+  const pinnedTeams = useWatchlistStore(state => state.pinnedTeams);
+  const togglePin = useWatchlistStore(state => state.togglePin);
+  const isPinned = useWatchlistStore(state => state.isPinned);
 
   // Entries to feed metric aggregators — must respect the same mode as calculateRealStats
   // so the columns shown on this page match the toggle in the header.
@@ -62,6 +126,23 @@ function TeamList() {
     { field: 'avgTotalPoints', direction: 'desc' }
   ]);
   const [viewMode, setViewMode] = useState<ViewMode>(typeof window !== 'undefined' && window.innerWidth < 768 ? 'cards' : 'table');
+  const [activeChip, setActiveChip] = useState<FilterChip>('all');
+  const [colorByPercentile, setColorByPercentile] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    const stored = localStorage.getItem(HEATMAP_PREF_KEY);
+    return stored === null ? true : stored === '1';
+  });
+  useEffect(() => {
+    try { localStorage.setItem(HEATMAP_PREF_KEY, colorByPercentile ? '1' : '0'); } catch {
+      // localStorage unavailable
+    }
+  }, [colorByPercentile]);
+
+  const trendByTeam = useMemo(() => {
+    const map = new Map<number, typeof teamTrends[number]>();
+    for (const t of teamTrends) map.set(t.teamNumber, t);
+    return map;
+  }, [teamTrends]);
 
   // Click-to-compare state (up to 4 on desktop, 3 on mobile)
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
@@ -115,6 +196,120 @@ function TeamList() {
     return cache;
   }, [teamStatistics, enabledColumns, entriesForMetrics, teamFuelStats]);
 
+  // Percentile cache — for each enabled column, store sorted field values once
+  // so per-row tinting is O(log n) instead of O(n).
+  const sortedFieldValues = useMemo(() => {
+    const map = new Map<string, number[]>();
+    for (const col of enabledColumns) {
+      const values: number[] = [];
+      for (const team of teamStatistics) {
+        const v = metricCache.get(team.teamNumber)?.get(col.field);
+        if (typeof v === 'number' && Number.isFinite(v)) values.push(v);
+      }
+      values.sort((a, b) => a - b);
+      map.set(col.field, values);
+    }
+    return map;
+  }, [teamStatistics, enabledColumns, metricCache]);
+
+  // Per-team match-points sequence for the sparkline column
+  const sparklineByTeam = useMemo(() => {
+    const map = new Map<number, number[]>();
+    for (const trend of teamTrends) {
+      map.set(
+        trend.teamNumber,
+        trend.matchResults.map(m => m.total),
+      );
+    }
+    return map;
+  }, [teamTrends]);
+
+  // Coefficient of variation (σ/μ) per team — needed for "Inconsistent" chip
+  const cvByTeam = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const trend of teamTrends) {
+      const totals = trend.matchResults.map(m => m.total);
+      const n = totals.length;
+      if (n < 3) { map.set(trend.teamNumber, 0); continue; }
+      const mean = totals.reduce((s, v) => s + v, 0) / n;
+      if (mean <= 0) { map.set(trend.teamNumber, 0); continue; }
+      const variance = totals.reduce((s, v) => s + (v - mean) ** 2, 0) / n;
+      map.set(trend.teamNumber, Math.sqrt(variance) / mean);
+    }
+    return map;
+  }, [teamTrends]);
+
+  // Filter chip → predicate + override-sort. Returning null sort means "use the
+  // user-selected sortCriteria"; otherwise the chip enforces its preferred order.
+  const chipBehavior = useMemo<{
+    predicate: (n: number) => boolean;
+    overrideSort: SortCriteria[] | null;
+  }>(() => {
+    const all = (_: number) => true;
+    if (activeChip === 'all') {
+      return { predicate: all, overrideSort: null };
+    }
+    if (activeChip === 'top-scorers') {
+      return {
+        predicate: all,
+        overrideSort: [{ field: 'avgTotalPoints', direction: 'desc' }],
+      };
+    }
+    if (activeChip === 'climbers') {
+      return {
+        predicate: (n) => {
+          const s = teamStatistics.find(t => t.teamNumber === n);
+          if (!s) return false;
+          return s.level1ClimbRate + s.level2ClimbRate + s.level3ClimbRate > 70;
+        },
+        overrideSort: [{ field: 'avgEndgamePoints', direction: 'desc' }],
+      };
+    }
+    if (activeChip === 'defenders') {
+      return {
+        predicate: (n) => {
+          const s = teamStatistics.find(t => t.teamNumber === n);
+          if (!s) return false;
+          // dedicatedPasserRate is the closest TeamStatistics proxy; pre-scout
+          // played_defense isn't summarized into stats.
+          return s.dedicatedPasserRate > 30;
+        },
+        overrideSort: null,
+      };
+    }
+    if (activeChip === 'hot-streaks') {
+      return {
+        predicate: (n) => {
+          const t = trendByTeam.get(n);
+          if (!t) return false;
+          return t.delta > 5 && t.matchResults.length >= 6;
+        },
+        overrideSort: null, // sort below by trend delta
+      };
+    }
+    if (activeChip === 'inconsistent') {
+      return {
+        predicate: (n) => (cvByTeam.get(n) ?? 0) > 0.4,
+        overrideSort: null,
+      };
+    }
+    if (activeChip === 'reliable') {
+      return {
+        predicate: (n) => {
+          const s = teamStatistics.find(t => t.teamNumber === n);
+          if (!s || s.matchesPlayed < 3) return false;
+          return s.lostConnectionRate < 5 && s.noRobotRate < 5;
+        },
+        overrideSort: [{ field: 'avgTotalPoints', direction: 'desc' }],
+      };
+    }
+    if (activeChip === 'pinned') {
+      const set = new Set(pinnedTeams);
+      return { predicate: (n) => set.has(n), overrideSort: null };
+    }
+    return { predicate: all, overrideSort: null };
+  }, [activeChip, teamStatistics, trendByTeam, cvByTeam, pinnedTeams]);
+
   const toggleCompare = (teamNumber: number) => {
     setCompareTeams(prev => {
       if (prev.includes(teamNumber)) {
@@ -140,7 +335,9 @@ function TeamList() {
     }
   };
 
-  // Sort and filter teams
+  // Sort and filter teams. Pinned teams float to the top regardless of sort
+  // (preserving pin order), unless the active chip is 'pinned' (which only
+  // shows pinned teams anyway, in normal sort order).
   const filteredAndSortedTeams = useMemo(() => {
     let teams = [...teamStatistics];
 
@@ -152,8 +349,18 @@ function TeamList() {
       );
     }
 
+    teams = teams.filter(t => chipBehavior.predicate(t.teamNumber));
+
+    const effectiveSort = chipBehavior.overrideSort ?? sortCriteria;
+    const useTrendSort = activeChip === 'hot-streaks';
+
     teams.sort((a, b) => {
-      for (const criteria of sortCriteria) {
+      if (useTrendSort) {
+        const da = trendByTeam.get(a.teamNumber)?.delta ?? 0;
+        const db = trendByTeam.get(b.teamNumber)?.delta ?? 0;
+        if (da !== db) return db - da;
+      }
+      for (const criteria of effectiveSort) {
         let aValue: number;
         let bValue: number;
 
@@ -161,7 +368,6 @@ function TeamList() {
           aValue = teamRankMap.get(a.teamNumber) ?? 999;
           bValue = teamRankMap.get(b.teamNumber) ?? 999;
         } else {
-          // Use pre-computed cache first, fall back to direct property access
           aValue = metricCache.get(a.teamNumber)?.get(criteria.field)
             ?? (a as unknown as Record<string, number>)[criteria.field];
           bValue = metricCache.get(b.teamNumber)?.get(criteria.field)
@@ -182,10 +388,35 @@ function TeamList() {
       return 0;
     });
 
-    return teams;
-  }, [teamStatistics, searchQuery, sortCriteria, teamRankMap, metricCache]);
+    if (activeChip === 'pinned' || pinnedTeams.length === 0) return teams;
+
+    // Float pinned teams to top in pin order
+    const pinnedSet = new Set(pinnedTeams);
+    const pinned: typeof teams = [];
+    const unpinned: typeof teams = [];
+    for (const t of teams) {
+      if (pinnedSet.has(t.teamNumber)) pinned.push(t);
+      else unpinned.push(t);
+    }
+    pinned.sort((a, b) => pinnedTeams.indexOf(a.teamNumber) - pinnedTeams.indexOf(b.teamNumber));
+    return [...pinned, ...unpinned];
+  }, [
+    teamStatistics, searchQuery, sortCriteria, teamRankMap, metricCache,
+    chipBehavior, activeChip, trendByTeam, pinnedTeams,
+  ]);
+
+  const lastPinnedIndex = useMemo(() => {
+    if (activeChip === 'pinned' || pinnedTeams.length === 0) return -1;
+    const set = new Set(pinnedTeams);
+    let last = -1;
+    for (let i = 0; i < filteredAndSortedTeams.length; i++) {
+      if (set.has(filteredAndSortedTeams[i].teamNumber)) last = i;
+    }
+    return last;
+  }, [filteredAndSortedTeams, pinnedTeams, activeChip]);
 
   const handleSort = (field: string, shiftKey: boolean) => {
+    if (chipBehavior.overrideSort) setActiveChip('all');
     setSortCriteria(prev => {
       const existingIndex = prev.findIndex(c => c.field === field);
 
@@ -309,6 +540,19 @@ function TeamList() {
             </button>
           </div>
 
+          <button
+            onClick={() => setColorByPercentile(prev => !prev)}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg transition-colors text-sm border ${
+              colorByPercentile
+                ? 'bg-success/15 text-success border-success/40'
+                : 'bg-surface text-textSecondary border-border hover:bg-interactive'
+            }`}
+            title={colorByPercentile ? 'Hide percentile heat-map' : 'Color cells by percentile rank'}
+          >
+            <Palette size={16} />
+            <span className="hidden sm:inline">Heat-map</span>
+          </button>
+
           <Link
             to="/metrics"
             className="flex items-center gap-2 px-3 py-2 bg-surface hover:bg-interactive rounded-lg transition-colors text-sm border border-border"
@@ -318,6 +562,32 @@ function TeamList() {
             <span className="sm:hidden">Columns</span>
           </Link>
         </div>
+      </div>
+
+      {/* Filter chips */}
+      <div className="flex flex-wrap gap-2">
+        {FILTER_CHIPS.map(chip => {
+          const isActive = activeChip === chip.id;
+          const disabled = chip.id === 'pinned' && pinnedTeams.length === 0;
+          return (
+            <button
+              key={chip.id}
+              onClick={() => setActiveChip(chip.id)}
+              disabled={disabled}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors border ${
+                isActive
+                  ? 'bg-blueAlliance text-white border-blueAlliance'
+                  : 'bg-surface text-textSecondary border-border hover:bg-interactive'
+              } ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+              title={chip.id === 'pinned' && disabled ? 'Pin teams from the table to track them here' : undefined}
+            >
+              {chip.label}
+              {chip.id === 'pinned' && pinnedTeams.length > 0 && (
+                <span className="ml-1 opacity-80">({pinnedTeams.length})</span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {/* Search Bar */}
@@ -381,9 +651,11 @@ function TeamList() {
             <table className="w-full">
             <thead className="bg-surfaceElevated border-b border-border sticky top-0 z-10">
               <tr>
+                <th className="w-10 px-2 py-3"></th>
                 <th className="px-4 py-3 text-left text-textSecondary text-sm font-semibold">
                   <SortButton field="teamNumber" label="Team" />
                 </th>
+                <th className="px-3 py-3 text-center text-textSecondary text-sm font-semibold">Trend</th>
                 <th className="px-3 py-3 text-center text-textSecondary text-sm font-semibold">
                   <SortButton field="eventRank" label="Rank" />
                 </th>
@@ -400,6 +672,9 @@ function TeamList() {
             <tbody className="divide-y divide-border">
               {filteredAndSortedTeams.map((team, index) => {
                 const isSelected = compareTeams.includes(team.teamNumber);
+                const teamPinned = isPinned(team.teamNumber);
+                const showPinDivider = index === lastPinnedIndex;
+                const sparkData = sparklineByTeam.get(team.teamNumber) ?? [];
                 return (
                   <tr
                     key={team.teamNumber}
@@ -411,8 +686,23 @@ function TeamList() {
                       isSelected
                         ? 'bg-blueAlliance/10 border-l-2 border-l-blueAlliance'
                         : `${index % 2 === 0 ? 'bg-surfaceAlt' : ''} hover:bg-interactive`
-                    }`}
+                    } ${showPinDivider ? 'border-b-2 border-b-warning/40' : ''}`}
                   >
+                    <td className="px-2 py-4 text-center">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); togglePin(team.teamNumber); }}
+                        className={`p-1 rounded transition-colors ${
+                          teamPinned ? 'text-warning' : 'text-textMuted hover:text-warning'
+                        }`}
+                        title={teamPinned ? 'Unpin team' : 'Pin team to top'}
+                        aria-label={teamPinned ? `Unpin team ${team.teamNumber}` : `Pin team ${team.teamNumber}`}
+                      >
+                        <Star
+                          size={16}
+                          fill={teamPinned ? 'currentColor' : 'none'}
+                        />
+                      </button>
+                    </td>
                     <td className="px-4 py-4">
                       <Link
                         to={`/teams/${team.teamNumber}`}
@@ -432,6 +722,13 @@ function TeamList() {
                       </Link>
                     </td>
                     <td className="px-3 py-4 text-center">
+                      {sparkData.length > 0 ? (
+                        <Sparkline data={sparkData} width={70} height={20} />
+                      ) : (
+                        <span className="text-textMuted text-xs">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-4 text-center">
                       {teamRankMap.get(team.teamNumber) ? (
                         <span className="font-bold text-warning">#{teamRankMap.get(team.teamNumber)}</span>
                       ) : (
@@ -443,8 +740,21 @@ function TeamList() {
                     </td>
                     {enabledColumns.map(column => {
                       const value = metricCache.get(team.teamNumber)?.get(column.field) ?? 0;
+                      let bg: string | undefined;
+                      if (colorByPercentile) {
+                        const sorted = sortedFieldValues.get(column.field) ?? [];
+                        if (sorted.length > 0 && Number.isFinite(value)) {
+                          const p = percentileRank(value, sorted);
+                          const tint = percentileTint(p, isLowerBetter(column));
+                          if (tint !== 'transparent') bg = tint;
+                        }
+                      }
                       return (
-                        <td key={column.id} className="px-4 py-4 text-right">
+                        <td
+                          key={column.id}
+                          className="px-4 py-4 text-right"
+                          style={bg ? { backgroundColor: bg } : undefined}
+                        >
                           {formatMetricValue(value, column.format, column.decimals, team.matchesPlayed)}
                         </td>
                       );
@@ -460,6 +770,8 @@ function TeamList() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredAndSortedTeams.map((team) => {
             const isSelected = compareTeams.includes(team.teamNumber);
+            const teamPinned = isPinned(team.teamNumber);
+            const sparkData = sparklineByTeam.get(team.teamNumber) ?? [];
             return (
               <div
                 key={team.teamNumber}
@@ -470,14 +782,16 @@ function TeamList() {
                 className={`bg-surface rounded-lg border p-4 space-y-3 cursor-pointer transition-all ${
                   isSelected
                     ? 'border-blueAlliance ring-2 ring-blueAlliance bg-blueAlliance/10'
-                    : 'border-border hover:bg-interactive'
+                    : teamPinned
+                      ? 'border-warning/50 hover:bg-interactive'
+                      : 'border-border hover:bg-interactive'
                 }`}
               >
                 {/* Card Header */}
-                <div className="flex items-start justify-between">
+                <div className="flex items-start justify-between gap-2">
                   <Link
                     to={`/teams/${team.teamNumber}`}
-                    className="flex-1"
+                    className="flex-1 min-w-0"
                     onClick={(e) => {
                       e.stopPropagation();
                       if (longPressTriggered.current) {
@@ -493,16 +807,31 @@ function TeamList() {
                       {teamRankMap.get(team.teamNumber) && (
                         <span className="text-sm font-bold text-warning">#{teamRankMap.get(team.teamNumber)}</span>
                       )}
+                      {sparkData.length > 0 && (
+                        <Sparkline data={sparkData} width={60} height={18} />
+                      )}
                     </div>
                     {team.teamName && (
                       <p className="text-sm text-textSecondary line-clamp-1">{team.teamName}</p>
                     )}
                   </Link>
-                  {isSelected && (
-                    <span className="px-2 py-0.5 rounded text-xs font-bold bg-blueAlliance/20 text-blueAlliance">
-                      Compare
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {isSelected && (
+                      <span className="px-2 py-0.5 rounded text-xs font-bold bg-blueAlliance/20 text-blueAlliance">
+                        Compare
+                      </span>
+                    )}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); togglePin(team.teamNumber); }}
+                      className={`p-1 rounded transition-colors ${
+                        teamPinned ? 'text-warning' : 'text-textMuted hover:text-warning'
+                      }`}
+                      title={teamPinned ? 'Unpin team' : 'Pin team to top'}
+                      aria-label={teamPinned ? `Unpin team ${team.teamNumber}` : `Pin team ${team.teamNumber}`}
+                    >
+                      <Star size={16} fill={teamPinned ? 'currentColor' : 'none'} />
+                    </button>
+                  </div>
                 </div>
 
                 {/* Key Metrics */}
@@ -513,8 +842,21 @@ function TeamList() {
                   </div>
                   {enabledColumns.slice(0, 3).map(column => {
                     const value = metricCache.get(team.teamNumber)?.get(column.field) ?? 0;
+                    let bg: string | undefined;
+                    if (colorByPercentile) {
+                      const sorted = sortedFieldValues.get(column.field) ?? [];
+                      if (sorted.length > 0 && Number.isFinite(value)) {
+                        const p = percentileRank(value, sorted);
+                        const tint = percentileTint(p, isLowerBetter(column));
+                        if (tint !== 'transparent') bg = tint;
+                      }
+                    }
                     return (
-                      <div key={column.id} className="bg-surfaceElevated rounded p-2">
+                      <div
+                        key={column.id}
+                        className="bg-surfaceElevated rounded p-2"
+                        style={bg ? { backgroundColor: bg } : undefined}
+                      >
                         <p className="text-textSecondary text-xs truncate">{column.label}</p>
                         <p className="font-semibold">
                           {formatMetricValue(value, column.format, column.decimals, team.matchesPlayed)}
