@@ -19,8 +19,8 @@ export type NavGroup = {
 // Top-level header links — the 4 most-used pages get direct, single-click access.
 export const TOP_LEVEL: NavItem[] = [
   { to: '/',             icon: BarChart3,      label: 'Dashboard' },
-  { to: '/teams',        icon: Users,          label: 'Teams' },
   { to: '/pit-scouting', icon: ClipboardCheck, label: 'Ninja Scouting' },
+  { to: '/teams',        icon: Users,          label: 'Teams' },
   { to: '/picklist',     icon: ClipboardList,  label: 'Picklist' },
 ];
 
