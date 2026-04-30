@@ -1,5 +1,5 @@
 import type { TeamStatistics, ScoutEntry } from '../types/scouting';
-import type { TeamFuelStats } from './fuelAttribution';
+import type { TeamFuelStats, RobotMatchFuel } from './fuelAttribution';
 import type { TeamTrend } from './trendAnalysis';
 
 // Pure-function helpers that synthesize existing analytics into strategy-grade
@@ -377,4 +377,188 @@ export function analyzeTrend(
     magnitude: delta,
     reasoning: `σ/μ ${(cv * 100).toFixed(0)}%`,
   };
+}
+
+// ── Failure mode breakdown ──────────────────────────────────────────────────
+
+export interface FailureSlice {
+  key: 'lostConnection' | 'noRobot' | 'climbFailed' | 'didNothing' | 'poorAccuracy';
+  label: string;
+  count: number;
+  pct: number; // 0-100, share of total matches played
+  color: 'danger' | 'warning' | 'muted';
+}
+
+/** Returns one slice per failure mode, descending by count. Empty slices omitted. */
+export function computeFailureBreakdown(stats: TeamStatistics): FailureSlice[] {
+  const matches = stats.matchesPlayed;
+  if (matches === 0) return [];
+  const raw: FailureSlice[] = [
+    {
+      key: 'lostConnection',
+      label: 'Lost connection',
+      count: stats.lostConnectionCount,
+      pct: stats.lostConnectionRate,
+      color: 'danger',
+    },
+    {
+      key: 'noRobot',
+      label: 'No robot on field',
+      count: stats.noRobotCount,
+      pct: stats.noRobotRate,
+      color: 'danger',
+    },
+    {
+      key: 'climbFailed',
+      label: 'Climb failed',
+      count: stats.climbFailedCount,
+      pct: stats.climbFailedRate,
+      color: 'warning',
+    },
+    {
+      key: 'didNothing',
+      label: 'Auto: did nothing',
+      count: stats.autoDidNothingCount,
+      pct: stats.autoDidNothingRate,
+      color: 'muted',
+    },
+    {
+      key: 'poorAccuracy',
+      label: 'Poor scoring accuracy',
+      count: stats.poorAccuracyCount,
+      pct: stats.poorAccuracyRate,
+      color: 'warning',
+    },
+  ];
+  return raw.filter(s => s.count > 0).sort((a, b) => b.count - a.count);
+}
+
+// ── Defense effectiveness ───────────────────────────────────────────────────
+
+export interface DefenseImpact {
+  defendedMatches: number;
+  /** Average percent change in opponent total points vs each opponent's season average. */
+  avgOpponentDeltaPct: number;
+  /** Total opposing-team observations summed across defended matches (3 per match max). */
+  observations: number;
+}
+
+/**
+ * For each match where the team played defense, compare the opposing alliance's
+ * per-team scored points to each opponent's season average, then average the deltas.
+ *
+ * Negative `avgOpponentDeltaPct` means the opponents underperformed their season
+ * average when this team was on the field — a real defense effect.
+ */
+export function computeDefenseImpact(
+  teamNumber: number,
+  teamScoutEntries: ScoutEntry[],
+  matchFuelAttribution: RobotMatchFuel[],
+  allTeamStats: TeamStatistics[],
+): DefenseImpact {
+  const defendedEntries = teamScoutEntries.filter(
+    e => e.team_number === teamNumber && e.played_defense === true,
+  );
+  if (defendedEntries.length === 0) {
+    return { defendedMatches: 0, avgOpponentDeltaPct: 0, observations: 0 };
+  }
+
+  const statsByTeam = new Map<number, TeamStatistics>();
+  for (const s of allTeamStats) statsByTeam.set(s.teamNumber, s);
+
+  // For each defended match, find the opposing alliance's per-team attributed
+  // points and compute their delta vs season average.
+  let totalDeltaPct = 0;
+  let observations = 0;
+
+  for (const entry of defendedEntries) {
+    const homeAlliance = entry.configured_team.startsWith('red') ? 'red' : 'blue';
+    const oppAlliance: 'red' | 'blue' = homeAlliance === 'red' ? 'blue' : 'red';
+    const oppFuel = matchFuelAttribution.filter(
+      f => f.matchNumber === entry.match_number && f.alliance === oppAlliance,
+    );
+    for (const f of oppFuel) {
+      const oppStats = statsByTeam.get(f.teamNumber);
+      if (!oppStats || oppStats.avgTotalPoints <= 0) continue;
+      const matchPoints = f.totalPointsScored + f.totalTowerPoints;
+      const deltaPct = ((matchPoints - oppStats.avgTotalPoints) / oppStats.avgTotalPoints) * 100;
+      totalDeltaPct += deltaPct;
+      observations++;
+    }
+  }
+
+  return {
+    defendedMatches: defendedEntries.length,
+    avgOpponentDeltaPct: observations > 0 ? totalDeltaPct / observations : 0,
+    observations,
+  };
+}
+
+// ── Source delta (pre-scout vs live) ────────────────────────────────────────
+
+export interface SourceDelta {
+  preScoutAvg: number;
+  liveAvg: number;
+  preScoutMatches: number;
+  liveMatches: number;
+  /** Percent change vs pre-scout baseline. Positive = team is outperforming pre-scout. */
+  deltaPct: number;
+  preScoutEvents: string[];
+}
+
+/** Compare a team's live points to their pre-scout baseline. */
+export function computeSourceDelta(
+  teamNumber: number,
+  preScoutEntries: ScoutEntry[],
+  liveEntries: ScoutEntry[],
+  estimatePoints: (e: ScoutEntry) => number,
+): SourceDelta | null {
+  const pre = preScoutEntries.filter(e => e.team_number === teamNumber);
+  const live = liveEntries.filter(e => e.team_number === teamNumber);
+  if (pre.length === 0 || live.length === 0) return null;
+
+  const preAvg = pre.reduce((s, e) => s + estimatePoints(e), 0) / pre.length;
+  const liveAvg = live.reduce((s, e) => s + estimatePoints(e), 0) / live.length;
+  const deltaPct = preAvg > 0 ? ((liveAvg - preAvg) / preAvg) * 100 : 0;
+
+  const eventSet = new Set(pre.map(e => e.event_key));
+  return {
+    preScoutAvg: preAvg,
+    liveAvg,
+    preScoutMatches: pre.length,
+    liveMatches: live.length,
+    deltaPct,
+    preScoutEvents: [...eventSet],
+  };
+}
+
+// ── Metric rank ─────────────────────────────────────────────────────────────
+
+export interface MetricRank {
+  rank: number;       // 1-indexed
+  total: number;
+  percentile: number; // 0-1, "good" direction (higher is better unless lowerIsBetter)
+}
+
+/**
+ * Compute a 1-indexed rank of `value` within `allValues`. By default, larger
+ * values rank better (rank 1 = highest). Pass `lowerIsBetter` for metrics
+ * where lower is good (e.g. lostConnectionRate).
+ */
+export function computeMetricRank(
+  value: number,
+  allValues: number[],
+  lowerIsBetter = false,
+): MetricRank {
+  const total = allValues.length;
+  if (total === 0) return { rank: 1, total: 1, percentile: 0.5 };
+  let better = 0;
+  for (const v of allValues) {
+    if (lowerIsBetter ? v < value : v > value) better++;
+  }
+  const rank = better + 1;
+  const percentile = lowerIsBetter
+    ? rank === 1 ? 1 : 1 - (rank - 1) / total
+    : 1 - (rank - 1) / total;
+  return { rank, total, percentile };
 }

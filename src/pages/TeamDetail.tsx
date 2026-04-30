@@ -2,14 +2,31 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useState, useEffect, useMemo } from 'react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 
-import { ArrowLeft, TrendingUp, TrendingDown, Minus, Play, X, Trophy, Hash, Droplets, ArrowUpCircle, Eye } from 'lucide-react';
+import { ArrowLeft, Play, X, Trophy, Hash, Droplets, ArrowUpCircle, Eye } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { estimateMatchFuel, estimateMatchPoints, parseClimbLevel, computeRobotFuelFromActions } from '../types/scouting';
 import type { ScoutEntry } from '../types/scouting';
 import type { TBAMatch } from '../types/tba';
-import { getTeamEventMatches, getMatchVideoUrl, teamNumberToKey } from '../utils/tbaApi';
+import { getTeamEventMatches, getMatchVideoUrl, teamKeyToNumber, teamNumberToKey } from '../utils/tbaApi';
 import MatchDetailModal from '../components/MatchDetailModal';
 import DataSourceToggle from '../components/DataSourceToggle';
+import RankBadge from '../components/RankBadge';
+import MatchHeatmapStrip from '../components/MatchHeatmapStrip';
+import TrendChip from '../components/TrendChip';
+import DefenseEffectivenessCard from '../components/DefenseEffectivenessCard';
+import PreScoutNewtonDelta from '../components/PreScoutNewtonDelta';
+import PartnerComparisonCard from '../components/PartnerComparisonCard';
+import FailureModeChart from '../components/FailureModeChart';
+import AutoConsistencyChart from '../components/AutoConsistencyChart';
+import ClimbMatrix from '../components/ClimbMatrix';
+import {
+  analyzeTrend,
+  computeDefenseImpact,
+  computeFailureBreakdown,
+  computeMetricRank,
+  computeSourceDelta,
+  defenseRateForTeam,
+} from '../utils/strategicInsights';
 import { usePitScoutStore } from '../store/usePitScoutStore';
 import { useNinjaStore } from '../store/useNinjaStore';
 import { NINJA_CATEGORY_LABELS, NINJA_CATEGORY_COLORS, NINJA_TAG_LABELS, NINJA_TAG_COLORS } from '../types/ninja';
@@ -39,6 +56,7 @@ function TeamDetail() {
   const scoutActions = useAnalyticsStore(s => s.scoutActions);
   const matchFuelAttribution = useAnalyticsStore(s => s.matchFuelAttribution);
   const teamTrends = useAnalyticsStore(s => s.teamTrends);
+  const tbaData = useAnalyticsStore(s => s.tbaData);
   const eventCode = useAnalyticsStore(s => s.eventCode);
   const tbaApiKey = useAnalyticsStore(s => s.tbaApiKey);
 
@@ -215,9 +233,74 @@ function TeamDetail() {
 
   // Use shared trend analysis
   const teamTrend = teamTrends.find(t => t.teamNumber === teamNum);
-  const trend = teamTrend?.trend === 'improving' ? 'up'
-    : teamTrend?.trend === 'declining' ? 'down'
-    : 'stable';
+  const trendAnalysis = teamTrend
+    ? analyzeTrend(teamStats, teamTrend, scoutEntries)
+    : null;
+
+  // ─── Strategic-insight derivations (Phase 3) ────────────────────────────
+  const allTotalPoints = teamStatistics.map(s => s.avgTotalPoints);
+  const allAutoPoints = teamStatistics.map(s => s.avgAutoPoints);
+  const allEndgame = teamStatistics.map(s => s.avgEndgamePoints);
+
+  const totalPointsRank = computeMetricRank(teamStats.avgTotalPoints, allTotalPoints);
+  const autoPointsRank = computeMetricRank(teamStats.avgAutoPoints, allAutoPoints);
+  const endgameRank = computeMetricRank(teamStats.avgEndgamePoints, allEndgame);
+
+  const failureSlices = computeFailureBreakdown(teamStats);
+
+  const defenseRate = defenseRateForTeam(teamNum, preScoutEntries);
+  const defenseImpact = useMemo(
+    () => computeDefenseImpact(teamNum, preScoutEntries, matchFuelAttribution, teamStatistics),
+    [teamNum, preScoutEntries, matchFuelAttribution, teamStatistics],
+  );
+
+  const sourceDelta = useMemo(
+    () => computeSourceDelta(
+      teamNum,
+      preScoutEntries,
+      scoutEntries,
+      e => estimateMatchPoints(e).total,
+    ),
+    [teamNum, preScoutEntries, scoutEntries],
+  );
+
+  // Per-match auto/climb sequences for mini charts
+  const perMatchAuto = useMemo(
+    () => teamEntries.map(e => ({
+      matchNumber: e.match_number,
+      autoPoints: estimateMatchPoints(e).autoPoints,
+    })),
+    [teamEntries],
+  );
+  const perMatchClimb = useMemo(
+    () => teamEntries.map(e => ({
+      matchNumber: e.match_number,
+      climbLevel: parseClimbLevel(e.climb_level),
+      failed: e.teleop_climb_failed,
+    })),
+    [teamEntries],
+  );
+
+  // Find the home team's next unplayed match for partner comparison
+  const nextMatchPartners = useMemo(() => {
+    if (!tbaData?.matches || teamEntries.length === 0) return null;
+    const teamKey = teamNumberToKey(teamNum);
+    const upcoming = tbaData.matches
+      .filter(m => m.comp_level === 'qm' && m.alliances.red.score < 0)
+      .filter(m =>
+        m.alliances.red.team_keys.includes(teamKey) ||
+        m.alliances.blue.team_keys.includes(teamKey),
+      )
+      .sort((a, b) => a.match_number - b.match_number);
+    if (upcoming.length === 0) return null;
+    const next = upcoming[0];
+    const onRed = next.alliances.red.team_keys.includes(teamKey);
+    const allianceKeys = onRed ? next.alliances.red.team_keys : next.alliances.blue.team_keys;
+    return {
+      matchLabel: `Q${next.match_number}`,
+      partners: allianceKeys.map(teamKeyToNumber),
+    };
+  }, [tbaData, teamNum, teamEntries.length]);
 
   // Climb level label
   const climbLabel = (level: number) => {
@@ -271,9 +354,7 @@ function TeamDetail() {
         <div className="flex-1">
           <div className="flex items-center gap-3 md:gap-4 flex-wrap">
             <h1 className="text-3xl md:text-4xl font-bold">{teamStats.teamNumber}</h1>
-            {trend === 'up' && <TrendingUp className="text-success" size={32} />}
-            {trend === 'down' && <TrendingDown className="text-danger" size={32} />}
-            {trend === 'stable' && <Minus className="text-textMuted" size={32} />}
+            {trendAnalysis && <TrendChip analysis={trendAnalysis} />}
             <DataSourceToggle className="ml-auto" />
           </div>
           {teamStats.teamName && (
@@ -282,6 +363,11 @@ function TeamDetail() {
         </div>
       </div>
 
+      {/* Pre-scout vs Newton delta */}
+      {sourceDelta && (
+        <PreScoutNewtonDelta delta={sourceDelta} liveEventLabel={eventCode || 'Live'} />
+      )}
+
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         <div className="bg-surface p-4 md:p-6 rounded-lg border border-border border-l-4 border-l-warning">
@@ -289,7 +375,14 @@ function TeamDetail() {
             <p className="text-textSecondary text-sm">Avg Total Points</p>
             <Trophy size={20} className="text-warning" />
           </div>
-          <p className="text-3xl font-bold">{teamStats.avgTotalPoints.toFixed(1)}</p>
+          <div className="flex items-baseline gap-2 flex-wrap">
+            <p className="text-3xl font-bold">{teamStats.avgTotalPoints.toFixed(1)}</p>
+            <RankBadge
+              rank={totalPointsRank.rank}
+              total={totalPointsRank.total}
+              percentile={totalPointsRank.percentile}
+            />
+          </div>
         </div>
         <div className="bg-surface p-4 md:p-6 rounded-lg border border-border border-l-4 border-l-blueAlliance">
           <div className="flex items-center justify-between mb-2">
@@ -334,12 +427,72 @@ function TeamDetail() {
                 <p className="text-textSecondary text-sm">Avg Endgame Pts</p>
                 <ArrowUpCircle size={20} className="text-danger" />
               </div>
-              <p className="text-3xl font-bold">{teamStats.avgEndgamePoints.toFixed(1)}</p>
+              <div className="flex items-baseline gap-2 flex-wrap">
+                <p className="text-3xl font-bold">{teamStats.avgEndgamePoints.toFixed(1)}</p>
+                <RankBadge
+                  rank={endgameRank.rank}
+                  total={endgameRank.total}
+                  percentile={endgameRank.percentile}
+                />
+              </div>
               <p className="text-xs text-textSecondary mt-0.5">per match</p>
             </div>
           );
         })()}
       </div>
+
+      {/* Match heat-map strip */}
+      {teamEntries.length > 0 && (
+        <MatchHeatmapStrip entries={teamEntries} />
+      )}
+
+      {/* Partner comparison for next match */}
+      {nextMatchPartners && (
+        <PartnerComparisonCard
+          homeTeam={teamNum}
+          matchLabel={nextMatchPartners.matchLabel}
+          partners={nextMatchPartners.partners}
+          allStats={teamStatistics}
+        />
+      )}
+
+      {/* Defense effectiveness — only renders for defenders with impact data */}
+      {defenseRate > 0.2 && (
+        <DefenseEffectivenessCard
+          teamNumber={teamNum}
+          impact={defenseImpact}
+          defenseRate={defenseRate}
+        />
+      )}
+
+      {/* Failure modes + auto consistency + climb matrix */}
+      {(failureSlices.length > 0 || perMatchAuto.length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {failureSlices.length > 0 && (
+            <FailureModeChart slices={failureSlices} matchesPlayed={teamStats.matchesPlayed} />
+          )}
+          {perMatchAuto.length > 0 && (
+            <AutoConsistencyChart perMatchAuto={perMatchAuto} />
+          )}
+          {perMatchClimb.length > 0 && (
+            <div className={failureSlices.length > 0 || perMatchAuto.length > 0 ? 'lg:col-span-2' : ''}>
+              <ClimbMatrix perMatchClimb={perMatchClimb} />
+            </div>
+          )}
+          {/* Tiny one-line auto rank readout, since the hero card list is already crowded */}
+          {teamStats.matchesPlayed > 0 && (
+            <div className="bg-surface rounded-lg border border-border p-4 md:p-5 flex items-center gap-3 flex-wrap">
+              <span className="text-sm text-textSecondary">Avg auto:</span>
+              <span className="text-lg font-bold">{teamStats.avgAutoPoints.toFixed(1)}</span>
+              <RankBadge
+                rank={autoPointsRank.rank}
+                total={autoPointsRank.total}
+                percentile={autoPointsRank.percentile}
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Match History (Live) */}
       {matchData.length > 0 && (
