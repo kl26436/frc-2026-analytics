@@ -259,9 +259,19 @@ function TeamDetail() {
       teamNum,
       preScoutEntries,
       scoutEntries,
-      e => estimateMatchPoints(e).total,
+      // Per-entry points source: prefer FMS-attributed totals (what the
+      // Match History table shows) so the banner's "live avg" matches
+      // what users see row-by-row. Falls back to scout estimate when no
+      // FMS attribution exists (always the case for pre-scout entries).
+      e => {
+        const fa = matchFuelAttribution.find(
+          f => f.matchNumber === e.match_number && f.teamNumber === e.team_number,
+        );
+        if (fa) return fa.totalPointsScored + fa.totalTowerPoints;
+        return estimateMatchPoints(e).total;
+      },
     ),
-    [teamNum, preScoutEntries, scoutEntries],
+    [teamNum, preScoutEntries, scoutEntries, matchFuelAttribution],
   );
 
   // Per-match auto/climb sequences for mini charts
