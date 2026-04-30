@@ -143,8 +143,8 @@ function Dashboard() {
   }, [nextMatch, matchPredictions, tbaData, HOME]);
 
   const rankClass = (i: number) =>
-    i === 0 ? 'text-sm font-extrabold text-warning'
-    : i <= 2 ? 'text-xs font-bold text-textSecondary'
+    i === 0 ? 'text-sm font-bold text-warning'
+    : i <= 2 ? 'text-xs font-semibold text-textSecondary'
     : 'text-xs text-textMuted';
 
   const nickname = (teamNum: number) =>

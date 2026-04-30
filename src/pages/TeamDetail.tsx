@@ -851,7 +851,7 @@ function TeamDetail() {
 
         {/* Reliability */}
         <div className="bg-surface p-6 rounded-lg border border-border">
-          <h3 className="text-lg font-bold mb-1">Reliability & Quality</h3>
+          <h3 className="text-lg font-bold mb-1">Reliability &amp; quality</h3>
           <p className="text-xs text-textSecondary mb-4">Flag counts</p>
           <div className="space-y-3">
             <div className="flex justify-between">

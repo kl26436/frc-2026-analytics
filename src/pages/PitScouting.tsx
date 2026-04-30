@@ -742,7 +742,7 @@ function PitScouting() {
 
       {/* Tower Climb */}
       <div className="bg-surface p-4 rounded-lg border border-border">
-        <h2 className="font-bold mb-3">TOWER Climb *</h2>
+        <h2 className="font-bold mb-3">Tower climb *</h2>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {(['level3', 'level2', 'level1', 'none'] as ClimbLevel[]).map(value => (
             <button

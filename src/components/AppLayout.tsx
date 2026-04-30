@@ -43,7 +43,7 @@ function TopLevelLink({ item, isActive, onClose }: { item: NavItem; isActive: bo
   const { to, icon: Icon, label } = item;
   return (
     <Link to={to} onClick={onClose} className={navLinkClass(isActive)}>
-      <Icon size={18} />
+      <Icon size={20} />
       <span>{label}</span>
     </Link>
   );
@@ -79,7 +79,7 @@ function MoreDropdown({ groups, isActive, isItemActive }: MoreDropdownProps) {
   return (
     <div className="relative" ref={ref}>
       <button onClick={() => setOpen(!open)} className={navLinkClass(isActive)}>
-        <MoreHorizontal size={18} />
+        <MoreHorizontal size={20} />
         <span>More</span>
         <ChevronDown size={14} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>

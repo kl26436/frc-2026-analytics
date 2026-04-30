@@ -189,7 +189,7 @@ function DataQuality() {
 
                   {/* Under-ranked by scout (OPR ranks higher than scout thinks) */}
                   <div>
-                    <h3 className="text-sm font-bold text-danger mb-2">OPR Ranks Higher Than Scout</h3>
+                    <h3 className="text-sm font-bold text-danger mb-2">OPR ranks higher than scout</h3>
                     <p className="text-xs text-textMuted mb-2">These teams look better in OPR than scouting suggests</p>
                     {underRanked.length === 0 ? (
                       <p className="text-xs text-textMuted">None</p>
