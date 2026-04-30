@@ -468,6 +468,19 @@ export const useAnalyticsStore = create<AnalyticsState>()(
 
         const teamTrends = computeAllTeamTrends(entriesForStats);
         set({ teamStatistics, liveOnlyTeamStatistics, teamTrends });
+
+        // In pre-scout-only mode, the user wants pre-scout values to drive
+        // predictions verbatim. calculateFuelAttribution would otherwise re-merge
+        // live FMS-attributed values into teamStatistics for any team that has
+        // live FMS data, making predictions look like a blend. Clear FMS-derived
+        // state and skip attribution so the scout-only fallback path in
+        // buildPredictionInputs uses the pre-scout-derived teamStatistics.
+        if (usePreScout && predictionMode === 'pre-scout-only') {
+          set({ matchFuelAttribution: [], teamFuelStats: [] });
+          get().calculatePredictionInputs();
+          return;
+        }
+
         get().calculateFuelAttribution();
       },
 

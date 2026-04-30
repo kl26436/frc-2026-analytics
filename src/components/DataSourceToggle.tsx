@@ -1,4 +1,4 @@
-import { Database, FileSpreadsheet } from 'lucide-react';
+import { Database, FileSpreadsheet, GitMerge } from 'lucide-react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 
 interface Props {
@@ -6,15 +6,20 @@ interface Props {
 }
 
 /**
- * Two-state segmented control to flip team statistics between live-only and
- * pre-scout-only data. Lives in page headers so it's always visible —
- * the same setting also drives Monte Carlo predictions.
+ * Three-state segmented control: Live ↔ Pre-Scout ↔ Blend. Lives in page
+ * headers so the user can always see and change which data is feeding stats
+ * and predictions.
+ *
+ * - Live  → predictionMode='live-only' (tablet-scouted entries only)
+ * - Pre   → predictionMode='pre-scout-only' (video hand-counts only, FMS
+ *            attribution explicitly skipped so live data doesn't bleed in)
+ * - Blend → predictionMode='blended' (all live + all pre-scout)
  *
  * Hidden when there's no pre-scout data loaded (no decision to make).
  *
- * Wired to the same `predictionMode` field used by Admin Settings, so the
- * advanced "blended" / "smart-fallback" modes set there will be replaced if
- * the user clicks here. That's intentional — most users want a simple flip.
+ * Note: Admin Settings has a fourth mode, "smart-fallback". If that's set, the
+ * toggle highlights nothing and shows an "AUTO" tag so the user knows the
+ * choice came from a different control.
  */
 export default function DataSourceToggle({ className = '' }: Props) {
   const predictionMode = useAnalyticsStore(s => s.predictionMode);
@@ -27,11 +32,10 @@ export default function DataSourceToggle({ className = '' }: Props) {
 
   const showingLive = !usePreScout || predictionMode === 'live-only';
   const showingPreScout = usePreScout && predictionMode === 'pre-scout-only';
-  // If they're in a blended mode (smart-fallback / blended), show neither pill as fully active
-  // and label it so they know.
-  const isBlended = usePreScout && (predictionMode === 'smart-fallback' || predictionMode === 'blended');
+  const showingBlend = usePreScout && predictionMode === 'blended';
+  const isSmartFallback = usePreScout && predictionMode === 'smart-fallback';
 
-  const flipTo = (mode: 'live-only' | 'pre-scout-only') => {
+  const flipTo = (mode: 'live-only' | 'pre-scout-only' | 'blended') => {
     if (!usePreScout) setUsePreScout(true);
     setPredictionMode(mode);
   };
@@ -62,9 +66,21 @@ export default function DataSourceToggle({ className = '' }: Props) {
         <FileSpreadsheet size={12} />
         Pre-Scout
       </button>
-      {isBlended && (
-        <span className="px-2 text-[10px] text-textMuted uppercase tracking-wider" title={`Currently blending — ${predictionMode}`}>
-          {predictionMode === 'smart-fallback' ? 'auto' : 'blend'}
+      <button
+        onClick={() => flipTo('blended')}
+        className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-semibold transition-colors ${
+          showingBlend
+            ? 'bg-blueAlliance/15 text-blueAlliance'
+            : 'text-textSecondary hover:bg-interactive'
+        }`}
+        title="Combine live + pre-scout matches with equal weight"
+      >
+        <GitMerge size={12} />
+        Blend
+      </button>
+      {isSmartFallback && (
+        <span className="px-2 text-[10px] text-textMuted uppercase tracking-wider" title="Smart-fallback mode set in Admin Settings">
+          auto
         </span>
       )}
     </div>
