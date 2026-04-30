@@ -321,7 +321,7 @@ function TeamDetail() {
                 <p className="text-lg text-textMuted pb-0.5">-</p>
                 <div className="text-center">
                   <p className="text-sm font-medium text-textSecondary">Max</p>
-                  <p className="text-2xl font-bold text-success">{teamStats.maxTotalFuelEstimate}</p>
+                  <p className="text-2xl font-bold text-success">{teamStats.maxTotalFuelEstimate.toFixed(0)}</p>
                 </div>
               </div>
             </div>
@@ -689,9 +689,9 @@ function TeamDetail() {
           <div>
             <h3 className="text-sm font-bold text-textSecondary mb-2">Fuel Scoring</h3>
             <TotalsRow items={[
-              { label: 'Auto Fuel', value: `${teamStats.totalAutoFuelEstimate} total (${teamStats.avgAutoFuelEstimate.toFixed(1)} avg)` },
-              { label: 'Teleop Fuel', value: `${teamStats.totalTeleopFuelEstimate} total (${teamStats.avgTeleopFuelEstimate.toFixed(1)} avg)` },
-              { label: 'Passes', value: `${teamStats.totalAutoFuelPass + teamStats.totalTeleopFuelPass} total (${teamStats.avgTotalPass.toFixed(1)} avg)` },
+              { label: 'Auto Fuel', value: `${teamStats.totalAutoFuelEstimate.toFixed(0)} total (${teamStats.avgAutoFuelEstimate.toFixed(1)} avg)` },
+              { label: 'Teleop Fuel', value: `${teamStats.totalTeleopFuelEstimate.toFixed(0)} total (${teamStats.avgTeleopFuelEstimate.toFixed(1)} avg)` },
+              { label: 'Passes', value: `${(teamStats.totalAutoFuelPass + teamStats.totalTeleopFuelPass).toFixed(0)} total (${teamStats.avgTotalPass.toFixed(1)} avg)` },
             ]} />
           </div>
 
