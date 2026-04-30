@@ -15,6 +15,11 @@ import AllianceSelection from './pages/AllianceSelection';
 import AllianceSelectionJoin from './pages/AllianceSelectionJoin';
 import PitScouting from './pages/PitScouting';
 import AdminSettings from './pages/AdminSettings';
+import SyncTab from './pages/admin/SyncTab';
+import UsersTab from './pages/admin/UsersTab';
+import PreScoutTab from './pages/admin/PreScoutTab';
+import CalibrationTab from './pages/admin/CalibrationTab';
+import DangerZoneTab from './pages/admin/DangerZoneTab';
 import DataQuality from './pages/DataQuality';
 import MatchReplay from './pages/MatchReplay';
 
@@ -88,7 +93,14 @@ function AppContent() {
         <Route path="/bracket" element={<PlayoffBracket />} />
         <Route path="/ninja" element={<Navigate to="/pit-scouting" replace />} />
         <Route path="/ninja/:teamNumber" element={<Navigate to="/pit-scouting" replace />} />
-        <Route path="/admin" element={<AdminSettings />} />
+        <Route path="/admin" element={<AdminSettings />}>
+          <Route index element={<Navigate to="sync" replace />} />
+          <Route path="sync" element={<SyncTab />} />
+          <Route path="users" element={<UsersTab />} />
+          <Route path="pre-scout" element={<PreScoutTab />} />
+          <Route path="calibration" element={<CalibrationTab />} />
+          <Route path="danger-zone" element={<DangerZoneTab />} />
+        </Route>
         <Route path="/calibration" element={<FuelCalibration />} />
         <Route path="/insights" element={<AIInsights />} />
         <Route path="/robot-pictures" element={<RobotPictures />} />
