@@ -76,8 +76,10 @@ function mapRow(row) {
 
   const id = `${eventKey}_${matchNum}_${teamNum}`;
 
+  // Empty notes stay empty — _source already identifies the entry as pre-scout,
+  // so consumers can filter comment lists without a magic "[PRE-SCOUT]" marker.
   const notesRaw = (row.notes || '').trim();
-  const notes = notesRaw ? `[PRE-SCOUT] ${notesRaw}` : '[PRE-SCOUT]';
+  const notes = notesRaw ? `[PRE-SCOUT] ${notesRaw}` : '';
 
   const entry = {
     id,

@@ -113,9 +113,12 @@ export function calculateTeamStatistics(
       : 0;
 
   // ── Notes aggregation ──
+  // Strip bare "[PRE-SCOUT]" markers (older pre-scout imports wrote that even
+  // when the source row had no actual note text — covers existing data without
+  // a re-import).
   const notesList = entries
     .map(e => e.notes)
-    .filter(n => n && n.trim().length > 0);
+    .filter(n => n && n.trim().length > 0 && n.trim() !== '[PRE-SCOUT]');
 
   // ══════════════════════════════════════════════════════════════════════
   // BUILD RESULT — raw counts + derived stats
