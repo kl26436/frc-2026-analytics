@@ -500,10 +500,15 @@ function TeamDetail() {
                 </thead>
                 <tbody className="divide-y divide-border">
                   {allEntries.map((entry, idx) => {
-                    const fuel = estimateMatchFuel(entry);
                     const points = estimateMatchPoints(entry);
                     const climb = parseClimbLevel(entry.climb_level);
                     const startZone = getStartZone(entry);
+                    // "Scored" columns show the actual scored-ball counts so the math
+                    // matches "Pts" columns. Pre-scout's SCORE_PLUS_N rolls scored +
+                    // passed together (touched count), which would otherwise produce
+                    // confusing rows like "Teleop Scored 120 → Teleop Pts 68".
+                    const autoScored = entry.auton_FUEL_SCORE;
+                    const teleopScored = entry.teleop_FUEL_SCORE;
                     const passes = entry.auton_FUEL_PASS + entry.teleop_FUEL_PASS;
                     const tbaMatch = preScoutTbaMatches.get(entry.match_key);
                     const videoUrl = tbaMatch ? getMatchVideoUrl(tbaMatch) : null;
@@ -540,7 +545,7 @@ function TeamDetail() {
                         <td className="hidden md:table-cell px-3 py-3 text-center text-textSecondary">
                           {startZone > 0 ? `Z${startZone}` : '-'}
                         </td>
-                        <td className="hidden md:table-cell px-3 py-3 text-right text-textSecondary">{fuel.auto}</td>
+                        <td className="hidden md:table-cell px-3 py-3 text-right text-textSecondary">{autoScored}</td>
                         <td className="hidden md:table-cell px-3 py-3 text-center">
                           {entry.auton_AUTON_CLIMBED > 0 ? (
                             <span className="text-success font-semibold">Y</span>
@@ -549,7 +554,7 @@ function TeamDetail() {
                           )}
                         </td>
                         <td className="px-3 py-3 text-right font-semibold">{Math.round(points.autoPoints)}</td>
-                        <td className="hidden md:table-cell px-3 py-3 text-right text-textSecondary">{fuel.teleop}</td>
+                        <td className="hidden md:table-cell px-3 py-3 text-right text-textSecondary">{teleopScored}</td>
                         <td className="hidden md:table-cell px-3 py-3 text-right text-textSecondary">{passes > 0 ? passes : '-'}</td>
                         <td className="px-3 py-3 text-right font-semibold">{Math.round(points.teleopPoints)}</td>
                         <td className="px-3 py-3 text-center">
