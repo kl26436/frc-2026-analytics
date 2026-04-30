@@ -18,10 +18,10 @@ export type NavGroup = {
 
 // Top-level header links — the 4 most-used pages get direct, single-click access.
 export const TOP_LEVEL: NavItem[] = [
-  { to: '/',         icon: BarChart3,    label: 'Dashboard' },
-  { to: '/teams',    icon: Users,        label: 'Teams' },
-  { to: '/predict',  icon: Swords,       label: 'Predict' },
-  { to: '/picklist', icon: ClipboardList, label: 'Picklist' },
+  { to: '/',             icon: BarChart3,      label: 'Dashboard' },
+  { to: '/teams',        icon: Users,          label: 'Teams' },
+  { to: '/pit-scouting', icon: ClipboardCheck, label: 'Ninja Scouting' },
+  { to: '/picklist',     icon: ClipboardList,  label: 'Picklist' },
 ];
 
 // "More" dropdown — everything else, grouped semantically.
@@ -32,6 +32,7 @@ export const MORE_GROUPS: NavGroup[] = [
     groupLabel: 'Match Strategy',
     items: [
       { to: '/schedule', icon: Calendar, label: 'Match Prep' },
+      { to: '/predict',  icon: Swords,   label: 'Predict' },
     ],
   },
   {
@@ -47,9 +48,8 @@ export const MORE_GROUPS: NavGroup[] = [
   {
     groupLabel: 'Scouting',
     items: [
-      { to: '/pit-scouting',       icon: ClipboardCheck, label: 'Ninja Scouting' },
-      { to: '/alliance-selection', icon: Handshake,      label: 'Alliance Selection' },
-      { to: '/data-quality',       icon: AlertTriangle,  label: 'Data Quality' },
+      { to: '/alliance-selection', icon: Handshake,     label: 'Alliance Selection' },
+      { to: '/data-quality',       icon: AlertTriangle, label: 'Data Quality' },
     ],
   },
   {
