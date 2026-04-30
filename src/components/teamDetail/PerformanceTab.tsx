@@ -7,7 +7,6 @@ import FailureModeChart from '../FailureModeChart';
 import AutoConsistencyChart from '../AutoConsistencyChart';
 import ClimbMatrix from '../ClimbMatrix';
 import RankBadge from '../RankBadge';
-import PartnerComparisonCard from '../PartnerComparisonCard';
 import DefenseEffectivenessCard from '../DefenseEffectivenessCard';
 
 interface MatchPoint {
@@ -33,14 +32,12 @@ interface ChartColors {
 interface PerformanceTabProps {
   teamNum: number;
   teamStats: TeamStatistics;
-  teamStatistics: TeamStatistics[];
   trendChartData: MatchPoint[];
   failureSlices: FailureSlice[];
   perMatchAuto: Array<{ matchNumber: number; autoPoints: number }>;
   perMatchClimb: Array<{ matchNumber: number; climbLevel: number; failed?: boolean }>;
   autoPointsRank: MetricRank;
   chartColors: ChartColors;
-  nextMatchPartners: { matchLabel: string; partners: number[] } | null;
   defenseRate: number;
   defenseImpact: DefenseImpact;
 }
@@ -48,32 +45,23 @@ interface PerformanceTabProps {
 export function PerformanceTab({
   teamNum,
   teamStats,
-  teamStatistics,
   trendChartData,
   failureSlices,
   perMatchAuto,
   perMatchClimb,
   autoPointsRank,
   chartColors: cc,
-  nextMatchPartners,
   defenseRate,
   defenseImpact,
 }: PerformanceTabProps) {
   const n = teamStats.matchesPlayed;
   const [scoutingTotalsOpen, setScoutingTotalsOpen] = useState(false);
 
-  // Partner + defense cards render even on low-data teams since their value
-  // comes from match-prep / per-match info, not from the focused team's stats.
+  // Defense card only renders for teams that play substantial defense.
+  // Next-match partner comparison was removed — that's match-prep info,
+  // not part of a team's profile.
   const matchPrepCards = (
     <>
-      {nextMatchPartners && (
-        <PartnerComparisonCard
-          homeTeam={teamNum}
-          matchLabel={nextMatchPartners.matchLabel}
-          partners={nextMatchPartners.partners}
-          allStats={teamStatistics}
-        />
-      )}
       {defenseRate > 0.2 && (
         <DefenseEffectivenessCard
           teamNumber={teamNum}
@@ -169,7 +157,7 @@ export function PerformanceTab({
           <h3 className="text-lg font-bold mb-1">Auto Performance</h3>
           <p className="text-xs text-textSecondary mb-4">Calculated averages</p>
           <div className="space-y-3">
-            <Row label="Avg Auto Fuel Estimate" value={teamStats.avgAutoFuelEstimate.toFixed(1)} />
+            <Row label="Avg Auto Balls Touched" value={teamStats.avgAutoFuelEstimate.toFixed(1)} />
             <Row label="Avg Auto Points" value={teamStats.avgAutoPoints.toFixed(1)} />
             <Row label="Auto Climb" value={`${teamStats.autoClimbCount}/${n} (${teamStats.autoClimbRate.toFixed(0)}%)`} />
             <Row
@@ -184,7 +172,7 @@ export function PerformanceTab({
           <h3 className="text-lg font-bold mb-1">Teleop Performance</h3>
           <p className="text-xs text-textSecondary mb-4">Calculated averages</p>
           <div className="space-y-3">
-            <Row label="Avg Teleop Fuel Estimate" value={teamStats.avgTeleopFuelEstimate.toFixed(1)} />
+            <Row label="Avg Teleop Balls Touched" value={teamStats.avgTeleopFuelEstimate.toFixed(1)} />
             <Row label="Avg Teleop Points" value={teamStats.avgTeleopPoints.toFixed(1)} />
             <Row label="Avg Passes" value={teamStats.avgTotalPass.toFixed(1)} />
             <Row label="Dedicated Passer" value={`${teamStats.dedicatedPasserCount}/${n} (${teamStats.dedicatedPasserRate.toFixed(0)}%)`} />
@@ -282,10 +270,10 @@ export function PerformanceTab({
               ]} />
             </Section>
 
-            <Section title="Fuel Scoring">
+            <Section title="Balls Touched (raw scout counts)">
               <TotalsRow items={[
-                { label: 'Auto Fuel', value: `${teamStats.totalAutoFuelEstimate.toFixed(0)} total (${teamStats.avgAutoFuelEstimate.toFixed(1)} avg)` },
-                { label: 'Teleop Fuel', value: `${teamStats.totalTeleopFuelEstimate.toFixed(0)} total (${teamStats.avgTeleopFuelEstimate.toFixed(1)} avg)` },
+                { label: 'Auto', value: `${teamStats.totalAutoFuelEstimate.toFixed(0)} total (${teamStats.avgAutoFuelEstimate.toFixed(1)} avg)` },
+                { label: 'Teleop', value: `${teamStats.totalTeleopFuelEstimate.toFixed(0)} total (${teamStats.avgTeleopFuelEstimate.toFixed(1)} avg)` },
                 { label: 'Passes', value: `${(teamStats.totalAutoFuelPass + teamStats.totalTeleopFuelPass).toFixed(0)} total (${teamStats.avgTotalPass.toFixed(1)} avg)` },
               ]} />
             </Section>

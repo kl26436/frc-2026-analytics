@@ -98,24 +98,24 @@ Be specific with team numbers. Use data to support claims. Keep analysis actiona
 function formatTeamStats(stats: TeamStatistics[]): string {
   if (stats.length === 0) return 'No team statistics available.';
 
-  const sorted = [...stats].sort((a, b) => {
-    const aTotal = (a.avgAutoFuelEstimate || 0) + (a.avgTeleopFuelEstimate || 0);
-    const bTotal = (b.avgAutoFuelEstimate || 0) + (b.avgTeleopFuelEstimate || 0);
-    return bTotal - aTotal;
-  });
+  // Sort by canonical points (FMS-attributed when available, scout estimate
+  // fallback already merged into avgTotalPoints by the analytics store).
+  // Sorting by raw fuel estimates would systematically rank pre-scout-only
+  // teams higher than live teams with the same actual scoring.
+  const sorted = [...stats].sort((a, b) => (b.avgTotalPoints || 0) - (a.avgTotalPoints || 0));
 
   // Flag unreliable teams separately instead of cluttering the main table
   const unreliable = sorted.filter(t => t.lostConnectionRate !== undefined && t.lostConnectionRate > 0.15);
 
   const rows = sorted.map(t => {
-    const autoFuel = t.avgAutoFuelEstimate?.toFixed(1) ?? '0';
-    const teleopFuel = t.avgTeleopFuelEstimate?.toFixed(1) ?? '0';
     const avgPts = t.avgTotalPoints?.toFixed(1) ?? '?';
-    return `| ${t.teamNumber} | ${t.matchesPlayed} | ${autoFuel} | ${teleopFuel} | ${avgPts} |`;
+    const avgAuto = t.avgAutoPoints?.toFixed(1) ?? '?';
+    const avgTeleop = t.avgTeleopPoints?.toFixed(1) ?? '?';
+    return `| ${t.teamNumber} | ${t.matchesPlayed} | ${avgPts} | ${avgAuto} | ${avgTeleop} |`;
   });
 
-  let table = `| Team | Matches | Avg Auto Fuel | Avg Teleop Fuel | Avg Pts |
-|------|---------|---------------|-----------------|---------|
+  let table = `| Team | Matches | Avg Pts | Avg Auto | Avg Teleop |
+|------|---------|---------|----------|------------|
 ${rows.join('\n')}`;
 
   if (unreliable.length > 0) {
@@ -555,14 +555,12 @@ export function buildPlayoffStrategyPrompt(
 ${matchBreakdown || 'No entries.'}`;
   };
 
-  // Get all other teams as potential opponents
+  // Get all other teams as potential opponents — sort by canonical points
+  // (avgTotalPoints; FMS-attributed when available) so opponent ranking matches
+  // every other view in the app.
   const opponentStats = teamStats
     .filter(t => !allianceTeams.includes(t.teamNumber))
-    .sort((a, b) => {
-      const aTotal = (a.avgAutoFuelEstimate || 0) + (a.avgTeleopFuelEstimate || 0);
-      const bTotal = (b.avgAutoFuelEstimate || 0) + (b.avgTeleopFuelEstimate || 0);
-      return bTotal - aTotal;
-    });
+    .sort((a, b) => (b.avgTotalPoints || 0) - (a.avgTotalPoints || 0));
 
   const opponentTable = opponentStats.map(t => {
     const fuel = fuelStats.find(f => f.teamNumber === t.teamNumber);

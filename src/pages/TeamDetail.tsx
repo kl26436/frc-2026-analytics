@@ -6,7 +6,7 @@ import { ArrowLeft, X } from 'lucide-react';
 import { estimateMatchPoints, parseClimbLevel, estimateMatchFuel, computeRobotFuelFromActions } from '../types/scouting';
 import type { ScoutEntry } from '../types/scouting';
 import type { TBAMatch } from '../types/tba';
-import { getTeamEventMatches, teamKeyToNumber, teamNumberToKey } from '../utils/tbaApi';
+import { getTeamEventMatches, teamNumberToKey } from '../utils/tbaApi';
 import MatchDetailModal from '../components/MatchDetailModal';
 import TrendChip from '../components/TrendChip';
 import ReliabilityChip from '../components/ReliabilityChip';
@@ -66,7 +66,6 @@ function TeamDetail() {
   const scoutActions = useAnalyticsStore(s => s.scoutActions);
   const matchFuelAttribution = useAnalyticsStore(s => s.matchFuelAttribution);
   const teamTrends = useAnalyticsStore(s => s.teamTrends);
-  const tbaData = useAnalyticsStore(s => s.tbaData);
   const eventCode = useAnalyticsStore(s => s.eventCode);
   const tbaApiKey = useAnalyticsStore(s => s.tbaApiKey);
 
@@ -301,27 +300,6 @@ function TeamDetail() {
     [teamEntries],
   );
 
-  // Find the home team's next unplayed match for partner comparison
-  const nextMatchPartners = useMemo(() => {
-    if (!tbaData?.matches || teamEntries.length === 0) return null;
-    const teamKey = teamNumberToKey(teamNum);
-    const upcoming = tbaData.matches
-      .filter(m => m.comp_level === 'qm' && m.alliances.red.score < 0)
-      .filter(m =>
-        m.alliances.red.team_keys.includes(teamKey) ||
-        m.alliances.blue.team_keys.includes(teamKey),
-      )
-      .sort((a, b) => a.match_number - b.match_number);
-    if (upcoming.length === 0) return null;
-    const next = upcoming[0];
-    const onRed = next.alliances.red.team_keys.includes(teamKey);
-    const allianceKeys = onRed ? next.alliances.red.team_keys : next.alliances.blue.team_keys;
-    return {
-      matchLabel: `Q${next.match_number}`,
-      partners: allianceKeys.map(teamKeyToNumber),
-    };
-  }, [tbaData, teamNum, teamEntries.length]);
-
   return (
     <div className="space-y-4 md:space-y-6">
       {/* Header */}
@@ -382,7 +360,6 @@ function TeamDetail() {
         <PerformanceTab
           teamNum={teamNum}
           teamStats={teamStats}
-          teamStatistics={teamStatistics}
           trendChartData={matchData.map(({ entry, points }) => ({
             match: `Q${entry.match_number}`,
             total: points.total,
@@ -394,7 +371,6 @@ function TeamDetail() {
           perMatchClimb={perMatchClimb}
           autoPointsRank={autoPointsRank}
           chartColors={chartColors()}
-          nextMatchPartners={nextMatchPartners}
           defenseRate={defenseRate}
           defenseImpact={defenseImpact}
         />

@@ -4,6 +4,7 @@ import RankBadge from '../RankBadge';
 import MatchHeatmapStrip from '../MatchHeatmapStrip';
 import ScoringBreakdownPanel from '../ScoringBreakdownPanel';
 import PreScoutNewtonDelta from '../PreScoutNewtonDelta';
+import DataSourceToggle from '../DataSourceToggle';
 
 interface OverviewTabProps {
   teamStats: TeamStatistics;
@@ -38,6 +39,13 @@ export function OverviewTab({
 
   return (
     <div className="space-y-4 md:space-y-6">
+      {/* Data-source toggle — first thing on the team's overview so flipping
+          live ↔ pre-scout doesn't require leaving the page. Hidden when no
+          pre-scout data is loaded (DataSourceToggle handles that internally). */}
+      <div className="flex justify-end">
+        <DataSourceToggle />
+      </div>
+
       {sourceDelta && (
         <PreScoutNewtonDelta delta={sourceDelta} liveEventLabel={liveEventLabel} />
       )}
@@ -69,18 +77,22 @@ export function OverviewTab({
 
       <ScoringBreakdownPanel teamStats={teamStats} allStats={teamStatistics} />
 
-      {/* Climb summary strip */}
-      <div className="bg-surface rounded-lg border border-border p-4">
-        <h3 className="text-sm font-bold text-textSecondary mb-2">Climb summary</h3>
-        <div className="flex flex-wrap gap-3">
-          {climbCounts.map(({ label, count, color }) => (
-            <div key={label} className="bg-surfaceElevated rounded-lg px-4 py-2 text-center min-w-[60px]">
-              <p className="text-xs text-textSecondary">{label}</p>
-              <p className={`text-lg font-bold ${color}`}>{count}<span className="text-xs text-textMuted font-normal">/{n}</span></p>
-            </div>
-          ))}
+      {/* Climb summary strip — only renders if the team has actually climbed */}
+      {(teamStats.level1ClimbCount + teamStats.level2ClimbCount + teamStats.level3ClimbCount) > 0 && (
+        <div className="bg-surface rounded-lg border border-border p-4">
+          <h3 className="text-sm font-bold text-textSecondary mb-2">Climb summary</h3>
+          <div className="flex flex-wrap gap-3">
+            {climbCounts
+              .filter(({ count }) => count > 0)
+              .map(({ label, count, color }) => (
+                <div key={label} className="bg-surfaceElevated rounded-lg px-4 py-2 text-center min-w-[60px]">
+                  <p className="text-xs text-textSecondary">{label}</p>
+                  <p className={`text-lg font-bold ${color}`}>{count}<span className="text-xs text-textMuted font-normal">/{n}</span></p>
+                </div>
+              ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

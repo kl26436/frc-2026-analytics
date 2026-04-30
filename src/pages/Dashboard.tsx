@@ -1,15 +1,26 @@
 import { useEffect, useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { collection, onSnapshot } from 'firebase/firestore';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
+import { useWatchlistStore } from '../store/useWatchlistStore';
+import { db } from '../lib/firebase';
 import { Trophy, Target, TrendingUp, RefreshCw, ChevronDown, ChevronUp, Hash, WifiOff, Clock, Flame, Binoculars } from 'lucide-react';
 import { teamKeyToNumber } from '../utils/tbaApi';
 import { computeMatchup } from '../utils/predictions';
 import { matchLabel, matchSortKey } from '../utils/formatting';
+import { diffSinceLastVisit, recordVisit, type VisitDiff } from '../utils/lastVisit';
+import { buildOpponentBriefing } from '../utils/strategicInsights';
+import type { LiveComment } from '../types/pickList';
 import DataSourceToggle from '../components/DataSourceToggle';
 import HomeAllianceHero from '../components/HomeAllianceHero';
-import NextMatchHero from '../components/NextMatchHero';
 import MiniBracketWidget from '../components/MiniBracketWidget';
 import RecentPlayoffResults from '../components/RecentPlayoffResults';
+import MatchPreviewCard from '../components/MatchPreviewCard';
+import WhatChangedGreeting from '../components/dashboard/WhatChangedGreeting';
+import ThreatAssessment from '../components/dashboard/ThreatAssessment';
+import WatchlistCards from '../components/dashboard/WatchlistCards';
+import TopMoversStrip from '../components/dashboard/TopMoversStrip';
+import PicklistActivityFeed from '../components/dashboard/PicklistActivityFeed';
 
 const OUR_TEAM = 148;
 const RANKINGS_TO_SHOW = 5;
@@ -18,11 +29,15 @@ function Dashboard() {
   const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
   const teamTrends = useAnalyticsStore(state => state.teamTrends);
   const predictionInputs = useAnalyticsStore(state => state.predictionInputs);
+  const scoutEntries = useAnalyticsStore(state => state.scoutEntries);
+  const eventCode = useAnalyticsStore(state => state.eventCode);
 
   const homeTeamNumber = useAnalyticsStore(state => state.homeTeamNumber);
   const tbaData = useAnalyticsStore(state => state.tbaData);
   const tbaLoading = useAnalyticsStore(state => state.tbaLoading);
   const fetchTBAData = useAnalyticsStore(state => state.fetchTBAData);
+
+  const pinnedTeams = useWatchlistStore(s => s.pinnedTeams);
 
   const navigate = useNavigate();
   const HOME = homeTeamNumber || OUR_TEAM;
@@ -78,6 +93,7 @@ function Dashboard() {
   );
 
   const [showAllMatches, setShowAllMatches] = useState(false);
+  const [expandedMatchKey, setExpandedMatchKey] = useState<string | null>(null);
 
   // ── Match predictions ──
   const matchPredictions = useMemo(() => {
@@ -102,45 +118,6 @@ function Dashboard() {
     return null;
   }, [tbaData?.alliances, HOME]);
 
-  const nextMatchHeroProps = useMemo(() => {
-    if (!nextMatch) return null;
-    const prediction = matchPredictions.get(nextMatch.key);
-    if (!prediction) return null;
-
-    const redTeamNums = nextMatch.alliances.red.team_keys.map(teamKeyToNumber);
-    const blueTeamNums = nextMatch.alliances.blue.team_keys.map(teamKeyToNumber);
-    const alliances = tbaData?.alliances ?? [];
-    const redA = alliances.findIndex(a => a.picks.some(k => nextMatch.alliances.red.team_keys.includes(k)));
-    const blueA = alliances.findIndex(a => a.picks.some(k => nextMatch.alliances.blue.team_keys.includes(k)));
-
-    // Time + matches-away
-    const time = nextMatch.predicted_time || nextMatch.time;
-    const timeStr = time ? new Date(time * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : undefined;
-
-    const allSorted = [...(tbaData?.matches ?? [])].sort((a, b) => matchSortKey(a) - matchSortKey(b));
-    const firstUnplayed = allSorted.findIndex(m => m.alliances.red.score < 0);
-    const nextIdx = allSorted.findIndex(m => m.key === nextMatch.key);
-    const matchesAway = firstUnplayed >= 0 && nextIdx >= 0 ? nextIdx - firstUnplayed : null;
-
-    return {
-      matchKey: nextMatch.key,
-      matchLabel: getMatchLabel(nextMatch),
-      redTeams: redTeamNums,
-      blueTeams: blueTeamNums,
-      homeTeam: HOME,
-      prediction: {
-        redScore: prediction.red.totalScore,
-        blueScore: prediction.blue.totalScore,
-        redWinProb: prediction.redRP.winProbability,
-      },
-      redConfidence: prediction.red.confidence,
-      blueConfidence: prediction.blue.confidence,
-      timeUntilStart: timeStr,
-      matchesAway,
-      redAllianceNum: redA >= 0 ? redA + 1 : null,
-      blueAllianceNum: blueA >= 0 ? blueA + 1 : null,
-    };
-  }, [nextMatch, matchPredictions, tbaData, HOME]);
 
   const rankClass = (i: number) =>
     i === 0 ? 'text-sm font-bold text-warning'
@@ -265,6 +242,7 @@ function Dashboard() {
   const totalRankedTeams = tbaData?.rankings?.rankings?.length ?? 0;
 
   // ── Match Row ──
+  // Returns a fragment containing the row plus an optional expansion row (briefing) for upcoming matches.
   const MatchRow = ({ match, index }: { match: typeof homeMatches[0]; index: number }) => {
     const isRed = match.alliances.red.team_keys.includes(`frc${HOME}`);
     const isCompleted = match.alliances.red.score >= 0;
@@ -275,35 +253,96 @@ function Dashboard() {
 
     const prediction = matchPredictions.get(match.key);
     const ourRP = prediction ? (isRed ? prediction.redRP : prediction.blueRP) : null;
+    const expanded = expandedMatchKey === match.key;
+
+    const oppKeys = isRed ? match.alliances.blue.team_keys : match.alliances.red.team_keys;
+    const oppNums = oppKeys.map(teamKeyToNumber);
+    const briefing = !isCompleted && expanded
+      ? buildOpponentBriefing(oppNums, teamStatistics, teamTrends)
+      : null;
 
     return (
-      <tr
-        className={`border-b border-border/50 hover:bg-surfaceElevated cursor-pointer ${!isCompleted ? 'bg-surfaceElevated/50' : index % 2 === 0 ? 'bg-surfaceAlt' : ''}`}
-        onClick={() => navigate('/predict')}
-      >
-        <td className="py-2.5 px-4 font-bold">{getMatchLabel(match)}</td>
-        <td className={`py-2.5 px-3 text-center font-mono ${isCompleted ? (won ? 'bg-success/5' : lost ? 'bg-danger/5' : '') : ''}`}>
-          {isCompleted ? (
-            <span>
-              <span className={`${isRed ? 'text-redAlliance' : ''} ${match.alliances.red.score > match.alliances.blue.score ? 'font-bold' : ''}`}>{match.alliances.red.score}</span>
-              <span className="text-textMuted"> - </span>
-              <span className={`${!isRed ? 'text-blueAlliance' : ''} ${match.alliances.blue.score > match.alliances.red.score ? 'font-bold' : ''}`}>{match.alliances.blue.score}</span>
-            </span>
-          ) : <span className="text-textMuted">--</span>}
-        </td>
-        <td className="py-2.5 px-3 text-center">
-          {isCompleted ? (
-            <span className={`px-2 py-1 rounded text-xs font-bold ${won ? 'bg-success/20 text-success' : lost ? 'bg-danger/20 text-danger' : 'bg-textMuted/20 text-textMuted'}`}>
-              {won ? 'W' : lost ? 'L' : 'T'}
-            </span>
-          ) : <span className="text-textMuted text-xs">Upcoming</span>}
-        </td>
-        <td className="py-2.5 px-4 text-center text-xs">
-          {ourRP ? (
-            <span className="text-warning font-medium">{ourRP.expectedTotalRP.toFixed(1)}</span>
-          ) : <span className="text-textMuted">--</span>}
-        </td>
-      </tr>
+      <>
+        <tr
+          className={`border-b border-border/50 hover:bg-surfaceElevated cursor-pointer ${!isCompleted ? 'bg-surfaceElevated/50' : index % 2 === 0 ? 'bg-surfaceAlt' : ''} ${expanded ? 'bg-surfaceElevated' : ''}`}
+          onClick={() => {
+            if (isCompleted) {
+              navigate('/predict');
+            } else {
+              setExpandedMatchKey(prev => (prev === match.key ? null : match.key));
+            }
+          }}
+        >
+          <td className="py-2.5 px-4 font-bold">
+            {!isCompleted && (
+              <span className="inline-block mr-1 text-textMuted">{expanded ? '▾' : '▸'}</span>
+            )}
+            {getMatchLabel(match)}
+          </td>
+          <td className={`py-2.5 px-3 text-center font-mono ${isCompleted ? (won ? 'bg-success/5' : lost ? 'bg-danger/5' : '') : ''}`}>
+            {isCompleted ? (
+              <span>
+                <span className={`${isRed ? 'text-redAlliance' : ''} ${match.alliances.red.score > match.alliances.blue.score ? 'font-bold' : ''}`}>{match.alliances.red.score}</span>
+                <span className="text-textMuted"> - </span>
+                <span className={`${!isRed ? 'text-blueAlliance' : ''} ${match.alliances.blue.score > match.alliances.red.score ? 'font-bold' : ''}`}>{match.alliances.blue.score}</span>
+              </span>
+            ) : <span className="text-textMuted">--</span>}
+          </td>
+          <td className="py-2.5 px-3 text-center">
+            {isCompleted ? (
+              <span className={`px-2 py-1 rounded text-xs font-bold ${won ? 'bg-success/20 text-success' : lost ? 'bg-danger/20 text-danger' : 'bg-textMuted/20 text-textMuted'}`}>
+                {won ? 'W' : lost ? 'L' : 'T'}
+              </span>
+            ) : <span className="text-textMuted text-xs">Upcoming</span>}
+          </td>
+          <td className="py-2.5 px-4 text-center text-xs">
+            {ourRP ? (
+              <span className="text-warning font-medium">{ourRP.expectedTotalRP.toFixed(1)}</span>
+            ) : <span className="text-textMuted">--</span>}
+          </td>
+        </tr>
+        {!isCompleted && expanded && briefing && (
+          <tr className="bg-surfaceElevated">
+            <td colSpan={4} className="px-4 pb-3 pt-0">
+              <div className="bg-surface rounded-lg border border-border p-3 text-sm">
+                <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
+                  <p className="text-textSecondary">
+                    <span className="text-xs text-textMuted mr-1">vs</span>
+                    {oppNums.map((n, i) => (
+                      <span key={n}>
+                        <Link
+                          to={`/teams/${n}`}
+                          className="font-semibold text-blueAlliance hover:underline"
+                          onClick={e => e.stopPropagation()}
+                        >
+                          {n}
+                        </Link>
+                        {i < oppNums.length - 1 ? ', ' : ''}
+                      </span>
+                    ))}
+                    <span className="text-textMuted mx-2">·</span>
+                    {briefing.headline}
+                  </p>
+                  <Link
+                    to="/predict"
+                    onClick={e => e.stopPropagation()}
+                    className="text-xs text-blueAlliance hover:underline"
+                  >
+                    Open in Predict →
+                  </Link>
+                </div>
+                {briefing.bullets.length > 0 && (
+                  <ul className="space-y-0.5 text-xs text-textMuted">
+                    {briefing.bullets.map((b, i) => (
+                      <li key={i}>· {b}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </td>
+          </tr>
+        )}
+      </>
     );
   };
 
@@ -315,9 +354,86 @@ function Dashboard() {
     [teamStatistics]
   );
 
+  // ── Live picklist comments (lightweight subscription, just for activity feed) ──
+  const [picklistComments, setPicklistComments] = useState<LiveComment[]>([]);
+  useEffect(() => {
+    if (!eventCode) return;
+    const ref = collection(db, 'pick-lists', eventCode, 'comments');
+    const unsub = onSnapshot(
+      ref,
+      snap => {
+        const items: LiveComment[] = snap.docs.map(d => {
+          const data = d.data();
+          const ts = data.ts;
+          const iso =
+            ts && typeof ts.toDate === 'function' ? ts.toDate().toISOString()
+            : typeof ts === 'string' ? ts
+            : new Date().toISOString();
+          return {
+            id: d.id,
+            teamNumber: data.teamNumber as number,
+            uid: data.uid as string,
+            email: data.email as string,
+            displayName: data.displayName as string,
+            text: data.text as string,
+            ts: iso,
+          };
+        });
+        setPicklistComments(items);
+      },
+      () => setPicklistComments([]),
+    );
+    return unsub;
+  }, [eventCode]);
+
+  // ── Visit diff: capture prev snapshot once, record current snapshot on mount ──
+  const [visitDiff, setVisitDiff] = useState<VisitDiff | null>(null);
+  useEffect(() => {
+    if (!tbaData || !teamStatistics.length) return;
+    const topByPoints = [...teamStatistics]
+      .filter(t => t.avgTotalPoints > 0)
+      .sort((a, b) => b.avgTotalPoints - a.avgTotalPoints)
+      .slice(0, 5)
+      .map(t => t.teamNumber);
+    const homeRank = tbaData?.rankings?.rankings.find(r => r.team_key === `frc${HOME}`)?.rank ?? null;
+    const matchesPlayedCount = (tbaData?.matches ?? []).filter(m => m.alliances.red.score >= 0).length;
+    const snapshot = {
+      homeRank,
+      matchesPlayedCount,
+      topTeamNumbers: topByPoints,
+      matches: tbaData?.matches ?? [],
+      homeTeamNumber: HOME,
+    };
+    setVisitDiff(diffSinceLastVisit(snapshot));
+    recordVisit(snapshot);
+    // Only run on first useful data — we want the snapshot captured once per page mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tbaData?.event?.key, teamStatistics.length]);
+
+  const homeStats = useMemo(
+    () => teamStatistics.find(t => t.teamNumber === HOME),
+    [teamStatistics, HOME],
+  );
+
+  const nicknameOf = useMemo(
+    () => (n: number) =>
+      tbaData?.teams?.find(t => t.team_number === n)?.nickname ??
+      teamStatistics.find(t => t.teamNumber === n)?.teamName ??
+      undefined,
+    [tbaData, teamStatistics],
+  );
+
   // ── Shared card styles ──
   const card = 'bg-surface rounded-xl border border-border p-4 md:p-6 shadow-card';
   const cardHeader = 'text-sm md:text-base font-bold flex items-center gap-2 mb-3 md:mb-4';
+
+  // Pick the match for the rich preview: next upcoming, or last completed if none upcoming
+  const previewMatch = useMemo(() => {
+    if (nextMatch) return nextMatch;
+    if (completedMatches.length > 0) return completedMatches[completedMatches.length - 1];
+    return null;
+  }, [nextMatch, completedMatches]);
+  const previewPrediction = previewMatch ? matchPredictions.get(previewMatch.key) : null;
 
   return (
     <div className="space-y-4 md:space-y-6">
@@ -325,6 +441,14 @@ function Dashboard() {
       <div className="flex justify-end">
         <DataSourceToggle />
       </div>
+
+      {/* "What changed since last visit" greeting */}
+      <WhatChangedGreeting
+        diff={visitDiff}
+        homeTeam={HOME}
+        pinnedTeams={pinnedTeams}
+        nicknameOf={nicknameOf}
+      />
 
       {/* ═══ Home Team Hero (quals-only — playoffs replaces it with HomeAllianceHero) ═══ */}
       {tbaData && !inPlayoffs && (
@@ -425,8 +549,16 @@ function Dashboard() {
       {inPlayoffs && (
         <>
           <HomeAllianceHero homeTeam={HOME} />
-          {nextMatchHeroProps && (
-            <NextMatchHero {...nextMatchHeroProps} showAllianceNumbers />
+          {previewMatch && previewPrediction && (
+            <MatchPreviewCard
+              match={previewMatch}
+              prediction={previewPrediction}
+              homeTeam={HOME}
+              matchLabel={getMatchLabel(previewMatch)}
+              teamStatistics={teamStatistics}
+              teamTrends={teamTrends}
+              slim
+            />
           )}
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 md:gap-6">
             <div className="lg:col-span-3">
@@ -452,18 +584,31 @@ function Dashboard() {
         </div>
       )}
 
-          {/* ── Quals NextMatchHero (replaces the rich preview — see /predict for details) ── */}
-          {!inPlayoffs && nextMatchHeroProps && <NextMatchHero {...nextMatchHeroProps} />}
+      {/* ── Quals: rich match preview (replaces the slim NextMatchHero) ── */}
+      {!inPlayoffs && previewMatch && previewPrediction && (
+        <MatchPreviewCard
+          match={previewMatch}
+          prediction={previewPrediction}
+          homeTeam={HOME}
+          matchLabel={getMatchLabel(previewMatch)}
+          teamStatistics={teamStatistics}
+          teamTrends={teamTrends}
+        />
+      )}
 
-
-      {/* ═══ Match Schedule (quals-only) ═══ */}
+      {/* ═══ Match Schedule (quals-only) ═══
+          Upcoming rows expand inline to show the opponent briefing — replaces the
+          standalone UpcomingOpponentsBrief card to save vertical space. */}
       {!inPlayoffs && tbaData && homeMatches.length > 0 && (
         <div className={card}>
-          <h2 className={`${cardHeader} mb-4`}>
+          <h2 className={`${cardHeader} mb-2`}>
             <Clock className="text-warning" size={18} />
             Match Schedule
             <span className="text-xs text-textMuted font-normal ml-1">{completedMatches.length} of {homeMatches.length} played</span>
           </h2>
+          <p className="text-xs text-textMuted mb-3">
+            Tap an upcoming match to preview the opponent briefing.
+          </p>
           <div className="overflow-x-auto -mx-4 md:-mx-6">
             <table className="w-full text-sm">
               <thead>
@@ -494,6 +639,35 @@ function Dashboard() {
             </button>
           )}
         </div>
+      )}
+
+      {/* ── Strategist console widgets row ── */}
+      {!inPlayoffs && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+          <ThreatAssessment
+            homeStats={homeStats}
+            candidateStats={teamStatistics}
+            nicknameOf={nicknameOf}
+          />
+          <TopMoversStrip trends={teamTrends} />
+        </div>
+      )}
+
+      {/* ── Watchlist cards (full width) ── */}
+      {!inPlayoffs && (
+        <WatchlistCards
+          pinnedTeams={pinnedTeams}
+          allStats={teamStatistics}
+          allTrends={teamTrends}
+          allMatches={tbaData?.matches ?? []}
+          scoutEntries={scoutEntries}
+          nicknameOf={nicknameOf}
+        />
+      )}
+
+      {/* ── Picklist activity feed (only renders if recent activity) ── */}
+      {!inPlayoffs && (
+        <PicklistActivityFeed comments={picklistComments} />
       )}
 
       {/* ═══ 6-Card Grid: Rankings, Reliability, Leaderboards (quals-only) ═══ */}

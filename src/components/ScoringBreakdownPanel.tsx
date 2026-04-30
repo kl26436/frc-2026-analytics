@@ -15,12 +15,10 @@ export function ScoringBreakdownPanel({ teamStats, allStats }: ScoringBreakdownP
   const autoFuelPassed = teamStats.avgAutoFuelPass;
   const midFieldCount = teamStats.centerFieldAutoCount;
   const midFieldRate = n > 0 ? (midFieldCount / n) * 100 : 0;
-  const avgAutoPlus20 = teamStats.avgAutoPlus20;
 
   // Teleop column metrics
   const teleopFuelScored = teamStats.avgTeleopFuelScore;
   const teleopFuelPassed = teamStats.avgTeleopFuelPass;
-  const avgTeleopPlus20 = teamStats.avgTeleopPlus20;
 
   // Endgame summary (demoted)
   const climbCount = teamStats.level1ClimbCount + teamStats.level2ClimbCount + teamStats.level3ClimbCount;
@@ -47,10 +45,6 @@ export function ScoringBreakdownPanel({ teamStats, allStats }: ScoringBreakdownP
                 <span className="text-textMuted text-xs ml-1">({midFieldRate.toFixed(0)}%)</span>
               </span>
             </li>
-            <li className="flex items-center gap-2">
-              <span className="text-textSecondary flex-1">Bonus +20</span>
-              <span className="font-semibold">{avgAutoPlus20.toFixed(1)}<span className="text-textMuted text-xs ml-0.5">/m</span></span>
-            </li>
           </ul>
         </div>
 
@@ -59,17 +53,15 @@ export function ScoringBreakdownPanel({ teamStats, allStats }: ScoringBreakdownP
           <ul className="space-y-1.5 text-sm">
             <BreakdownRow label="Fuel scored" value={teleopFuelScored.toFixed(1)} rank={teleopFuelScoredRank} />
             <BreakdownRow label="Fuel passed" value={teleopFuelPassed.toFixed(1)} rank={teleopFuelPassedRank} />
-            <li className="flex items-center gap-2">
-              <span className="text-textSecondary flex-1">Bonus +20</span>
-              <span className="font-semibold">{avgTeleopPlus20.toFixed(1)}<span className="text-textMuted text-xs ml-0.5">/m</span></span>
-            </li>
           </ul>
         </div>
       </div>
 
-      <p className="text-xs text-textMuted mt-4 pt-3 border-t border-border">
-        Endgame · climbs in {climbCount}/{n} match{n === 1 ? '' : 'es'} · {teamStats.avgEndgamePoints.toFixed(1)} pts avg
-      </p>
+      {climbCount > 0 && (
+        <p className="text-xs text-textMuted mt-4 pt-3 border-t border-border">
+          Endgame · climbed in {climbCount}/{n} match{n === 1 ? '' : 'es'} · {teamStats.avgEndgamePoints.toFixed(1)} pts avg
+        </p>
+      )}
     </div>
   );
 }

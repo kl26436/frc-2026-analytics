@@ -85,15 +85,20 @@ export function MatchHistoryTab({
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {matchData.map(({ entry, fuel, points, climbLevel: climb, actionFuel }, index) => {
+                {matchData.map(({ entry, points, climbLevel: climb, actionFuel }, index) => {
                   const alliance = entry.configured_team.startsWith('red') ? 'red' : 'blue';
                   const tbaMatch = tbaMatches.find(
                     m => m.comp_level === 'qm' && m.match_number === entry.match_number
                   );
                   const videoUrl = tbaMatch ? getMatchVideoUrl(tbaMatch) : null;
                   const startZone = getStartZone(entry);
-                  const autoScored = actionFuel ? actionFuel.autoShots : fuel.auto;
-                  const teleopScored = actionFuel ? actionFuel.teleopShots : fuel.teleop;
+                  // "Scored" columns must always show actual scored balls.
+                  // actionFuel.X_Shots = scored attempts (correct).
+                  // Fall back to entry.X_FUEL_SCORE which is the raw scored-ball
+                  // count — never use estimateMatchFuel here, it returns balls
+                  // TOUCHED (scored + passed), wrong unit for a "Scored" column.
+                  const autoScored = actionFuel ? actionFuel.autoShots : entry.auton_FUEL_SCORE;
+                  const teleopScored = actionFuel ? actionFuel.teleopShots : entry.teleop_FUEL_SCORE;
                   const passes = actionFuel ? actionFuel.totalPasses : entry.auton_FUEL_PASS + entry.teleop_FUEL_PASS;
 
                   return (

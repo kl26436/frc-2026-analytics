@@ -59,10 +59,10 @@ export function characterizeTeam(
   if (scorePct >= 0.75) traits.push('aggressive scorer');
   else if (scorePct < 0.25) traits.push('low scorer');
 
-  // Climb success — any successful climb (L1/L2/L3 in percent units, 0-100)
+  // Climb — only mention as a positive trait. Negative climb signals are
+  // noise (most 2026 teams don't climb); see feedback_climb_signals.md.
   const climbSuccessPct = stats.level1ClimbRate + stats.level2ClimbRate + stats.level3ClimbRate;
   if (climbSuccessPct >= 70) traits.push('reliable climber');
-  else if (stats.matchesPlayed >= 3 && climbSuccessPct < 30) traits.push('rarely climbs');
 
   // Defense (only signal-rich if the caller passed pre-scout-derived rate)
   if (ctx.defenseRate != null && ctx.defenseRate > 0.3) {
@@ -138,8 +138,8 @@ export function buildOpponentBriefing(
   const autoPct = percentileRank(avgAuto, allAuto);
 
   const tags: string[] = [];
+  // Only positive climb signal — see feedback_climb_signals.md
   if (avgClimbSuccess >= 70) tags.push('climbers');
-  else if (avgClimbSuccess < 30) tags.push('weak endgame');
   if (autoPct >= 0.75) tags.push('strong auto');
   else if (autoPct < 0.25) tags.push('weak auto');
 
@@ -260,27 +260,49 @@ export function buildWatchForList(
 
   const allAuto = allStats.map(s => s.avgAutoPoints);
   const allTotal = allStats.map(s => s.avgTotalPoints);
+  const allTeleopScored = allStats.map(s => s.avgTeleopFuelScore);
+  const allPasses = allStats.map(s => s.avgTotalPass);
 
   const everyTeam = [...redTeams, ...blueTeams];
   for (const teamNumber of everyTeam) {
     const stats = allStats.find(s => s.teamNumber === teamNumber);
     if (!stats || stats.matchesPlayed < 3) continue;
 
-    // High auto threat
+    // High auto threat (top 25% — auto scoring is one of the user's top signals)
     const autoPct = percentileRank(stats.avgAutoPoints, allAuto);
-    if (autoPct >= 0.9) {
+    if (autoPct >= 0.75) {
       out.push(
         `${teamNumber}'s auto (avg ${stats.avgAutoPoints.toFixed(0)}, top ${Math.round((1 - autoPct) * 100)}%)`,
       );
     }
 
-    // Strong climber
-    const climbSuccess =
-      stats.level1ClimbRate + stats.level2ClimbRate + stats.level3ClimbRate;
+    // High mid-field auto rate — second user-priority signal
+    const midFieldRate = stats.matchesPlayed > 0 ? stats.centerFieldAutoCount / stats.matchesPlayed : 0;
+    if (midFieldRate >= 0.6) {
+      out.push(
+        `${teamNumber} crosses to mid-field in auto (${Math.round(midFieldRate * 100)}%)`,
+      );
+    }
+
+    // Strong teleop scorer (top 25% by balls scored in teleop)
+    const teleopScoredPct = percentileRank(stats.avgTeleopFuelScore, allTeleopScored);
+    if (teleopScoredPct >= 0.85) {
+      out.push(
+        `${teamNumber} scores ${stats.avgTeleopFuelScore.toFixed(0)} balls/match in teleop (top ${Math.round((1 - teleopScoredPct) * 100)}%)`,
+      );
+    }
+
+    // Heavy passer (top 25% by avg passes)
+    const passesPct = percentileRank(stats.avgTotalPass, allPasses);
+    if (passesPct >= 0.85 && stats.avgTotalPass >= 5) {
+      out.push(
+        `${teamNumber} passes ${stats.avgTotalPass.toFixed(0)} balls/match (top ${Math.round((1 - passesPct) * 100)}%)`,
+      );
+    }
+
+    // Strong L3 climber — only positive climb signals (see feedback_climb_signals.md)
     if (stats.level3ClimbRate >= 60) {
       out.push(`${teamNumber} reliably hits L3 climb (${stats.level3ClimbRate.toFixed(0)}%)`);
-    } else if (climbSuccess < 30) {
-      out.push(`${teamNumber} rarely climbs (${climbSuccess.toFixed(0)}%)`);
     }
 
     // Reliability concern
