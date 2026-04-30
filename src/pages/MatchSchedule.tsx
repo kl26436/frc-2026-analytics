@@ -146,13 +146,25 @@ export function WatchScheduleTable({ watchSchedule, getDriveType, filterNinjaEma
             );
           };
 
+          const isQual = m.comp_level === 'qm';
+          const replayHref = played && isQual ? `/replay/${m.match_number}` : null;
           return (
             <div key={m.key} className={`px-3 py-2 ${played ? 'opacity-40' : ''}`}>
               {/* Match header */}
               <div className="flex items-center gap-2 mb-1.5">
-                <span className={`text-xs font-bold ${played ? 'text-textMuted' : 'text-textPrimary'}`}>
-                  {matchLabel(m)}
-                </span>
+                {replayHref ? (
+                  <Link
+                    to={replayHref}
+                    className="text-xs font-bold text-textMuted hover:text-textPrimary underline decoration-dotted"
+                    title="Open match replay"
+                  >
+                    {matchLabel(m)}
+                  </Link>
+                ) : (
+                  <span className={`text-xs font-bold ${played ? 'text-textMuted' : 'text-textPrimary'}`}>
+                    {matchLabel(m)}
+                  </span>
+                )}
                 <span className="text-[10px] text-textMuted">→</span>
                 <div className="flex gap-1">
                   {prepLabels.map(fm => (
@@ -219,14 +231,26 @@ export function WatchScheduleTable({ watchSchedule, getDriveType, filterNinjaEma
           );
         };
 
+        const isQual = m.comp_level === 'qm';
+        const replayHref = played && isQual ? `/replay/${m.match_number}` : null;
         return (
           <div
             key={m.key}
             className={`grid grid-cols-[50px_70px_1fr_1fr] gap-2 items-start px-3 py-2 border-b border-border/50 text-xs ${played ? 'opacity-50' : ''}`}
           >
-            <span className={`font-bold pt-0.5 ${played ? 'text-textMuted' : 'text-textPrimary'}`}>
-              {matchLabel(m)}
-            </span>
+            {replayHref ? (
+              <Link
+                to={replayHref}
+                className="font-bold pt-0.5 text-textMuted hover:text-textPrimary underline decoration-dotted"
+                title="Open match replay"
+              >
+                {matchLabel(m)}
+              </Link>
+            ) : (
+              <span className={`font-bold pt-0.5 ${played ? 'text-textMuted' : 'text-textPrimary'}`}>
+                {matchLabel(m)}
+              </span>
+            )}
             <div className="flex flex-col gap-0.5 pt-0.5">
               {prepLabels.map((fm, idx) => (
                 <span key={fm}>

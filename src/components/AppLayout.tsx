@@ -1,101 +1,127 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
-import { BarChart3, Users, ClipboardList, Menu, X, Calendar, Swords, Handshake, ClipboardCheck, ChevronDown, Search, Target, Shield, LogOut, AlertTriangle, LineChart, PlayCircle, FlaskConical, Sparkles, ExternalLink, GitBranch } from 'lucide-react';
+import {
+  Menu, X, ChevronDown, Shield, LogOut, FlaskConical, ExternalLink, MoreHorizontal,
+} from 'lucide-react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { useAuth } from '../contexts/AuthContext';
 import ActiveSessionBanner from './ActiveSessionBanner';
 import { matchLabel, matchSortKey } from '../utils/formatting';
+import { useNavStructure, type NavItem, type NavGroup } from '../hooks/useNavStructure';
 
 const AUTO_REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
 
-type NavItem = { to: string; icon: React.ElementType; label: string; external?: boolean };
-type NavGroup = { groupLabel: string; items: NavItem[] };
-
-interface NavDropdownProps {
-  label: string;
-  icon: React.ElementType;
-  items?: NavItem[];
-  groups?: NavGroup[];
-  isActive: boolean;
+// Shared link styles — single source of truth for nav active state.
+// Mobile and desktop both use the same green-tinted active treatment so
+// the visual language is consistent regardless of viewport.
+function navLinkClass(active: boolean): string {
+  return [
+    'flex items-center gap-2 px-3 py-2 rounded-lg transition-colors text-sm',
+    active
+      ? 'bg-success/20 text-success font-semibold'
+      : 'text-textSecondary hover:text-textPrimary hover:bg-surfaceElevated',
+  ].join(' ');
 }
 
-function NavDropdownItem({ item, onClose }: { item: NavItem; onClose: () => void }) {
-  const { to, icon: ItemIcon, label: itemLabel, external } = item;
-  if (external) {
-    return (
-      <a
-        href={to}
-        target="_blank"
-        rel="noopener noreferrer"
-        onClick={onClose}
-        className="flex items-center gap-3 px-4 py-2.5 hover:bg-interactive transition-colors"
-      >
-        <ItemIcon size={18} />
-        <span>{itemLabel}</span>
-        <ExternalLink size={14} className="ml-auto text-textMuted" />
-      </a>
-    );
-  }
+function dropdownItemClass(active: boolean): string {
+  return [
+    'flex items-center gap-3 px-4 py-2.5 transition-colors',
+    active ? 'bg-success/20 text-success font-semibold' : 'hover:bg-interactive',
+  ].join(' ');
+}
+
+function mobileNavLinkClass(active: boolean): string {
+  return [
+    'flex items-center gap-3 px-4 py-3 rounded transition-colors',
+    active ? 'bg-success/20 text-success font-semibold' : 'hover:bg-interactive',
+  ].join(' ');
+}
+
+// ── Top-level link ────────────────────────────────────────────────────────────
+
+function TopLevelLink({ item, isActive, onClose }: { item: NavItem; isActive: boolean; onClose?: () => void }) {
+  const { to, icon: Icon, label } = item;
   return (
-    <Link
-      to={to}
-      onClick={onClose}
-      className="flex items-center gap-3 px-4 py-2.5 hover:bg-interactive transition-colors"
-    >
-      <ItemIcon size={18} />
-      <span>{itemLabel}</span>
+    <Link to={to} onClick={onClose} className={navLinkClass(isActive)}>
+      <Icon size={18} />
+      <span>{label}</span>
     </Link>
   );
 }
 
-function NavDropdown({ label, icon: Icon, items, groups, isActive }: NavDropdownProps) {
+// ── More dropdown (desktop) ───────────────────────────────────────────────────
+
+interface MoreDropdownProps {
+  groups: NavGroup[];
+  isActive: boolean;
+  isItemActive: (path: string) => boolean;
+}
+
+function MoreDropdown({ groups, isActive, isItemActive }: MoreDropdownProps) {
   const [open, setOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+    const onClickOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleKey);
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onClickOutside);
+    document.addEventListener('keydown', onKey);
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleKey);
+      document.removeEventListener('mousedown', onClickOutside);
+      document.removeEventListener('keydown', onKey);
     };
   }, []);
 
   const close = () => setOpen(false);
 
   return (
-    <div className="relative" ref={dropdownRef}>
-      <button
-        onClick={() => setOpen(!open)}
-        className={`flex items-center gap-2 px-3 xl:px-4 py-2 rounded-lg transition-colors text-sm xl:text-base ${
-          isActive ? 'bg-surfaceElevated text-textPrimary font-semibold' : 'text-textSecondary hover:text-textPrimary hover:bg-surfaceElevated'
-        }`}
-      >
-        <Icon size={20} />
-        <span>{label}</span>
-        <ChevronDown size={16} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+    <div className="relative" ref={ref}>
+      <button onClick={() => setOpen(!open)} className={navLinkClass(isActive)}>
+        <MoreHorizontal size={18} />
+        <span>More</span>
+        <ChevronDown size={14} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 mt-1 bg-surface border border-border rounded-lg shadow-lg py-1 min-w-[180px] z-50">
-          {items && items.map((item) => (
-            <NavDropdownItem key={item.to} item={item} onClose={close} />
-          ))}
-          {groups && groups.map((group, i) => (
+        <div className="absolute top-full right-0 mt-1 bg-surface border border-border rounded-lg shadow-lg py-1 min-w-[220px] z-50">
+          {groups.map((group, gi) => (
             <div key={group.groupLabel}>
-              {i > 0 && <div className="border-t border-border my-1" />}
-              <p className="px-4 py-1.5 text-xs font-semibold text-textMuted uppercase tracking-wider">{group.groupLabel}</p>
-              {group.items.map((item) => (
-                <NavDropdownItem key={item.to} item={item} onClose={close} />
-              ))}
+              {gi > 0 && <div className="border-t border-border my-1" />}
+              <p className="px-4 py-1.5 text-xs font-semibold text-textMuted uppercase tracking-wider">
+                {group.groupLabel}
+              </p>
+              {group.items.map(item => {
+                const Icon = item.icon;
+                if (item.external) {
+                  return (
+                    <a
+                      key={item.to}
+                      href={item.to}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={close}
+                      className="flex items-center gap-3 px-4 py-2.5 hover:bg-interactive transition-colors"
+                    >
+                      <Icon size={18} />
+                      <span>{item.label}</span>
+                      <ExternalLink size={14} className="ml-auto text-textMuted" />
+                    </a>
+                  );
+                }
+                return (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    onClick={close}
+                    className={dropdownItemClass(isItemActive(item.to))}
+                  >
+                    <Icon size={18} />
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
             </div>
           ))}
         </div>
@@ -104,51 +130,7 @@ function NavDropdown({ label, icon: Icon, items, groups, isActive }: NavDropdown
   );
 }
 
-// Navigation structure
-const dashboardItems: NavItem[] = [
-  { to: '/', icon: BarChart3, label: 'Dashboard' },
-  { to: '/bracket', icon: GitBranch, label: 'Playoff Bracket' },
-];
-
-const analysisItems: NavItem[] = [
-  { to: '/teams', icon: Users, label: 'Teams' },
-  { to: '/event', icon: Calendar, label: 'Event' },
-  { to: '/replay/1', icon: PlayCircle, label: 'Match Replay' },
-  { to: '/pit-analysis', icon: BarChart3, label: 'Pit Analysis' },
-  { to: '/performance-comparison', icon: LineChart, label: 'Pre-Scout vs Live' },
-];
-
-const scoutingItems: NavItem[] = [
-  { to: '/pit-scouting', icon: ClipboardCheck, label: 'Ninja Scouting' },
-  { to: 'https://robowranglers148.dev', icon: BarChart3, label: 'Grafana', external: true },
-  { to: '/data-quality', icon: AlertTriangle, label: 'Data Quality' },
-];
-
-const strategyGroups: NavGroup[] = [
-  {
-    groupLabel: 'Match Strategy',
-    items: [
-      { to: '/schedule', icon: Calendar, label: 'Match Prep' },
-      { to: '/predict', icon: Swords, label: 'Predict' },
-    ],
-  },
-  {
-    groupLabel: 'Alliance Strategy',
-    items: [
-      { to: '/picklist', icon: ClipboardList, label: 'Pick List' },
-      { to: '/alliance-selection', icon: Handshake, label: 'Alliance Selection' },
-    ],
-  },
-  {
-    groupLabel: 'AI',
-    items: [
-      { to: '/insights', icon: Sparkles, label: 'AI Insights' },
-    ],
-  },
-];
-
-// Flat list for active-state detection
-const allStrategyItems = strategyGroups.flatMap(g => g.items);
+// ── User dropdown ─────────────────────────────────────────────────────────────
 
 function UserDropdown() {
   const { user, signOut, isAdmin } = useAuth();
@@ -156,17 +138,15 @@ function UserDropdown() {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
+    const onClickOutside = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    document.addEventListener('keydown', handleKey);
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onClickOutside);
+    document.addEventListener('keydown', onKey);
     return () => {
-      document.removeEventListener('mousedown', handler);
-      document.removeEventListener('keydown', handleKey);
+      document.removeEventListener('mousedown', onClickOutside);
+      document.removeEventListener('keydown', onKey);
     };
   }, []);
 
@@ -225,6 +205,8 @@ function UserDropdown() {
   );
 }
 
+// ── App layout ────────────────────────────────────────────────────────────────
+
 function AppLayout() {
   const eventCode = useAnalyticsStore(state => state.eventCode);
   const tbaData = useAnalyticsStore(state => state.tbaData);
@@ -233,6 +215,8 @@ function AppLayout() {
   const { user, isAdmin, signOut, eventConfig } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
+
+  const { topLevel, moreGroups, isItemActive, isMoreActive } = useNavStructure();
 
   const closeMobileMenu = () => setMobileMenuOpen(false);
 
@@ -246,6 +230,11 @@ function AppLayout() {
     return () => clearInterval(id);
   }, [eventConfig?.autoSyncEnabled, fetchTBAData, triggerSync, eventCode]);
 
+  // Close mobile menu on route change so users don't see stale open menu
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
+
   // Current match at the event (first upcoming match overall)
   const currentMatchLabel = (() => {
     if (!tbaData?.matches) return null;
@@ -255,31 +244,18 @@ function AppLayout() {
     return upcoming.length ? matchLabel(upcoming[0]) : null;
   })();
 
-  const isDashboardActive = location.pathname === '/' || location.pathname === '/bracket';
-  const isScoutingActive = scoutingItems.filter(item => !item.external).some(item => location.pathname === item.to || location.pathname.startsWith(item.to + '/'));
-  const isAnalysisActive = analysisItems.some(item => location.pathname === item.to || location.pathname.startsWith(item.to + '/'));
-  const isStrategyActive = allStrategyItems.some(item => location.pathname === item.to || location.pathname.startsWith(item.to + '/'));
-
-
-  const mobileNavLinkClass = (path: string) =>
-    `flex items-center gap-3 px-4 py-3 rounded transition-colors ${
-      location.pathname === path || location.pathname.startsWith(path + '/')
-        ? 'bg-success/20 text-success'
-        : 'hover:bg-interactive'
-    }`;
-
   return (
     <div className="min-h-screen bg-background text-textPrimary">
       {/* Header */}
       <header className="bg-surface border-b border-border sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4">
             {/* Logo and Title */}
-            <div className="flex items-center gap-3 md:gap-4">
-              <img src={`${import.meta.env.BASE_URL}team-logo.png`} alt="Team 148 Logo" className="h-10 w-10 md:h-12 md:w-12 object-contain" />
-              <div>
+            <div className="flex items-center gap-3 md:gap-4 min-w-0">
+              <img src={`${import.meta.env.BASE_URL}team-logo.png`} alt="Team 148 Logo" className="h-10 w-10 md:h-12 md:w-12 object-contain flex-shrink-0" />
+              <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h1 className="text-lg md:text-2xl font-bold">Team 148 - Data Wrangler</h1>
+                  <h1 className="text-lg md:text-2xl font-bold whitespace-nowrap">Team 148 - Data Wrangler</h1>
                   {currentMatchLabel && (
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-success/15 text-success text-xs font-semibold">
                       <span className="w-1.5 h-1.5 rounded-full bg-success" />
@@ -287,30 +263,27 @@ function AppLayout() {
                     </span>
                   )}
                 </div>
-                <p className="text-textSecondary text-xs md:text-sm">
+                <p className="text-textSecondary text-xs md:text-sm truncate">
                   2026 • {tbaData?.event?.name ?? eventCode}
                 </p>
               </div>
             </div>
 
             {/* Desktop Navigation */}
-            <nav className="hidden lg:flex gap-2 xl:gap-3 items-center border-l border-border pl-3 ml-3">
-              <NavDropdown label="Dashboard" icon={BarChart3} items={dashboardItems} isActive={isDashboardActive} />
-
-              <NavDropdown label="Scouting" icon={Search} items={scoutingItems} isActive={isScoutingActive} />
-
-              <NavDropdown label="Analysis" icon={LineChart} items={analysisItems} isActive={isAnalysisActive} />
-
-              <NavDropdown label="Strategy" icon={Target} groups={strategyGroups} isActive={isStrategyActive} />
-
+            <nav className="hidden lg:flex gap-1 xl:gap-2 items-center">
+              {topLevel.map(item => (
+                <TopLevelLink key={item.to} item={item} isActive={isItemActive(item.to)} />
+              ))}
+              <MoreDropdown groups={moreGroups} isActive={isMoreActive} isItemActive={isItemActive} />
               <UserDropdown />
             </nav>
 
             {/* Mobile Menu Button */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="lg:hidden p-2 rounded hover:bg-interactive transition-colors"
+              className="lg:hidden p-2 rounded hover:bg-interactive transition-colors flex-shrink-0"
               aria-label="Toggle menu"
+              aria-expanded={mobileMenuOpen}
             >
               {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
@@ -319,59 +292,64 @@ function AppLayout() {
           {/* Mobile Navigation */}
           {mobileMenuOpen && (
             <nav className="lg:hidden mt-4 pt-4 border-t border-border space-y-1 max-h-[calc(100vh-5rem)] overflow-y-auto">
-              {dashboardItems.map(({ to, icon: Icon, label }) => (
-                <Link key={to} to={to} onClick={closeMobileMenu} className={mobileNavLinkClass(to)}>
-                  <Icon size={20} />
-                  <span>{label}</span>
-                </Link>
+              {/* Top-level (mirrors desktop top-level links) */}
+              {topLevel.map(item => {
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    onClick={closeMobileMenu}
+                    className={mobileNavLinkClass(isItemActive(item.to))}
+                  >
+                    <Icon size={20} />
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+
+              {/* "More" groups expanded (mobile has the room — no need for a sub-dropdown) */}
+              {moreGroups.map(group => (
+                <div key={group.groupLabel} className="pt-3">
+                  <p className="px-4 py-1 text-xs font-semibold text-textMuted uppercase tracking-wider">
+                    {group.groupLabel}
+                  </p>
+                  {group.items.map(item => {
+                    const Icon = item.icon;
+                    if (item.external) {
+                      return (
+                        <a
+                          key={item.to}
+                          href={item.to}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={closeMobileMenu}
+                          className={mobileNavLinkClass(false)}
+                        >
+                          <Icon size={20} />
+                          <span>{item.label}</span>
+                          <ExternalLink size={14} className="ml-auto text-textMuted" />
+                        </a>
+                      );
+                    }
+                    return (
+                      <Link
+                        key={item.to}
+                        to={item.to}
+                        onClick={closeMobileMenu}
+                        className={mobileNavLinkClass(isItemActive(item.to))}
+                      >
+                        <Icon size={20} />
+                        <span>{item.label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
               ))}
 
-              <div className="pt-2">
-                <p className="px-4 py-1 text-xs font-semibold text-textMuted uppercase tracking-wider">Scouting</p>
-                {scoutingItems.map(({ to, icon: Icon, label, external }) =>
-                  external ? (
-                    <a key={to} href={to} target="_blank" rel="noopener noreferrer" onClick={closeMobileMenu} className={mobileNavLinkClass(to)}>
-                      <Icon size={20} />
-                      <span>{label}</span>
-                      <ExternalLink size={14} className="ml-auto text-textMuted" />
-                    </a>
-                  ) : (
-                    <Link key={to} to={to} onClick={closeMobileMenu} className={mobileNavLinkClass(to)}>
-                      <Icon size={20} />
-                      <span>{label}</span>
-                    </Link>
-                  )
-                )}
-              </div>
-
-              <div className="pt-2">
-                <p className="px-4 py-1 text-xs font-semibold text-textMuted uppercase tracking-wider">Analysis</p>
-                {analysisItems.map(({ to, icon: Icon, label }) => (
-                  <Link key={to} to={to} onClick={closeMobileMenu} className={mobileNavLinkClass(to)}>
-                    <Icon size={20} />
-                    <span>{label}</span>
-                  </Link>
-                ))}
-              </div>
-
-              <div className="pt-2">
-                <p className="px-4 py-1 text-xs font-semibold text-textMuted uppercase tracking-wider">Strategy</p>
-                {strategyGroups.map((group) => (
-                  <div key={group.groupLabel} className="pt-1">
-                    <p className="px-4 py-1 text-xs text-textMuted tracking-wide">{group.groupLabel}</p>
-                    {group.items.map(({ to, icon: Icon, label }) => (
-                      <Link key={to} to={to} onClick={closeMobileMenu} className={mobileNavLinkClass(to)}>
-                        <Icon size={20} />
-                        <span>{label}</span>
-                      </Link>
-                    ))}
-                  </div>
-                ))}
-              </div>
-
-              {/* User info + sign out */}
+              {/* User info + admin shortcuts + sign out */}
               <div className="pt-4 mt-2 border-t border-border">
-                <div className="flex items-center gap-3 px-4 py-3">
+                <div className="flex items-center gap-3 px-4 py-3 flex-wrap">
                   {user?.photoURL && (
                     <img src={user.photoURL} alt="" className="h-8 w-8 rounded-full" />
                   )}
