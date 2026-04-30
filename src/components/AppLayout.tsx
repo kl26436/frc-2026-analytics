@@ -288,7 +288,7 @@ function AppLayout() {
                   )}
                 </div>
                 <p className="text-textSecondary text-xs md:text-sm">
-                  2026 • {eventCode}
+                  2026 • {tbaData?.event?.name ?? eventCode}
                 </p>
               </div>
             </div>

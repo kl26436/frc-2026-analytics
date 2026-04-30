@@ -33,6 +33,12 @@ interface AnalyticsState {
   preScoutEntries: ScoutEntry[];
   excludedEntries: ExcludedEntry[];
   teamStatistics: TeamStatistics[];
+  // Live-only stats — always computed from scout entries with NO pre-scout mixed in.
+  // Used by every page where viewers must see identical numbers regardless of their
+  // personal pre-scout toggle (picklist, alliance selection, dashboard, etc.).
+  // teamStatistics above respects the user's pre-scout mode and is consumed only
+  // where pre-scout is appropriate: predictions, team list page, team details page.
+  liveOnlyTeamStatistics: TeamStatistics[];
   pgTbaMatches: PgTBAMatch[];
   scoutActions: RobotActions[];
   matchFuelAttribution: RobotMatchFuel[];
@@ -113,6 +119,7 @@ export const useAnalyticsStore = create<AnalyticsState>()(
       preScoutEntries: [],
       excludedEntries: [],
       teamStatistics: [],
+      liveOnlyTeamStatistics: [],
       pgTbaMatches: [],
       scoutActions: [],
       matchFuelAttribution: [],
@@ -159,6 +166,7 @@ export const useAnalyticsStore = create<AnalyticsState>()(
           scoutEntries: [],
           excludedEntries: [],
           teamStatistics: [],
+          liveOnlyTeamStatistics: [],
           pgTbaMatches: [],
           scoutActions: [],
           matchFuelAttribution: [],
@@ -432,12 +440,26 @@ export const useAnalyticsStore = create<AnalyticsState>()(
         );
         const teamStatistics = calculateAllTeamStatistics(entriesForStats, teamNamesMap.size > 0 ? teamNamesMap : undefined);
 
+        // Live-only stats: always derived from live scout entries, ignoring pre-scout
+        // and the user's predictionMode. Used by every page where viewers must see
+        // identical numbers regardless of personal toggles.
+        const liveOnlyTeamStatistics = calculateAllTeamStatistics(
+          liveFiltered,
+          teamNamesMap.size > 0 ? teamNamesMap : undefined,
+        );
+
         // Include TBA teams that have no entries yet (new event, no live OR pre-scout data)
         if (tbaData?.teams) {
           const scoutedTeams = new Set(teamStatistics.map(t => t.teamNumber));
+          const liveScoutedTeams = new Set(liveOnlyTeamStatistics.map(t => t.teamNumber));
           for (const tbaTeam of tbaData.teams) {
             if (!scoutedTeams.has(tbaTeam.team_number)) {
               teamStatistics.push(
+                calculateTeamStatistics(tbaTeam.team_number, [], tbaTeam.nickname)
+              );
+            }
+            if (!liveScoutedTeams.has(tbaTeam.team_number)) {
+              liveOnlyTeamStatistics.push(
                 calculateTeamStatistics(tbaTeam.team_number, [], tbaTeam.nickname)
               );
             }
@@ -445,7 +467,7 @@ export const useAnalyticsStore = create<AnalyticsState>()(
         }
 
         const teamTrends = computeAllTeamTrends(entriesForStats);
-        set({ teamStatistics, teamTrends });
+        set({ teamStatistics, liveOnlyTeamStatistics, teamTrends });
         get().calculateFuelAttribution();
       },
 
@@ -499,7 +521,7 @@ export const useAnalyticsStore = create<AnalyticsState>()(
         // Merge FMS-attributed point averages into teamStatistics so all pages
         // show consistent numbers (FMS-attributed when available, scout fallback)
         const fuelMap = new Map(teamFuelStats.map(f => [f.teamNumber, f]));
-        const teamStatistics = get().teamStatistics.map(ts => {
+        const mergeFuel = (ts: TeamStatistics): TeamStatistics => {
           const fuel = fuelMap.get(ts.teamNumber);
           if (!fuel) return ts;
           return {
@@ -509,9 +531,11 @@ export const useAnalyticsStore = create<AnalyticsState>()(
             avgEndgamePoints: fuel.avgEndgameTowerPoints,
             avgTotalPoints: fuel.avgTotalPointsScored,
           };
-        });
+        };
+        const teamStatistics = get().teamStatistics.map(mergeFuel);
+        const liveOnlyTeamStatistics = get().liveOnlyTeamStatistics.map(mergeFuel);
 
-        set({ matchFuelAttribution, teamFuelStats, teamStatistics });
+        set({ matchFuelAttribution, teamFuelStats, teamStatistics, liveOnlyTeamStatistics });
         get().calculateLocalOPR();
         get().calculatePredictionInputs();
       },
@@ -557,6 +581,7 @@ export const useAnalyticsStore = create<AnalyticsState>()(
             preScoutEntries: [],
             excludedEntries: [],
             teamStatistics: [],
+            liveOnlyTeamStatistics: [],
             pgTbaMatches: [],
             scoutActions: [],
             matchFuelAttribution: [],

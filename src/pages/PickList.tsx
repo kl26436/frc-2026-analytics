@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { usePickListStore, DEFAULT_RED_FLAG_THRESHOLDS, type RedFlagThresholds } from '../store/usePickListStore';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
@@ -44,6 +44,7 @@ import {
   Zap,
   Shield,
   Trophy,
+  Crown,
   Target,
   Wrench,
   SlidersHorizontal,
@@ -430,6 +431,8 @@ interface LivePickListViewProps {
   teamPassesFilters: (teamNumber: number) => boolean;
   liveFilterConfigs: FilterConfig[] | null;
   pushLiveFilterConfigs: (configs: FilterConfig[]) => Promise<void>;
+  liveFilterPassingTeams: number[] | null;
+  pushLiveFilterPassingTeams: (teamNumbers: number[]) => Promise<void>;
   compareTeams: number[];
   onToggleCompare: (teamNumber: number) => void;
   allowedUsers: { email: string; displayName: string }[];
@@ -448,10 +451,14 @@ function LivePickListView({
   tbaData,
   filterConfigs, toggleFilter, updateFilter, addFilter, removeFilter,
   liveFilterConfigs, pushLiveFilterConfigs,
+  liveFilterPassingTeams, pushLiveFilterPassingTeams,
   compareTeams, onToggleCompare,
   allowedUsers,
 }: LivePickListViewProps) {
-  const teamStatistics = useAnalyticsStore(s => s.teamStatistics);
+  // Picklist must not be influenced by pre-scout — every viewer sees the same
+  // numbers regardless of personal data-source toggles. Pre-scout is only for
+  // predictions, team list, and team detail pages.
+  const teamStatistics = useAnalyticsStore(s => s.liveOnlyTeamStatistics);
   const teamTrends = useAnalyticsStore(s => s.teamTrends);
   const [showSuggestionSummary, setShowSuggestionSummary] = useState(false);
   const [initializing, setInitializing] = useState(false);
@@ -565,21 +572,57 @@ function LivePickListView({
   const effectiveFilterConfigs = liveFilterConfigs ?? filterConfigs;
   const liveHasActiveFilters = effectiveFilterConfigs.some(f => f.active);
 
+  // Highlights are sourced from the synced pass set so every viewer sees identical
+  // highlights regardless of their personal data-source mode (live vs pre-scout).
+  // Editor's machine is canonical; viewers read the set written by the lock holder.
+  // Fallback (no synced set yet, or rare race after add/remove) computes locally.
+  const livePassingSet = useMemo(
+    () => (liveFilterPassingTeams ? new Set(liveFilterPassingTeams) : null),
+    [liveFilterPassingTeams]
+  );
+
   const liveTeamPassesFilters = (teamNumber: number): boolean => {
+    if (!liveHasActiveFilters) return true;
+    if (livePassingSet) return livePassingSet.has(teamNumber);
     return doesTeamPassAllFilters(teamNumber, effectiveFilterConfigs, teamStatistics, livePitEntries);
   };
+
+  // Compute the passing-teams set from a candidate filter list using the editor's
+  // local data. Returns team numbers passing ALL active filters.
+  const computePassingTeams = useCallback((configs: FilterConfig[]): number[] => {
+    if (!liveList) return [];
+    const anyActive = configs.some(f => f.active);
+    if (!anyActive) return [];
+    return liveList.teams
+      .filter(t => doesTeamPassAllFilters(t.teamNumber, configs, teamStatistics, livePitEntries))
+      .map(t => t.teamNumber);
+  }, [liveList, teamStatistics, livePitEntries]);
+
+  // Editor: keep the synced pass set in sync as their local stats/pit data update,
+  // so highlights stay accurate as new scout data lands during a live session.
+  useEffect(() => {
+    if (!canEdit || !liveList) return;
+    const passing = computePassingTeams(effectiveFilterConfigs);
+    pushLiveFilterPassingTeams(passing).catch(() => {});
+  }, [canEdit, liveList, effectiveFilterConfigs, teamStatistics, livePitEntries, computePassingTeams, pushLiveFilterPassingTeams]);
 
   // When admin toggles a filter, update locally AND push to Firestore
   const handleLiveToggleFilter = (id: string) => {
     const updated = effectiveFilterConfigs.map(f => f.id === id ? { ...f, active: !f.active } : f);
     toggleFilter(id); // updates local state in parent (keeps button UI reactive)
-    if (canEdit) pushLiveFilterConfigs(updated);
+    if (canEdit) {
+      pushLiveFilterConfigs(updated);
+      pushLiveFilterPassingTeams(computePassingTeams(updated)).catch(() => {});
+    }
   };
 
   const handleLiveUpdateFilter = (id: string, updates: Partial<FilterConfig>) => {
     const updated = effectiveFilterConfigs.map(f => f.id === id ? { ...f, ...updates } : f);
     updateFilter(id, updates);
-    if (canEdit) pushLiveFilterConfigs(updated);
+    if (canEdit) {
+      pushLiveFilterConfigs(updated);
+      pushLiveFilterPassingTeams(computePassingTeams(updated)).catch(() => {});
+    }
   };
 
   const handleLiveAddFilter = (source: 'stats' | 'pit' = 'stats') => {
@@ -592,19 +635,29 @@ function LivePickListView({
       newFilter = { id: newId, label: 'New Filter', icon: 'target', field: 'avgTotalPoints', operator: '>=', threshold: 0, active: false };
     }
     addFilter(source);
-    if (canEdit) pushLiveFilterConfigs([...effectiveFilterConfigs, newFilter]);
+    if (canEdit) {
+      const updated = [...effectiveFilterConfigs, newFilter];
+      pushLiveFilterConfigs(updated);
+      pushLiveFilterPassingTeams(computePassingTeams(updated)).catch(() => {});
+    }
   };
 
   const handleLiveRemoveFilter = (id: string) => {
     const updated = effectiveFilterConfigs.filter(f => f.id !== id);
     removeFilter(id);
-    if (canEdit) pushLiveFilterConfigs(updated);
+    if (canEdit) {
+      pushLiveFilterConfigs(updated);
+      pushLiveFilterPassingTeams(computePassingTeams(updated)).catch(() => {});
+    }
   };
 
   const handleLiveClearAllFilters = () => {
     const updated = effectiveFilterConfigs.map(f => ({ ...f, active: false }));
     effectiveFilterConfigs.filter(f => f.active).forEach(f => toggleFilter(f.id));
-    if (canEdit) pushLiveFilterConfigs(updated);
+    if (canEdit) {
+      pushLiveFilterConfigs(updated);
+      pushLiveFilterPassingTeams([]).catch(() => {});
+    }
   };
 
   const handleInitialize = async () => {
@@ -1417,7 +1470,7 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onToggleWatchlist,
   const isPickListTeam = 'tier' in team;
   const isReviewed = isPickListTeam ? (team as PickListTeam).reviewed !== false : true;
   const teamStats = useAnalyticsStore(state =>
-    state.teamStatistics.find(t => t.teamNumber === team.teamNumber)
+    state.liveOnlyTeamStatistics.find(t => t.teamNumber === team.teamNumber)
   );
   const teamTrend = useAnalyticsStore(state =>
     state.teamTrends.find(t => t.teamNumber === team.teamNumber)
@@ -1480,6 +1533,25 @@ function TeamCard({ team, currentTier, tierNames, onMoveTier, onToggleWatchlist,
         >
           {team.teamNumber}
         </Link>
+
+        {/* TBA rank badge — top 8 are alliance captains (not available); 9–12 are likely first picks */}
+        {tbaRanking && tbaRanking.rank <= 8 && (
+          <span
+            className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-warning text-background font-bold flex-shrink-0"
+            title={`Rank #${tbaRanking.rank} — alliance captain (top 8, not available)`}
+          >
+            <Crown size={10} />
+            #{tbaRanking.rank}
+          </span>
+        )}
+        {tbaRanking && tbaRanking.rank > 8 && tbaRanking.rank <= 12 && (
+          <span
+            className="text-[10px] px-1.5 py-0.5 rounded bg-warning/20 text-warning font-bold flex-shrink-0"
+            title={`Rank #${tbaRanking.rank} — top 12 (likely first pick)`}
+          >
+            #{tbaRanking.rank}
+          </span>
+        )}
 
         {/* Total points */}
         <span className="text-xs text-textSecondary flex-shrink-0">{teamStats?.avgTotalPoints?.toFixed(0) ?? '0'} pts</span>
@@ -1772,7 +1844,8 @@ function PickList() {
   const getWatchlistTeams = usePickListStore(state => state.getWatchlistTeams);
 
   const eventCode = useAnalyticsStore(state => state.eventCode);
-  const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
+  // Personal picklist must also be live-only — no pre-scout in the picklist period.
+  const teamStatistics = useAnalyticsStore(state => state.liveOnlyTeamStatistics);
   const teamTrends = useAnalyticsStore(state => state.teamTrends);
   const tbaData = useAnalyticsStore(state => state.tbaData);
 
@@ -2261,6 +2334,8 @@ function PickList() {
           teamPassesFilters={teamPassesFilters}
           liveFilterConfigs={liveSync.liveFilterConfigs}
           pushLiveFilterConfigs={liveSync.pushLiveFilterConfigs}
+          liveFilterPassingTeams={liveSync.liveFilterPassingTeams}
+          pushLiveFilterPassingTeams={liveSync.pushLiveFilterPassingTeams}
           compareTeams={compareTeams}
           onToggleCompare={toggleCompare}
           allowedUsers={allAllowedUsers}

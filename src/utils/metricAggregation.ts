@@ -29,6 +29,16 @@ const RAW_METRICS: Record<string, Extractor> = {
   teleopFuelPass: (e) => e.teleop_FUEL_PASS,
   totalPass: (e) => e.auton_FUEL_PASS + e.teleop_FUEL_PASS,
 
+  // Total fuel moved per match — sum of all balls touched (scored + passed).
+  // Mirrors the fuel-attribution `avgMoved` for raw / pre-scout data.
+  totalMoved: (e) =>
+    (e.auton_FUEL_SCORE || 0) + (e.teleop_FUEL_SCORE || 0) +
+    (e.auton_FUEL_PASS || 0) + (e.teleop_FUEL_PASS || 0),
+
+  // Total fuel scored per match (auto + teleop). Raw equivalent of
+  // fuel-attribution `avgScored`.
+  totalScored: (e) => (e.auton_FUEL_SCORE || 0) + (e.teleop_FUEL_SCORE || 0),
+
   // Bonus buckets
   autoPlus1: (e) => e.auton_SCORE_PLUS_1,
   autoPlus2: (e) => e.auton_SCORE_PLUS_2,
@@ -155,7 +165,10 @@ const FUEL_FIELD_FALLBACK: Record<string, string> = {
   avgAutoScored: 'autoFuelScore',
   avgTeleopScored: 'teleopFuelScore',
   avgPasses: 'totalPass',
-  avgShotsScored: 'autoFuelScore', // closest scout-side equivalent (auto only — better than 0)
+  avgShotsScored: 'totalScored',
+  avgMoved: 'totalMoved',
+  avgScored: 'totalScored',
+  avgShots: 'totalScored',
 };
 
 // ── Get metric value (handles pre-computed, on-the-fly, and fuel attribution) ──

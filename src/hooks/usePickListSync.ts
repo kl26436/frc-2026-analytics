@@ -15,7 +15,7 @@ function tsToIso(ts: unknown): string {
   return new Date().toISOString();
 }
 
-function docToLiveList(data: Record<string, unknown>): { list: PickList; lockStatus: LiveLockStatus | null; snapshotTakenAt: string | null; snapshotTakenBy: string | null; pendingControlFor: string | null; liveFilterConfigs: FilterConfig[] | null } {
+function docToLiveList(data: Record<string, unknown>): { list: PickList; lockStatus: LiveLockStatus | null; snapshotTakenAt: string | null; snapshotTakenBy: string | null; pendingControlFor: string | null; liveFilterConfigs: FilterConfig[] | null; liveFilterPassingTeams: number[] | null } {
   const raw = data.lockedBy as Record<string, unknown> | null | undefined;
   const lockStatus: LiveLockStatus | null = raw
     ? { uid: String(raw.uid), email: String(raw.email), displayName: String(raw.displayName), lockedAt: tsToIso(raw.lockedAt) }
@@ -31,6 +31,7 @@ function docToLiveList(data: Record<string, unknown>): { list: PickList; lockSta
     snapshotTakenBy: data.snapshotTakenBy ? String(data.snapshotTakenBy) : null,
     pendingControlFor: data.pendingControlFor ? String(data.pendingControlFor) : null,
     liveFilterConfigs: data.filterConfigs ? (data.filterConfigs as FilterConfig[]) : null,
+    liveFilterPassingTeams: Array.isArray(data.filterPassingTeams) ? (data.filterPassingTeams as number[]) : null,
   };
 }
 
@@ -50,6 +51,7 @@ export function usePickListSync(
   const [comments, setComments] = useState<LiveComment[]>([]);
   const [suggestions, setSuggestions] = useState<LiveSuggestion[]>([]);
   const [liveFilterConfigs, setLiveFilterConfigs] = useState<FilterConfig[] | null>(null);
+  const [liveFilterPassingTeams, setLiveFilterPassingTeams] = useState<number[] | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [exists, setExists] = useState(false); // whether Firestore doc exists
 
@@ -67,6 +69,7 @@ export function usePickListSync(
     setLockStatus(null);
     setPendingControlFor(null);
     setLiveFilterConfigs(null);
+    setLiveFilterPassingTeams(null);
     setComments([]);
     setSuggestions([]);
     setExists(false);
@@ -80,13 +83,14 @@ export function usePickListSync(
     unsubListRef.current = onSnapshot(listRef, (snap) => {
       if (snap.exists()) {
         const data = snap.data() as Record<string, unknown>;
-        const { list, lockStatus: ls, snapshotTakenAt: sta, snapshotTakenBy: stb, pendingControlFor: pcf, liveFilterConfigs: lfc } = docToLiveList(data);
+        const { list, lockStatus: ls, snapshotTakenAt: sta, snapshotTakenBy: stb, pendingControlFor: pcf, liveFilterConfigs: lfc, liveFilterPassingTeams: lfp } = docToLiveList(data);
         setLiveList(list);
         setLockStatus(ls);
         setSnapshotTakenAt(sta);
         setSnapshotTakenBy(stb);
         setPendingControlFor(pcf);
         setLiveFilterConfigs(lfc);
+        setLiveFilterPassingTeams(lfp);
         setLastUpdatedAt(data.updatedAt ? tsToIso(data.updatedAt) : null);
         setExists(true);
       } else {
@@ -94,6 +98,7 @@ export function usePickListSync(
         setLockStatus(null);
         setPendingControlFor(null);
         setLiveFilterConfigs(null);
+        setLiveFilterPassingTeams(null);
         setExists(false);
       }
       setSyncing(false);
@@ -390,6 +395,14 @@ export function usePickListSync(
     await updateDoc(doc(db, 'pick-lists', eventKey), { filterConfigs: configs });
   }, [eventKey]);
 
+  // Editor pushes the computed passing-teams set so all viewers see identical
+  // highlights even if their personal data-source modes (live vs pre-scout)
+  // produce different local stats. Source of truth = whoever holds the lock.
+  const pushLiveFilterPassingTeams = useCallback(async (teamNumbers: number[]) => {
+    if (!eventKey) return;
+    await updateDoc(doc(db, 'pick-lists', eventKey), { filterPassingTeams: teamNumbers });
+  }, [eventKey]);
+
   const voteSuggestion = useCallback(async (suggestionId: string) => {
     if (!eventKey || !uid) return;
     await updateDoc(doc(db, 'pick-lists', eventKey, 'suggestions', suggestionId), {
@@ -404,6 +417,7 @@ export function usePickListSync(
     snapshotTakenBy,
     pendingControlFor,
     liveFilterConfigs,
+    liveFilterPassingTeams,
     comments,
     suggestions,
     syncing,
@@ -427,6 +441,7 @@ export function usePickListSync(
     claimPendingControl,
     // Filter sync
     pushLiveFilterConfigs,
+    pushLiveFilterPassingTeams,
     // All-user actions
     addComment,
     deleteComment,

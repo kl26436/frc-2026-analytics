@@ -12,9 +12,15 @@
  * Bucket strategy override (see plan discussion 2026-04-29):
  *   2026 scoring is 1 ball = 1 point with no multipliers. SCORE_PLUS_N
  *   buttons are scout quantity-shortcut buttons, not point multipliers.
- *   Pre-scout has hand-counted ball totals, so we route the count straight
- *   into SCORE_PLUS_1 — estimateMatchFuel() then returns the correct point
- *   total without any downstream changes.
+ *
+ *   In LIVE data: sum(SCORE_PLUS_X * X) = total balls touched (scored + passed),
+ *   and FUEL_SCORE / FUEL_PASS hold the scored / passed ball counts. Downstream
+ *   estimateMatchPoints multiplies fuel by FUEL_SCORE/(FUEL_SCORE+FUEL_PASS)
+ *   to extract the scored portion.
+ *
+ *   For pre-scout we mirror that invariant: SCORE_PLUS_1 = FUEL_SCORE + FUEL_PASS
+ *   so the bucket sum equals total balls. estimateMatchFuel then returns total
+ *   balls and estimateMatchPoints correctly extracts the scored points.
  */
 
 const TRUE_VALUES = new Set(['TRUE', 'true', 'True', '1', 'yes', 'Yes']);
@@ -65,6 +71,8 @@ function mapRow(row) {
 
   const autonFuelScore = toInt(autonFuelRaw);
   const teleopFuelScore = toInt(teleopFuelRaw);
+  const autonFuelPass = toInt(row.auton_FUEL_PASS_score);
+  const teleopFuelPass = toInt(row.teleop_FUEL_PASS_score);
 
   const id = `${eventKey}_${matchNum}_${teamNum}`;
 
@@ -98,18 +106,19 @@ function mapRow(row) {
     // returns the correct point count. FUEL_SCORE preserved as a scoring-signal
     // flag (used by fuelAttribution.hasSummaryScoring).
     auton_FUEL_SCORE: autonFuelScore,
-    auton_FUEL_PASS: toInt(row.auton_FUEL_PASS_score),
+    auton_FUEL_PASS: autonFuelPass,
     teleop_FUEL_SCORE: teleopFuelScore,
-    teleop_FUEL_PASS: toInt(row.teleop_FUEL_PASS_score),
+    teleop_FUEL_PASS: teleopFuelPass,
 
-    auton_SCORE_PLUS_1: autonFuelScore,
+    // Bucket sum equals total balls touched (scored + passed) — see file header
+    auton_SCORE_PLUS_1: autonFuelScore + autonFuelPass,
     auton_SCORE_PLUS_2: 0,
     auton_SCORE_PLUS_3: 0,
     auton_SCORE_PLUS_5: 0,
     auton_SCORE_PLUS_10: 0,
     auton_SCORE_PLUS_20: 0,
 
-    teleop_SCORE_PLUS_1: teleopFuelScore,
+    teleop_SCORE_PLUS_1: teleopFuelScore + teleopFuelPass,
     teleop_SCORE_PLUS_2: 0,
     teleop_SCORE_PLUS_3: 0,
     teleop_SCORE_PLUS_5: 0,
