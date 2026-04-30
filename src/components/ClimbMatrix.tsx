@@ -16,16 +16,26 @@ const ROWS = [
 
 export function ClimbMatrix({ perMatchClimb }: ClimbMatrixProps) {
   if (perMatchClimb.length === 0) return null;
+
+  // Drop entirely if there are no climbs anywhere
+  const anyClimb = perMatchClimb.some(p => p.climbLevel > 0 || p.failed);
+  if (!anyClimb) return null;
+
+  // Only render rows that have data (don't show empty L3 row when no team climbed L3)
+  const activeRows = ROWS.filter(row =>
+    perMatchClimb.some(p => p.climbLevel === row.level || (row.level === 0 && p.failed))
+  );
+
   const innerW = perMatchClimb.length * (CELL + GAP) - GAP;
   const width = LABEL_W + innerW;
-  const height = ROWS.length * (ROW_H + 2) + 16;
+  const height = activeRows.length * (ROW_H + 2) + 16;
 
   return (
     <div className="bg-surface rounded-lg border border-border p-4 md:p-5">
       <h3 className="text-sm font-bold text-textSecondary mb-3">Climb history</h3>
       <div className="overflow-x-auto pb-1">
         <svg width={width} height={height} role="img" aria-label="Climb success matrix">
-          {ROWS.map((row, ri) => {
+          {activeRows.map((row, ri) => {
             const y = ri * (ROW_H + 2);
             return (
               <g key={row.level}>
@@ -76,7 +86,7 @@ export function ClimbMatrix({ perMatchClimb }: ClimbMatrixProps) {
             const labelStride = perMatchClimb.length > 18 ? 4 : perMatchClimb.length > 10 ? 2 : 1;
             if (i % labelStride !== 0 && i !== perMatchClimb.length - 1) return null;
             const x = LABEL_W + i * (CELL + GAP) + CELL / 2;
-            const y = ROWS.length * (ROW_H + 2) + 10;
+            const y = activeRows.length * (ROW_H + 2) + 10;
             return (
               <text
                 key={`label-${p.matchNumber}`}

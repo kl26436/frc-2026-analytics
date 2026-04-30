@@ -8,6 +8,8 @@ interface MatchHeatmapStripProps {
   entries: ScoutEntry[];
   /** When set, hovering a cell shows the match label. Click navigates to /replay/:matchNumber. */
   navigable?: boolean;
+  /** Compact mode: drops the heading and legend. Used inline within the hero block. */
+  compact?: boolean;
 }
 
 type Classification = 'good' | 'average' | 'below' | 'catastrophic';
@@ -37,7 +39,7 @@ const CELL = 14;
 const GAP = 3;
 const HEIGHT = 24;
 
-export function MatchHeatmapStrip({ entries, navigable = true }: MatchHeatmapStripProps) {
+export function MatchHeatmapStrip({ entries, navigable = true, compact = false }: MatchHeatmapStripProps) {
   const navigate = useNavigate();
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
 
@@ -63,6 +65,54 @@ export function MatchHeatmapStrip({ entries, navigable = true }: MatchHeatmapStr
 
   const width = cells.length * (CELL + GAP) - GAP;
   const hovered = hoverIdx != null ? cells[hoverIdx] : null;
+
+  if (compact) {
+    return (
+      <div>
+        <div className="overflow-x-auto pb-1">
+          <svg width={width} height={HEIGHT} style={{ display: 'block' }} role="img" aria-label="Per-match heatmap">
+            {cells.map((c, i) => {
+              const x = i * (CELL + GAP);
+              const isHovered = i === hoverIdx;
+              return (
+                <rect
+                  key={c.entry.id}
+                  x={x}
+                  y={0}
+                  width={CELL}
+                  height={HEIGHT}
+                  rx={2}
+                  fill={fillForClass(c.classification)}
+                  stroke={isHovered ? 'hsl(0 0% 100% / 0.9)' : 'transparent'}
+                  strokeWidth={isHovered ? 1.5 : 0}
+                  style={{ cursor: navigable ? 'pointer' : 'default' }}
+                  onMouseEnter={() => setHoverIdx(i)}
+                  onMouseLeave={() => setHoverIdx(prev => (prev === i ? null : prev))}
+                  onClick={() => { if (navigable) navigate(`/replay/${c.entry.match_number}`); }}
+                >
+                  <title>
+                    {`Q${c.entry.match_number} · ${Math.round(c.total)} pts · ${climbLabel(parseClimbLevel(c.entry.climb_level))}`}
+                    {c.entry.notes ? `\n${c.entry.notes}` : ''}
+                  </title>
+                </rect>
+              );
+            })}
+          </svg>
+        </div>
+        {hovered && (
+          <div className="mt-2 text-xs text-textSecondary">
+            <span className="font-semibold text-textPrimary">Q{hovered.entry.match_number}</span>
+            {' · '}
+            {Math.round(hovered.total)} pts
+            {' · '}
+            {climbLabel(parseClimbLevel(hovered.entry.climb_level))} climb
+            {hovered.entry.lost_connection && <span className="text-danger"> · lost connection</span>}
+            {hovered.entry.no_robot_on_field && <span className="text-danger"> · no-show</span>}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="bg-surface rounded-lg border border-border p-4">
