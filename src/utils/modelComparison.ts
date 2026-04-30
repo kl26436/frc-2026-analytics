@@ -1,5 +1,6 @@
 import type { RobotMatchFuel } from './fuelAttribution';
 import { powerCurveAttribution, DEFAULT_BETA } from './fuelAttribution';
+import type { CrossEventPriors } from './crossEventPriors';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -245,6 +246,7 @@ const MIN_MATCHES_FOR_BAYESIAN = 3;
 export function computeModelComparison(
   matchFuelAttribution: RobotMatchFuel[],
   activeModelId?: string,
+  crossEventPriors?: CrossEventPriors,
 ): ModelComparisonResult {
   const groups = groupByAlliance(matchFuelAttribution);
   // Default to power_DEFAULT_BETA if no active model specified
@@ -272,8 +274,9 @@ export function computeModelComparison(
     matchCountByTeam.set(row.teamNumber, (matchCountByTeam.get(row.teamNumber) || 0) + 1);
   }
   const teamsWithEnoughData = Array.from(matchCountByTeam.values()).filter(c => c >= MIN_MATCHES_FOR_BAYESIAN).length;
+  const hasCrossEventPriors = crossEventPriors && crossEventPriors.size > 0;
   const bayesianVariant = variants.find(v => v.id === 'bayesian')!;
-  bayesianVariant.isActive = teamsWithEnoughData > 0;
+  bayesianVariant.isActive = teamsWithEnoughData > 0 || !!hasCrossEventPriors;
 
   // Run each model
   const models: ModelResult[] = [];
@@ -311,18 +314,24 @@ export function computeModelComparison(
           attributed = logCurveAttribution(shots, group.fmsTotal);
           break;
         case 'bayesian': {
-          const priors = buildPriorAccuracies(groups, group.matchNumber, DEFAULT_BETA);
+          const eventPriors = buildPriorAccuracies(groups, group.matchNumber, DEFAULT_BETA);
           const priorAccuracies = group.robots.map(r => {
-            const p = priors.get(r.teamNumber);
-            if (!p || p.totalShots < 5) return null; // need meaningful shot count
-            const teamMatches = matchFuelAttribution.filter(
-              m => m.teamNumber === r.teamNumber && m.matchNumber < group.matchNumber
-            ).length;
-            if (teamMatches < MIN_MATCHES_FOR_BAYESIAN) return null;
-            return p.totalScored / p.totalShots;
+            // Merge cross-event priors with in-event priors
+            const ep = eventPriors.get(r.teamNumber);
+            const xp = crossEventPriors?.get(r.teamNumber);
+            const totalShots = (ep?.totalShots ?? 0) + (xp?.totalShots ?? 0);
+            const totalScored = (ep?.totalScored ?? 0) + (xp?.totalScored ?? 0);
+            if (totalShots < 5) return null;
+            // With cross-event priors, don't require MIN_MATCHES at current event
+            if (!xp) {
+              const teamMatches = matchFuelAttribution.filter(
+                m => m.teamNumber === r.teamNumber && m.matchNumber < group.matchNumber
+              ).length;
+              if (teamMatches < MIN_MATCHES_FOR_BAYESIAN) return null;
+            }
+            return totalScored / totalShots;
           });
           attributed = bayesianAttribution(shots, group.fmsTotal, priorAccuracies, isZeroWeight);
-          // Fall back to power curve if bayesian can't run for this group
           if (!attributed) {
             attributed = powerCurveAttribution(shots, group.fmsTotal, DEFAULT_BETA);
           }
@@ -377,8 +386,18 @@ export function computeModelComparison(
  * Processes alliance groups in match order, building per-team accuracy priors
  * from all previously seen matches. Falls back to power curve β=DEFAULT_BETA
  * for any group where no team has enough prior data (< 5 shots).
+ *
+ * @param rows - Match fuel attribution from current event (first pass)
+ * @param crossEventPriors - Optional pre-seeded priors from prior events.
+ *   When provided, teams with prior-event history start match 1 with accuracy
+ *   priors instead of falling back to power curve. This is the key improvement
+ *   for multi-event scouting — returning teams get informed attribution from
+ *   the very first match at a new event.
  */
-export function reattributeWithBayesian(rows: RobotMatchFuel[]): RobotMatchFuel[] {
+export function reattributeWithBayesian(
+  rows: RobotMatchFuel[],
+  crossEventPriors?: CrossEventPriors,
+): RobotMatchFuel[] {
   if (rows.length === 0) return rows;
 
   // Group by match + alliance
@@ -395,7 +414,16 @@ export function reattributeWithBayesian(rows: RobotMatchFuel[]): RobotMatchFuel[
   );
 
   // Running priors: team → { shots, scored }
+  // Pre-seed with cross-event data if available
   const priors = new Map<number, { shots: number; scored: number }>();
+  if (crossEventPriors) {
+    for (const [teamNumber, prior] of crossEventPriors) {
+      priors.set(teamNumber, {
+        shots: prior.totalShots,
+        scored: prior.totalScored,
+      });
+    }
+  }
   const result: RobotMatchFuel[] = [];
 
   for (const group of sortedGroups) {

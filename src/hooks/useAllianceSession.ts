@@ -124,6 +124,8 @@ function docToSession(docId: string, data: Record<string, unknown>): AllianceSel
     status: (data.status ?? 'active') as SessionStatus,
     messages: (data.messages ?? []) as ChatMessage[],
     lastUpdatedBy: (data.lastUpdatedBy ?? '') as string,
+    highlightedAlliance: (data.highlightedAlliance ?? null) as number | null,
+    highlightedBy: (data.highlightedBy ?? null) as string | null,
   };
 }
 
@@ -504,6 +506,15 @@ export function useAllianceSession(userId: string | null) {
     await updateSession({ messages });
   }, [session, userId, updateSession]);
 
+  // Set the synced highlight for the entire session (editor-only)
+  const setHighlightedAlliance = useCallback(async (alliance: number | null) => {
+    if (!session || !isEditor || !userId) return;
+    await updateSession({
+      highlightedAlliance: alliance,
+      highlightedBy: alliance == null ? null : userId,
+    });
+  }, [session, isEditor, userId, updateSession]);
+
   // Re-order session teams based on updated pick list (live sync)
   const reorderFromPickList = useCallback(async (pickListTeams: PickListTeam[]) => {
     if (!session || !isHost) return;
@@ -569,5 +580,6 @@ export function useAllianceSession(userId: string | null) {
     sendMessage,
     startListening,
     reorderFromPickList,
+    setHighlightedAlliance,
   };
 }

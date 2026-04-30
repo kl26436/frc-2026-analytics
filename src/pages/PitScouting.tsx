@@ -147,9 +147,12 @@ function PitScouting() {
     return () => ninjaStore.unsubscribeAll();
   }, [eventCode, user, loadEntriesFromFirestore]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Initialize form when team is selected
+  // Initialize form when team is selected — only reset on actual team change,
+  // NOT when entries update (which would blow away unsaved edits like coach name).
+  const prevTeamRef = useRef<number | null>(null);
   useEffect(() => {
-    if (selectedTeam && scoutName) {
+    if (selectedTeam && scoutName && selectedTeam !== prevTeamRef.current) {
+      prevTeamRef.current = selectedTeam;
       const existing = entries.find(e => e.teamNumber === selectedTeam);
       if (existing) {
         const { id, timestamp, ...rest } = existing;
@@ -162,6 +165,9 @@ function PitScouting() {
           teamName: teamStats?.teamName || '',
         });
       }
+    }
+    if (!selectedTeam) {
+      prevTeamRef.current = null;
     }
   }, [selectedTeam, scoutName, eventCode, entries, teamStatistics]);
 
@@ -666,6 +672,7 @@ function PitScouting() {
                   src={pic.robot_image_link}
                   alt={`Team ${selectedTeam} robot ${idx + 1}`}
                   className="w-full h-32 object-cover rounded-lg bg-card border border-border"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                 />
               ))}
             </div>

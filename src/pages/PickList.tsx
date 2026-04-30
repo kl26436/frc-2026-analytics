@@ -140,7 +140,7 @@ const STAT_OPTIONS: { value: keyof TeamStatistics; label: string }[] = [
   { value: 'avgAutoPoints', label: 'Avg Auto Points' },
   { value: 'avgTeleopPoints', label: 'Avg Teleop Points' },
   { value: 'avgEndgamePoints', label: 'Avg Endgame Points' },
-  { value: 'avgTotalFuelEstimate', label: 'Avg Total Fuel' },
+  { value: 'avgTotalFuelEstimate', label: 'Avg Balls Moved' },
   { value: 'avgAutoFuelEstimate', label: 'Avg Auto Fuel' },
   { value: 'avgTeleopFuelEstimate', label: 'Avg Teleop Fuel' },
   { value: 'avgEndgamePoints', label: 'Avg Endgame Points' },
@@ -1893,8 +1893,15 @@ function PickList() {
     if (!confirm('This will overwrite the shared live list with your personal list. Continue?')) return;
     const list = publishToLive();
     if (list && liveSync.canEdit) {
-      await liveSync.pushTeams(list.teams);
-      await liveSync.pushConfig(list.config);
+      try {
+        await liveSync.pushTeams(list.teams);
+        await liveSync.pushConfig(list.config);
+        // Only clear diverged flag after successful write
+        usePickListStore.getState().pullFromLive(list.teams, list.config);
+      } catch {
+        // Write failed — keep diverged so user knows it didn't sync
+        usePickListStore.getState().markDiverged();
+      }
     }
   };
 
@@ -2140,7 +2147,7 @@ function PickList() {
               Diverged from live
             </span>
           )}
-          {mode === 'personal' && locallyDiverged && liveSync.canEdit && (
+          {locallyDiverged && liveSync.canEdit && (
             <button
               onClick={handlePublishToLive}
               className="px-3 py-1.5 bg-success/20 text-success hover:bg-success/30 rounded-lg text-sm font-medium transition-colors"
@@ -2148,7 +2155,7 @@ function PickList() {
               Publish to Live
             </button>
           )}
-          {mode === 'personal' && liveSync.liveList && (
+          {liveSync.liveList && (
             <button
               onClick={handlePullFromLive}
               className="px-3 py-1.5 bg-blueAlliance/20 text-blueAlliance hover:bg-blueAlliance/30 rounded-lg text-sm font-medium transition-colors"

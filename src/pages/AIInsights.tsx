@@ -33,6 +33,7 @@ export default function AIInsights() {
   const predictionInputs = useAnalyticsStore(s => s.predictionInputs);
   const homeTeamNumber = useAnalyticsStore(s => s.homeTeamNumber);
   const eventCode = useAnalyticsStore(s => s.eventCode);
+  const tbaData = useAnalyticsStore(s => s.tbaData);
 
   const [activeTemplate, setActiveTemplate] = useState<InsightTemplateId | null>(null);
   const [redTeams, setRedTeams] = useState<string>('');
@@ -54,7 +55,8 @@ export default function AIInsights() {
 
       case 'draft_simulator': {
         const seed = seedNumber ? parseInt(seedNumber) : undefined;
-        return buildDraftSimulatorPrompt(teamStatistics, teamFuelStats, teamTrends, predictionInputs, homeTeamNumber, seed);
+        const tbaRankings = tbaData?.rankings?.rankings;
+        return buildDraftSimulatorPrompt(teamStatistics, teamFuelStats, teamTrends, predictionInputs, homeTeamNumber, seed, tbaRankings);
       }
 
       case 'playoff_strategy': {
@@ -77,7 +79,7 @@ export default function AIInsights() {
       default:
         return '';
     }
-  }, [activeTemplate, teamStatistics, teamFuelStats, teamTrends, scoutEntries, pgTbaMatches, predictionInputs, homeTeamNumber, eventCode, redTeams, blueTeams, matchNumber, allianceTeams, seedNumber]);
+  }, [activeTemplate, teamStatistics, teamFuelStats, teamTrends, scoutEntries, pgTbaMatches, predictionInputs, homeTeamNumber, eventCode, redTeams, blueTeams, matchNumber, allianceTeams, seedNumber, tbaData]);
 
   const hasData = teamStatistics.length > 0 || scoutEntries.length > 0;
 

@@ -28,6 +28,7 @@ interface AllianceSelectionBoardProps {
   onTransferHost: (uid: string) => Promise<void>;
   onRemoveParticipant: (uid: string) => Promise<void>;
   onSendMessage: (text: string) => Promise<void>;
+  onHighlightAlliance: (alliance: number | null) => Promise<void>;
 }
 
 function AllianceSelectionBoard({
@@ -47,6 +48,7 @@ function AllianceSelectionBoard({
   onTransferHost,
   onRemoveParticipant,
   onSendMessage,
+  onHighlightAlliance,
 }: AllianceSelectionBoardProps) {
   const teamStatistics = useAnalyticsStore(state => state.teamStatistics);
 
@@ -57,10 +59,11 @@ function AllianceSelectionBoard({
   const clearCompareSelection = useAllianceSelectionStore(state => state.clearCompareSelection);
   const showComparisonModal = useAllianceSelectionStore(state => state.showComparisonModal);
   const setShowComparisonModal = useAllianceSelectionStore(state => state.setShowComparisonModal);
-  const highlightedAlliance = useAllianceSelectionStore(state => state.highlightedAlliance);
-  const setHighlightedAlliance = useAllianceSelectionStore(state => state.setHighlightedAlliance);
   const showParticipants = useAllianceSelectionStore(state => state.showParticipants);
   const setShowParticipants = useAllianceSelectionStore(state => state.setShowParticipants);
+
+  // Highlight is synced via the session doc — viewers see what editors set
+  const highlightedAlliance = session.highlightedAlliance ?? null;
 
   // Build the display team list
   const displayTeams = useMemo(() => {
@@ -234,7 +237,8 @@ function AllianceSelectionBoard({
           <AllianceTracker
             alliances={session.alliances}
             highlightedAlliance={highlightedAlliance}
-            onHighlightAlliance={setHighlightedAlliance}
+            onHighlightAlliance={(a) => { void onHighlightAlliance(a); }}
+            disabled={!isEditor}
           />
         </div>
       </div>

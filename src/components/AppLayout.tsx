@@ -58,8 +58,15 @@ function NavDropdown({ label, icon: Icon, items, groups, isActive }: NavDropdown
         setOpen(false);
       }
     };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKey);
+    };
   }, []);
 
   const close = () => setOpen(false);
@@ -152,8 +159,15 @@ function UserDropdown() {
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
     document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      document.removeEventListener('keydown', handleKey);
+    };
   }, []);
 
   return (
@@ -264,12 +278,17 @@ function AppLayout() {
             <div className="flex items-center gap-3 md:gap-4">
               <img src={`${import.meta.env.BASE_URL}team-logo.png`} alt="Team 148 Logo" className="h-10 w-10 md:h-12 md:w-12 object-contain" />
               <div>
-                <h1 className="text-lg md:text-2xl font-bold">Team 148 - Data Wrangler</h1>
-                <p className="text-textSecondary text-xs md:text-sm">
-                  REBUILT 2026 • {eventCode}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="text-lg md:text-2xl font-bold">Team 148 - Data Wrangler</h1>
                   {currentMatchLabel && (
-                    <span> • Now: <span className="font-semibold text-text">{currentMatchLabel}</span></span>
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-success/15 text-success text-xs font-semibold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-success" />
+                      Now · {currentMatchLabel}
+                    </span>
                   )}
+                </div>
+                <p className="text-textSecondary text-xs md:text-sm">
+                  2026 • {eventCode}
                 </p>
               </div>
             </div>

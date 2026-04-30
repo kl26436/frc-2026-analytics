@@ -51,6 +51,7 @@ function RobotPictures() {
                     alt={`Team ${team.team_number} robot`}
                     className="w-full h-full object-cover"
                     loading="lazy"
+                    onError={(e) => { (e.target as HTMLImageElement).closest('button')!.style.display = 'none'; }}
                   />
                 </button>
               );
@@ -90,6 +91,7 @@ function RobotPictures() {
             alt={`Team ${allImages[lightboxIdx].team} robot`}
             className="max-h-[85vh] max-w-[90vw] object-contain rounded-lg"
             onClick={(e) => e.stopPropagation()}
+            onError={() => setLightboxIdx(null)}
           />
 
           {lightboxIdx < allImages.length - 1 && (

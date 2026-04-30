@@ -44,6 +44,7 @@ function AllianceSelectionJoin() {
     removeParticipant,
     sendMessage,
     startListening,
+    setHighlightedAlliance,
   } = useAllianceSession(user?.uid ?? null);
 
   // Auto sign-in on mount
@@ -245,6 +246,7 @@ function AllianceSelectionJoin() {
           onTransferHost={transferHost}
           onRemoveParticipant={removeParticipant}
           onSendMessage={sendMessage}
+          onHighlightAlliance={setHighlightedAlliance}
         />
       </main>
     </div>

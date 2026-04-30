@@ -101,7 +101,7 @@ export const TOWER_FIELDS = {
 // ─── Ranking Points ──────────────────────────────────────────────────────────
 
 export const RP_FIELDS = {
-  /** Energized RP: alliance scored ≥100 fuel points. Boolean. */
+  /** Energized RP: alliance scored ≥240 fuel points. Boolean. */
   energized: 'energizedAchieved',
 
   /** Supercharged RP: alliance scored ≥360 fuel points. Boolean. Rare at week0. */

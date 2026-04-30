@@ -30,7 +30,10 @@ const ALLOWED_ORIGINS = [
 
 function getCorsOrigin(req) {
   const origin = req.headers.origin || "";
-  return ALLOWED_ORIGINS.includes(origin) ? origin : "";
+  if (ALLOWED_ORIGINS.includes(origin)) return origin;
+  // Allow Firebase preview channel URLs (e.g. data-wrangler-2026--test-xxx.web.app)
+  if (/^https:\/\/data-wrangler-2026--[a-z0-9-]+\.web\.app$/.test(origin)) return origin;
+  return "";
 }
 
 // Simple in-memory rate limiter (resets on cold start, good enough)
@@ -58,16 +61,26 @@ exports.claudeProxy = onRequest(
     memory: "256MiB",
     region: "us-central1",
     maxInstances: 10,
-    cors: ALLOWED_ORIGINS,
+    cors: true,
   },
   async (req, res) => {
+
+    // Manual CORS: allow static origins + preview channel URLs
+    const corsOrigin = getCorsOrigin(req);
+    res.set("Access-Control-Allow-Origin", corsOrigin || "");
+    res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+    if (req.method === "OPTIONS") {
+      res.status(204).send("");
+      return;
+    }
 
     if (req.method !== "POST") {
       res.status(405).json({ error: "Method not allowed" });
       return;
     }
 
-    const corsOrigin = getCorsOrigin(req);
     if (!corsOrigin) {
       res.status(403).json({ error: "Origin not allowed" });
       return;

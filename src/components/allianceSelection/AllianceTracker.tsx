@@ -5,9 +5,14 @@ interface AllianceTrackerProps {
   alliances: Alliance[];
   highlightedAlliance: number | null;
   onHighlightAlliance: (n: number | null) => void;
+  disabled?: boolean;
 }
 
-function AllianceTracker({ alliances, highlightedAlliance, onHighlightAlliance }: AllianceTrackerProps) {
+function AllianceTracker({ alliances, highlightedAlliance, onHighlightAlliance, disabled }: AllianceTrackerProps) {
+  const handleHighlight = (n: number) => {
+    if (disabled) return;
+    onHighlightAlliance(highlightedAlliance === n ? null : n);
+  };
   return (
     <div className="bg-surface rounded-lg border border-border p-3 sm:p-4">
       <h3 className="text-sm font-bold text-textSecondary mb-3 uppercase tracking-wide">Alliances</h3>
@@ -19,9 +24,7 @@ function AllianceTracker({ alliances, highlightedAlliance, onHighlightAlliance }
             key={a.number}
             alliance={a}
             isHighlighted={highlightedAlliance === a.number}
-            onHighlight={() =>
-              onHighlightAlliance(highlightedAlliance === a.number ? null : a.number)
-            }
+            onHighlight={() => handleHighlight(a.number)}
           />
         ))}
       </div>
@@ -33,9 +36,7 @@ function AllianceTracker({ alliances, highlightedAlliance, onHighlightAlliance }
             <AllianceCard
               alliance={a}
               isHighlighted={highlightedAlliance === a.number}
-              onHighlight={() =>
-                onHighlightAlliance(highlightedAlliance === a.number ? null : a.number)
-              }
+              onHighlight={() => handleHighlight(a.number)}
             />
           </div>
         ))}

@@ -91,7 +91,7 @@ export const usePickListStore = create<PickListState>()(
       },
 
       publishToLive: () => {
-        set({ locallyDiverged: false });
+        // Return the list first, clear diverged flag AFTER caller confirms write succeeded
         return get().pickList;
       },
 

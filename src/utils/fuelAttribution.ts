@@ -46,16 +46,33 @@ export interface RobotMatchFuel {
 
 // ── Power Curve Attribution ──────────────────────────────────────────────────
 
-export const DEFAULT_BETA = 0.7;
+/**
+ * Default β for power curve attribution.
+ *
+ * β=1.0 (linear) — distributes FMS alliance total proportionally to scout shot
+ * counts. Linear is preferred because:
+ *   1. FMS total constrains the sum — overestimates can't inflate totals
+ *   2. Relative proportions between alliance robots are more stable than absolutes
+ *   3. β<1 systematically undervalues dominant scorers by 15-25% per match
+ *   4. Even with 30% scout overcount, linear error (~7%) ≈ power curve error (~7%)
+ *      but without the guaranteed bias against high-volume robots
+ *
+ * Previously β=0.7 (chosen for lowest CV at Week 0), but this compressed top-end
+ * scorers. Rankings are identical regardless of β; only magnitudes change.
+ */
+export const DEFAULT_BETA = 1.0;
 
 /**
  * Distribute fmsTotal across robots proportionally using shots^β.
  * Returns an array of attributed scored balls in the same order as `shots`.
+ *
+ * With β=1.0 (default), this is simple proportional distribution:
+ *   robotScored = (robotShots / allianceShots) × fmsAllianceTotal
  */
 export function powerCurveAttribution(
   shots: number[],
   fmsTotal: number,
-  beta: number,
+  beta: number = DEFAULT_BETA,
 ): number[] {
   const weights = shots.map(s => Math.pow(Math.max(s, 0), beta));
   const totalWeight = weights.reduce((sum, w) => sum + w, 0);
@@ -286,7 +303,7 @@ export function computeMatchFuelAttribution(
     // Sum of all alliance shots (for FMS/scout ratio)
     const allianceScoutShots = group.reduce((s, r) => s + r.shots, 0);
 
-    // Attribution function: use custom if provided, otherwise power curve with beta
+    // Attribution function: use custom if provided, otherwise linear proportional (β=1.0)
     const attrib = attributionFn ?? ((s: number[], t: number) => powerCurveAttribution(s, t, beta));
 
     // Distribute FMS totals to individual robots

@@ -54,4 +54,6 @@ export interface AllianceSelectionSession {
   status: SessionStatus;
   messages: ChatMessage[];
   lastUpdatedBy: string;
+  highlightedAlliance?: number | null;
+  highlightedBy?: string | null;
 }

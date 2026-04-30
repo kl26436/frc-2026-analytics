@@ -59,6 +59,7 @@ function AllianceSelection() {
     sendMessage,
     startListening,
     reorderFromPickList,
+    setHighlightedAlliance,
   } = useAllianceSession(user?.uid ?? null);
 
   // Auto sign-in on mount
@@ -358,6 +359,7 @@ function AllianceSelection() {
       onTransferHost={transferHost}
       onRemoveParticipant={removeParticipant}
       onSendMessage={sendMessage}
+      onHighlightAlliance={setHighlightedAlliance}
     />
   );
 }

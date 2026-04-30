@@ -12,7 +12,6 @@ interface AllianceSelectionUIState {
   searchQuery: string;
   selectedTeamsForCompare: number[];
   showComparisonModal: boolean;
-  highlightedAlliance: number | null;
   showParticipants: boolean;
 
   // Actions
@@ -24,7 +23,6 @@ interface AllianceSelectionUIState {
   toggleTeamForCompare: (teamNumber: number) => void;
   clearCompareSelection: () => void;
   setShowComparisonModal: (show: boolean) => void;
-  setHighlightedAlliance: (alliance: number | null) => void;
   setShowParticipants: (show: boolean) => void;
 }
 
@@ -38,7 +36,6 @@ export const useAllianceSelectionStore = create<AllianceSelectionUIState>()(
       searchQuery: '',
       selectedTeamsForCompare: [],
       showComparisonModal: false,
-      highlightedAlliance: null,
       showParticipants: false,
 
       setLastSessionCode: (code) => set({ lastSessionCode: code }),
@@ -66,7 +63,6 @@ export const useAllianceSelectionStore = create<AllianceSelectionUIState>()(
       }),
 
       setShowComparisonModal: (show) => set({ showComparisonModal: show }),
-      setHighlightedAlliance: (alliance) => set({ highlightedAlliance: alliance }),
       setShowParticipants: (show) => set({ showParticipants: show }),
     }),
     {

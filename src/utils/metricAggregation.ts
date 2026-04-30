@@ -147,6 +147,17 @@ export function computeMetric(
   return aggregate(values, aggregation, percentileValue);
 }
 
+// ── Fallback raw-metric ids for FMS-attribution fields ──
+// When teamFuelStats has no entry for a team (pre-scout-only mode, or FMS data
+// not yet available), columns with these fuelFields fall back to a raw-entry
+// equivalent so the table doesn't show misleading 0's.
+const FUEL_FIELD_FALLBACK: Record<string, string> = {
+  avgAutoScored: 'autoFuelScore',
+  avgTeleopScored: 'teleopFuelScore',
+  avgPasses: 'totalPass',
+  avgShotsScored: 'autoFuelScore', // closest scout-side equivalent (auto only — better than 0)
+};
+
 // ── Get metric value (handles pre-computed, on-the-fly, and fuel attribution) ──
 
 export function getMetricValue(
@@ -166,6 +177,17 @@ export function getMetricValue(
       }
       return value || 0;
     }
+  }
+  // No FMS attribution available for this team — fall back to a raw-entry equivalent
+  // when one exists. Lets pre-scout-only mode populate Avg Passes / Avg Auto Scored / etc.
+  if (column.fuelField && FUEL_FIELD_FALLBACK[column.fuelField]) {
+    return computeMetric(
+      allEntries,
+      team.teamNumber,
+      FUEL_FIELD_FALLBACK[column.fuelField],
+      column.aggregation,
+      column.percentileValue,
+    );
   }
   // Dynamic metric — compute from raw entries
   if (column.rawMetric) {

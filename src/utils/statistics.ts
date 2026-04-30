@@ -53,8 +53,9 @@ export function calculateTeamStatistics(
 
   // ── Auto counts ──
   const autoClimbCount = entries.filter(e => e.auton_AUTON_CLIMBED > 0).length;
-  const autoDidNothingCount = entries.filter(e => e.auton_did_nothing).length;
-  const centerFieldAutoCount = entries.filter(e => e.auton_went_to_neutral).length;
+  // auton_did_nothing in the scouting app actually means "went to mid-field"
+  const autoDidNothingCount = 0; // not tracked separately
+  const centerFieldAutoCount = entries.filter(e => e.auton_did_nothing).length;
 
   // ── Start zone counts ──
   const startZoneCounts = [1, 2, 3, 4, 5, 6].map(zone => {

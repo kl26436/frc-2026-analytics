@@ -2,6 +2,8 @@ import type { TeamStatistics, ScoutEntry, PgTBAMatch } from '../types/scouting';
 import type { TeamFuelStats } from './fuelAttribution';
 import type { TeamTrend } from './trendAnalysis';
 import type { PredictionTeamInput } from './predictions';
+import type { TBAEventRanking } from '../types/tba';
+import { simulateSnakeDraft, formatDraftResultForPrompt } from './draftSimulator';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -68,7 +70,7 @@ Key game mechanics:
 - **Fuel**: Balls scored into a hub. FMS tracks alliance-level totals only. We use power curve attribution (beta=0.7) to estimate per-robot scoring. Fuel scoring is BY FAR the most important factor — it drives both match wins and the Energized/Supercharged bonus RPs.
 - **Endgame Climbing**: Levels 0-3 (None=0, L1=10, L2=20, L3=30 points). Per-robot data from FMS.
 - **Auto Climb**: 15 points if robot climbs tower during autonomous. Very valuable — worth more than 10 fuel points and contributes to Traversal RP.
-- **Ranking Points**: Win=3 RP, Energized (hub>=100)=1 RP, Supercharged (hub>=360)=1 RP, Traversal (tower>=50)=1 RP. Max 6 RP/match.
+- **Ranking Points**: Win=3 RP, Energized (hub>=360 at Champs)=1 RP, Supercharged (hub>=500 at Champs)=1 RP, Traversal (tower>=50)=1 RP. Max 6 RP/match.
 
 ## Strategic Priority Order (MUST FOLLOW)
 1. **Fuel scoring volume** — the #1 differentiator between good and great teams. High-volume shooters win matches. You can easily outscore any climb advantage with a few extra balls.
@@ -377,37 +379,80 @@ export function buildDraftSimulatorPrompt(
   teamStats: TeamStatistics[],
   fuelStats: TeamFuelStats[],
   trends: TeamTrend[],
-  _predictions: PredictionTeamInput[],
+  predictions: PredictionTeamInput[],
   homeTeamNumber: number,
   homeTeamSeed?: number,
+  tbaRankings?: TBAEventRanking[],
 ): string {
-  // Rank teams by estimated strength for seeding prediction
-  const rankedTeams = [...teamStats].sort((a, b) => {
-    const aScore = (a.avgTotalPoints || 0);
-    const bScore = (b.avgTotalPoints || 0);
-    return bScore - aScore;
-  });
+  // ── Run algorithmic draft simulation if TBA rankings available ──
+  let draftResultBlock = '';
+  if (tbaRankings && tbaRankings.length > 0) {
+    const draftResult = simulateSnakeDraft(
+      tbaRankings, teamStats, fuelStats, predictions,
+    );
+    draftResultBlock = formatDraftResultForPrompt(draftResult);
+  }
 
-  // Split into captains and pick pool
-  const captains = rankedTeams.slice(0, 8);
-  const pickPool = rankedTeams.slice(8);
+  // ── Build captain/pick pool tables from TBA rankings (or fallback to avgTotalPoints) ──
+  let captains: TeamStatistics[];
+  let pickPool: TeamStatistics[];
+
+  if (tbaRankings && tbaRankings.length > 0) {
+    // Seed from TBA rankings
+    const sortedRankings = [...tbaRankings].sort((a, b) => a.rank - b.rank);
+    const allianceCount = tbaRankings.length <= 24
+      ? Math.max(2, Math.min(8, Math.floor((tbaRankings.length - 1 - 8) / 3)))
+      : 8;
+    const captainNums = new Set(
+      sortedRankings.slice(0, allianceCount).map(r => parseInt(r.team_key.replace('frc', ''), 10))
+    );
+
+    captains = sortedRankings
+      .slice(0, allianceCount)
+      .map(r => {
+        const num = parseInt(r.team_key.replace('frc', ''), 10);
+        return teamStats.find(t => t.teamNumber === num);
+      })
+      .filter((t): t is TeamStatistics => !!t);
+
+    // Pick pool sorted by scouting strength (not TBA rank)
+    const poolTeams = teamStats.filter(t => !captainNums.has(t.teamNumber));
+    pickPool = [...poolTeams].sort((a, b) => (b.avgTotalPoints || 0) - (a.avgTotalPoints || 0));
+  } else {
+    // Fallback: rank by avgTotalPoints
+    const rankedTeams = [...teamStats].sort((a, b) => (b.avgTotalPoints || 0) - (a.avgTotalPoints || 0));
+    captains = rankedTeams.slice(0, 8);
+    pickPool = rankedTeams.slice(8);
+  }
 
   const captainTable = captains.map((t, i) => {
     const fuel = fuelStats.find(f => f.teamNumber === t.teamNumber);
-    return `| Seed ${i + 1} | ${t.teamNumber} | ${t.avgTotalPoints?.toFixed(1) ?? '?'} | ${t.avgAutoFuelEstimate?.toFixed(1) ?? '?'} | ${t.avgTeleopFuelEstimate?.toFixed(1) ?? '?'} | ${fuel?.avgPasses.toFixed(1) ?? '?'} |`;
+    const tbaRank = tbaRankings?.find(r => r.team_key === `frc${t.teamNumber}`)?.rank;
+    const rankLabel = tbaRank ? `#${tbaRank}` : `Seed ${i + 1}`;
+    return `| ${rankLabel} | ${t.teamNumber} | ${t.avgTotalPoints?.toFixed(1) ?? '?'} | ${t.avgAutoFuelEstimate?.toFixed(1) ?? '?'} | ${t.avgTeleopFuelEstimate?.toFixed(1) ?? '?'} | ${fuel?.avgPasses.toFixed(1) ?? '?'} |`;
   }).join('\n');
 
   const pickPoolTable = pickPool.map((t, i) => {
     const fuel = fuelStats.find(f => f.teamNumber === t.teamNumber);
     const trend = trends.find(tr => tr.teamNumber === t.teamNumber);
     const trendDir = trend ? (trend.trend === 'improving' ? 'UP' : trend.trend === 'declining' ? 'DOWN' : 'STABLE') : '?';
-    return `| ${i + 1} | ${t.teamNumber} | ${t.avgTotalPoints?.toFixed(1) ?? '?'} | ${t.avgAutoFuelEstimate?.toFixed(1) ?? '?'} | ${t.avgTeleopFuelEstimate?.toFixed(1) ?? '?'} | ${fuel?.avgPasses.toFixed(1) ?? '?'} | ${trendDir} |`;
+    const tbaRank = tbaRankings?.find(r => r.team_key === `frc${t.teamNumber}`)?.rank;
+    const tbaCol = tbaRank ? `#${tbaRank}` : '?';
+    return `| ${i + 1} | ${t.teamNumber} | ${t.avgTotalPoints?.toFixed(1) ?? '?'} | ${tbaCol} | ${t.avgAutoFuelEstimate?.toFixed(1) ?? '?'} | ${t.avgTeleopFuelEstimate?.toFixed(1) ?? '?'} | ${fuel?.avgPasses.toFixed(1) ?? '?'} | ${trendDir} |`;
   }).join('\n');
 
-  const homeRank = rankedTeams.findIndex(t => t.teamNumber === homeTeamNumber) + 1;
+  const homeRank = tbaRankings?.find(r => r.team_key === `frc${homeTeamNumber}`)?.rank;
+  const scoutRank = [...teamStats].sort((a, b) => (b.avgTotalPoints || 0) - (a.avgTotalPoints || 0))
+    .findIndex(t => t.teamNumber === homeTeamNumber) + 1;
   const seedInfo = homeTeamSeed
     ? `Team ${homeTeamNumber} is seed **#${homeTeamSeed}**${homeTeamSeed <= 8 ? ' (CAPTAIN — picks in Round 1)' : ' (in the pick pool — will be selected by a captain)'}.`
-    : `Based on data, Team ${homeTeamNumber} is ranked approximately **#${homeRank}** out of ${rankedTeams.length} teams${homeRank <= 8 ? ' (likely a CAPTAIN)' : ' (likely in the pick pool)'}.`;
+    : homeRank
+    ? `Team ${homeTeamNumber} is TBA rank **#${homeRank}** (scout strength rank #${scoutRank})${homeRank <= 8 ? ' — **CAPTAIN** (picks in Round 1)' : ' — in the pick pool'}.`
+    : `Based on scouting data, Team ${homeTeamNumber} is ranked approximately **#${scoutRank}** out of ${teamStats.length} teams${scoutRank <= 8 ? ' (likely a CAPTAIN)' : ' (likely in the pick pool)'}.`;
+
+  const seedingSource = tbaRankings && tbaRankings.length > 0
+    ? '**Seeding is from TBA qualification rankings.** Pick pool is ranked by DW scouting strength (avgTotalPoints composite).'
+    : '**WARNING: No TBA rankings available.** Seeding estimated from scouting data.';
 
   return `${buildGameContext()}
 
@@ -415,66 +460,61 @@ export function buildDraftSimulatorPrompt(
 
 ## ${seedInfo}
 
-## CAPTAINS (Seeds 1-8) — These teams CANNOT be picked. They do the picking.
-| Seed | Team | Avg Pts | Auto Fuel | Teleop Fuel | Passes |
-|------|------|---------|-----------|-------------|--------|
+${seedingSource}
+
+${draftResultBlock ? draftResultBlock + '\n\n---\n' : ''}
+## CAPTAINS — These teams CANNOT be picked. They do the picking.
+Seeded by TBA qualification ranking.
+| TBA Rank | Team | Avg Pts (DW) | Auto Fuel | Teleop Fuel | Passes |
+|----------|------|--------------|-----------|-------------|--------|
 ${captainTable}
 
-## PICK POOL — Available to be picked, ranked by strength
-These are the teams captains choose from. The #1 seed picks FIRST and can take ANY of these teams.
-| Pool Rank | Team | Avg Pts | Auto Fuel | Teleop Fuel | Passes | Trend |
-|-----------|------|---------|-----------|-------------|--------|-------|
+## PICK POOL — Available to be picked, ranked by DW scouting strength
+Captains choose from this pool. Pool Rank #1 = strongest available robot by scouting data.
+| Pool Rank | Team | Avg Pts (DW) | TBA Rank | Auto Fuel | Teleop Fuel | Passes | Trend |
+|-----------|------|--------------|----------|-----------|-------------|--------|-------|
 ${pickPoolTable}
 
-## HOW THE DRAFT WORKS — READ CAREFULLY
+## SNAKE DRAFT RULES (FRC Section 10.6.1)
 
-**Round 1 — Captains pick in seed order (1→2→3→4→5→6→7→8):**
-- Seed 1 (${captains[0]?.teamNumber}) picks FIRST. They have first choice of the ENTIRE pick pool. They will almost always take the #1 ranked available team (Pool Rank #1) because you always want the best robot you can get.
-- Seed 2 picks next from whoever is left, and so on down to Seed 8.
-- **THE KEY RULE: In Round 1, captains pick the best available robot.** Period. There is no reason to skip a stronger team for a weaker one in Round 1. A captain picking a Pool Rank #15 team when Pool Rank #1 is available would be insane.
+**Round 1 — Descending (Alliance 1→${captains.length}):**
+- TBA rank #1 captain picks first. Best available from the pick pool.
+- Each captain picks one team in seed order.
 
-**Round 2 — REVERSE order (8→7→6→5→4→3→2→1):**
-- Seed 8 picks first in Round 2 (back-to-back with their Round 1 pick).
-- Seed 1 picks LAST in Round 2 — they get the ~16th best available team.
-- Round 2 picks may consider synergy/complementary skills more, but teams still generally take the best available.
+**Round 2 — ASCENDING (Alliance ${captains.length}→1) — THE SNAKE:**
+- Alliance ${captains.length} picks first (back-to-back with their Round 1 pick).
+- Alliance 1 picks LAST — their 2nd pick is the ~${captains.length * 2}th best available.
 
-**Declines:**
-- A team can DECLINE an invitation if they think a higher-seeded captain will pick them, or if they'd rather captain a lower alliance themselves.
-- Declines are rare for top picks. A team ranked Pool #1 will almost never decline Seed 1.
-- Declines are more common from teams in the 9-12 range who might prefer to captain Alliance 7 or 8 instead of being a 2nd pick for Alliance 3.
+**Round 3 — Backups (Alliance 1→${captains.length}):**
+- Up to 8 highest-ranked unselected teams form the backup pool.
 
-**CRITICAL: When simulating, work through it step by step:**
-1. Seed 1 looks at the pick pool. Who is the best available? Pick them.
-2. Seed 2 looks at remaining pool. Who is the best available? Pick them.
-3. Continue through Seed 8.
-4. Then Seed 8 picks again (Round 2), then 7, 6, 5, 4, 3, 2, 1.
+**Declines (T606):**
+- A team can decline an invitation. Declined teams CANNOT be picked by anyone else and are ineligible for backup.
+- Declines are most common from teams ranked 9-12 who prefer to captain a lower alliance.
 
-## Analysis Requested
+## YOUR ANALYSIS
 
-### 1. Most Likely Draft Outcome
-Walk through every pick in order. For each pick state:
-- Who the captain is
-- Who they pick and why (usually: "best available team in the pool")
-- If anyone might decline and what happens next
+The algorithmic simulation above gives a baseline prediction. Now analyze it critically:
 
-Then show the final 8 alliances as a table:
+### 1. Do You Agree With the Simulated Draft?
+Review each pick. Are there specific picks where a captain would deviate from "best available" for strategic reasons (synergy, complementary skills, passing/scoring balance)?
 
-| Alliance | Captain | 1st Pick | 2nd Pick | Est. Alliance Strength |
-|----------|---------|----------|----------|------------------------|
+### 2. Decline Predictions
+Which teams in the 9-12 TBA ranking range might realistically decline? What cascading effects would each decline create?
 
-### 2. Best Case Scenario for Team ${homeTeamNumber}
-What's the dream alliance? What declines or surprises would need to happen?
+### 3. Best Case Scenario for Team ${homeTeamNumber}
+Dream alliance composition. What declines or surprises make this happen?
 
-### 3. Worst Case Scenario for Team ${homeTeamNumber}
-What if key targets get taken before you? What's the floor for your alliance?
+### 4. Worst Case Scenario for Team ${homeTeamNumber}
+Floor scenario. What if key targets are taken?
 
-### 4. Scariest Opposing Alliances
-Which 2-3 alliances are the biggest playoff threats?
+### 5. Scariest Opposing Alliances
+Which 2-3 alliances are the biggest playoff threats based on the simulation?
 
-### 5. Key Decision Points
-Specific moments in the draft that change everything for Team ${homeTeamNumber}. Who might decline whom? What picks create cascading effects?
+### 6. Key Decision Points
+Specific draft moments that change everything for Team ${homeTeamNumber}.
 
-Be specific with team numbers. Make bold predictions. The pick pool ranking IS the default pick order — deviate from it only if you have a strong reason.`;
+Be specific with team numbers. Be bold. The simulation is a starting point — challenge it where your analysis differs.`;
 }
 
 export function buildPlayoffStrategyPrompt(
@@ -584,7 +624,7 @@ You are the strategy coach for this alliance in playoffs. Provide a complete gam
    - A robot breaks down mid-match?
 
 6. **RP Strategy**: How do you consistently get bonus RPs?
-   - Energized (hub>=100) — is your alliance capable?
+   - Energized (hub>=360 at Champs) — is your alliance capable?
    - Traversal (tower>=50) — climb assignment plan
    - When to play safe vs aggressive
 

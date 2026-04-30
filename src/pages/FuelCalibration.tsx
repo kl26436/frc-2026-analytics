@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { DEFAULT_BETA } from '../utils/fuelAttribution';
 import {
   Shield, FlaskConical, ChevronDown, ArrowUpDown, Copy, Check,
-  BarChart3, Table2, Bot, Wifi, WifiOff,
+  BarChart3, Table2, Bot, Wifi, WifiOff, RefreshCw,
 } from 'lucide-react';
 import ClaudeChat from '../components/ClaudeChat';
 import {
@@ -128,9 +128,10 @@ export default function FuelCalibration() {
     [matchFuelAttribution],
   );
 
+  const crossEventPriors = useAnalyticsStore(s => s.crossEventPriors);
   const modelComparison = useMemo(
-    () => computeModelComparison(matchFuelAttribution, modelConfigToKey(attributionModel)),
-    [matchFuelAttribution, attributionModel],
+    () => computeModelComparison(matchFuelAttribution, modelConfigToKey(attributionModel), crossEventPriors ?? undefined),
+    [matchFuelAttribution, attributionModel, crossEventPriors],
   );
 
   const bayesianAvailable = useMemo(
@@ -791,6 +792,20 @@ function ActiveModelSelector({ attributionModel, setAttributionModel, bayesianAv
   const isDefault = attributionModel.family === 'power' && attributionModel.beta === DEFAULT_BETA;
   const activeLabel = MODEL_OPTIONS.find(o => (o.family === 'power' ? `power_${o.beta}` : o.family) === currentKey)?.label ?? currentKey;
 
+  // Cross-event priors state
+  const priorEventKeys = useAnalyticsStore(s => s.priorEventKeys);
+  const setPriorEventKeys = useAnalyticsStore(s => s.setPriorEventKeys);
+  const crossEventPriors = useAnalyticsStore(s => s.crossEventPriors);
+  const crossEventPriorsLoading = useAnalyticsStore(s => s.crossEventPriorsLoading);
+  const loadCrossEventPriors = useAnalyticsStore(s => s.loadCrossEventPriors);
+  const eventCode = useAnalyticsStore(s => s.eventCode);
+  const [priorKeysInput, setPriorKeysInput] = useState(priorEventKeys.join(', '));
+
+  const priorTeamCount = crossEventPriors?.size ?? 0;
+  const priorMatchCount = crossEventPriors
+    ? Array.from(crossEventPriors.values()).reduce((s, p) => s + p.matchCount, 0)
+    : 0;
+
   return (
     <div className={`bg-surface rounded-lg border p-4 flex flex-col gap-3 ${
       isDefault ? 'border-border' : 'border-warning'
@@ -833,6 +848,57 @@ function ActiveModelSelector({ attributionModel, setAttributionModel, bayesianAv
           )}
         </div>
       </div>
+
+      {/* Cross-Event Priors Config (always shown so priors can be loaded before Bayesian is available) */}
+      {(
+        <div className="border-t border-border pt-3 mt-1">
+          <p className="text-xs font-medium text-textSecondary mb-2">
+            Cross-Event Priors — Load team accuracy history from prior events
+          </p>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+            <input
+              type="text"
+              value={priorKeysInput}
+              onChange={e => setPriorKeysInput(e.target.value)}
+              placeholder={`e.g. 2026week0, 2026txwac (not ${eventCode})`}
+              className="flex-1 px-3 py-1.5 bg-card border border-border rounded text-sm text-textPrimary placeholder:text-textMuted focus:outline-none focus:border-success"
+            />
+            <button
+              disabled={crossEventPriorsLoading}
+              onClick={() => {
+                const keys = priorKeysInput
+                  .split(',')
+                  .map(k => k.trim())
+                  .filter(k => k.length > 0 && k !== eventCode);
+                setPriorEventKeys(keys);
+              }}
+              className="px-3 py-1.5 text-xs font-medium rounded bg-interactive text-textPrimary hover:bg-interactive/80 transition-colors disabled:opacity-50"
+            >
+              {crossEventPriorsLoading ? 'Loading...' : 'Load Priors'}
+            </button>
+            {crossEventPriors && priorEventKeys.length > 0 && (
+              <button
+                onClick={() => loadCrossEventPriors()}
+                className="px-2 py-1.5 text-xs text-textMuted hover:text-textPrimary transition-colors"
+                title="Reload priors"
+              >
+                <RefreshCw size={14} />
+              </button>
+            )}
+          </div>
+          {crossEventPriors && priorTeamCount > 0 && (
+            <p className="text-xs text-success mt-1.5">
+              Loaded priors for {priorTeamCount} teams from {priorMatchCount} prior matches
+              ({priorEventKeys.join(', ')})
+            </p>
+          )}
+          {priorEventKeys.length > 0 && !crossEventPriors && !crossEventPriorsLoading && (
+            <p className="text-xs text-textMuted mt-1.5">
+              No prior data loaded yet. Click &quot;Load Priors&quot; to fetch.
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
