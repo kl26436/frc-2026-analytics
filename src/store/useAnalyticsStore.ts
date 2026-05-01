@@ -469,18 +469,12 @@ export const useAnalyticsStore = create<AnalyticsState>()(
         const teamTrends = computeAllTeamTrends(entriesForStats);
         set({ teamStatistics, liveOnlyTeamStatistics, teamTrends });
 
-        // In pre-scout-only mode, the user wants pre-scout values to drive
-        // predictions verbatim. calculateFuelAttribution would otherwise re-merge
-        // live FMS-attributed values into teamStatistics for any team that has
-        // live FMS data, making predictions look like a blend. Clear FMS-derived
-        // state and skip attribution so the scout-only fallback path in
-        // buildPredictionInputs uses the pre-scout-derived teamStatistics.
-        if (usePreScout && predictionMode === 'pre-scout-only') {
-          set({ matchFuelAttribution: [], teamFuelStats: [] });
-          get().calculatePredictionInputs();
-          return;
-        }
-
+        // Always run fuel attribution — even in pre-scout-only mode the
+        // matchFuelAttribution data is needed for displays like the source-delta
+        // banner that compare live FMS-attributed points against pre-scout
+        // scout-estimated points. The merge step inside calculateFuelAttribution
+        // gates on the same predictionMode and skips overriding teamStatistics
+        // when the user wants pre-scout values to drive predictions verbatim.
         get().calculateFuelAttribution();
       },
 
@@ -545,7 +539,17 @@ export const useAnalyticsStore = create<AnalyticsState>()(
             avgTotalPoints: fuel.avgTotalPointsScored,
           };
         };
-        const teamStatistics = get().teamStatistics.map(mergeFuel);
+        // teamStatistics merge is gated on the user's prediction mode. In
+        // pre-scout-only mode the user wants their pre-scout values to drive
+        // predictions verbatim, so we skip overriding teamStatistics with the
+        // FMS-attributed values. liveOnlyTeamStatistics ALWAYS gets the merge
+        // (it's "live-only" by definition — used by views where pre-scout must
+        // not leak in regardless of user toggle).
+        const { usePreScout: usePS, predictionMode: pmMode } = get();
+        const skipMerge = usePS && pmMode === 'pre-scout-only';
+        const teamStatistics = skipMerge
+          ? get().teamStatistics
+          : get().teamStatistics.map(mergeFuel);
         const liveOnlyTeamStatistics = get().liveOnlyTeamStatistics.map(mergeFuel);
 
         set({ matchFuelAttribution, teamFuelStats, teamStatistics, liveOnlyTeamStatistics });
