@@ -5,6 +5,7 @@ import { useAnalyticsStore } from '../../store/useAnalyticsStore';
 import { useAllianceSelectionStore } from '../../store/useAllianceSelectionStore';
 import type { LiveSession } from '../../contexts/AuthContext';
 import type { PickList } from '../../types/pickList';
+import EventName from '../EventName';
 
 interface AllianceSelectionLobbyProps {
   onCreateSession: (eventKey: string, displayName: string, teamNumber?: number) => Promise<void>;
@@ -134,7 +135,7 @@ function AllianceSelectionLobby({ onCreateSession, onJoinSession, onClearLiveSes
             <div className="space-y-4">
               <div>
                 <p className="text-sm text-textSecondary mb-1">Event</p>
-                <p className="font-semibold">{eventCode}</p>
+                <p className="font-semibold"><EventName eventKey={eventCode} /></p>
               </div>
 
               <div className="flex gap-4 flex-wrap">

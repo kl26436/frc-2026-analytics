@@ -127,6 +127,8 @@ function TeamList() {
   ]);
   const [viewMode, setViewMode] = useState<ViewMode>(typeof window !== 'undefined' && window.innerWidth < 768 ? 'cards' : 'table');
   const [activeChip, setActiveChip] = useState<FilterChip>('all');
+  const [keyboardSelectedIndex, setKeyboardSelectedIndex] = useState<number | null>(null);
+  const [showShortcutHelp, setShowShortcutHelp] = useState(false);
   const [colorByPercentile, setColorByPercentile] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true;
     const stored = localStorage.getItem(HEATMAP_PREF_KEY);
@@ -415,6 +417,69 @@ function TeamList() {
     return last;
   }, [filteredAndSortedTeams, pinnedTeams, activeChip]);
 
+  // ── Keyboard navigation (j/k/Enter/p/Esc/?) ──
+  // Mounted globally while TeamList is the active page. Skips when the user
+  // is typing in any input/textarea, or when modifier keys are held.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      const inEditable =
+        tag === 'INPUT' ||
+        tag === 'TEXTAREA' ||
+        tag === 'SELECT' ||
+        target?.isContentEditable;
+      if (inEditable) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      if (e.key === 'j' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        setKeyboardSelectedIndex(prev => {
+          if (filteredAndSortedTeams.length === 0) return null;
+          if (prev === null) return 0;
+          return Math.min(prev + 1, filteredAndSortedTeams.length - 1);
+        });
+      } else if (e.key === 'k' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        setKeyboardSelectedIndex(prev => {
+          if (filteredAndSortedTeams.length === 0) return null;
+          if (prev === null) return 0;
+          return Math.max(prev - 1, 0);
+        });
+      } else if (e.key === 'Enter') {
+        if (keyboardSelectedIndex == null) return;
+        const team = filteredAndSortedTeams[keyboardSelectedIndex];
+        if (team) {
+          e.preventDefault();
+          navigate(`/teams/${team.teamNumber}`);
+        }
+      } else if (e.key === 'p') {
+        if (keyboardSelectedIndex == null) return;
+        const team = filteredAndSortedTeams[keyboardSelectedIndex];
+        if (team) {
+          e.preventDefault();
+          togglePin(team.teamNumber);
+        }
+      } else if (e.key === 'Escape') {
+        if (showShortcutHelp) setShowShortcutHelp(false);
+        else if (keyboardSelectedIndex != null) setKeyboardSelectedIndex(null);
+      } else if (e.key === '?') {
+        e.preventDefault();
+        setShowShortcutHelp(s => !s);
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [filteredAndSortedTeams, keyboardSelectedIndex, navigate, togglePin, showShortcutHelp]);
+
+  // Clamp selection if results shrink
+  useEffect(() => {
+    if (keyboardSelectedIndex == null) return;
+    if (keyboardSelectedIndex >= filteredAndSortedTeams.length) {
+      setKeyboardSelectedIndex(filteredAndSortedTeams.length === 0 ? null : filteredAndSortedTeams.length - 1);
+    }
+  }, [filteredAndSortedTeams.length, keyboardSelectedIndex]);
+
   const handleSort = (field: string, shiftKey: boolean) => {
     if (chipBehavior.overrideSort) setActiveChip('all');
     setSortCriteria(prev => {
@@ -675,6 +740,7 @@ function TeamList() {
                 const teamPinned = isPinned(team.teamNumber);
                 const showPinDivider = index === lastPinnedIndex;
                 const sparkData = sparklineByTeam.get(team.teamNumber) ?? [];
+                const isKeyboardFocused = keyboardSelectedIndex === index;
                 return (
                   <tr
                     key={team.teamNumber}
@@ -682,11 +748,14 @@ function TeamList() {
                     onTouchStart={() => handleTouchStart(team.teamNumber)}
                     onTouchEnd={handleTouchEnd}
                     onTouchMove={handleTouchMove}
+                    ref={isKeyboardFocused ? (el) => el?.scrollIntoView({ block: 'nearest' }) : undefined}
                     className={`transition-colors cursor-pointer ${
                       isSelected
                         ? 'bg-blueAlliance/10 border-l-2 border-l-blueAlliance'
                         : `${index % 2 === 0 ? 'bg-surfaceAlt' : ''} hover:bg-interactive`
-                    } ${showPinDivider ? 'border-b-2 border-b-warning/40' : ''}`}
+                    } ${showPinDivider ? 'border-b-2 border-b-warning/40' : ''} ${
+                      isKeyboardFocused ? 'outline outline-2 -outline-offset-2 outline-blueAlliance' : ''
+                    }`}
                   >
                     <td className="px-2 py-4 text-center">
                       <button
@@ -923,6 +992,62 @@ function TeamList() {
             setCompareMode(false);
           }}
         />
+      )}
+
+      {/* Keyboard shortcuts cheatsheet (toggle with ?) */}
+      <button
+        onClick={() => setShowShortcutHelp(s => !s)}
+        className="fixed bottom-4 right-4 z-30 w-9 h-9 rounded-full bg-surface border border-border text-textSecondary hover:text-textPrimary shadow-lg flex items-center justify-center font-bold"
+        title="Keyboard shortcuts"
+        aria-label="Keyboard shortcuts"
+      >
+        ?
+      </button>
+      {showShortcutHelp && (
+        <div
+          className="fixed inset-0 bg-black/60 z-40 flex items-center justify-center p-4"
+          onClick={() => setShowShortcutHelp(false)}
+          role="dialog"
+          aria-label="Keyboard shortcuts"
+        >
+          <div
+            className="bg-surface border border-border rounded-xl p-5 max-w-sm w-full shadow-xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 className="text-base font-bold mb-3">Keyboard shortcuts</h3>
+            <ul className="space-y-2 text-sm">
+              {[
+                { keys: ['j', '↓'], label: 'Move selection down' },
+                { keys: ['k', '↑'], label: 'Move selection up' },
+                { keys: ['Enter'], label: 'Open selected team' },
+                { keys: ['p'], label: 'Pin / unpin selected team' },
+                { keys: ['Esc'], label: 'Clear selection' },
+                { keys: ['?'], label: 'Toggle this help' },
+                { keys: ['⌘K', 'Ctrl+K'], label: 'Open command palette' },
+              ].map(row => (
+                <li key={row.label} className="flex items-center justify-between gap-3">
+                  <span className="text-textSecondary">{row.label}</span>
+                  <span className="flex items-center gap-1">
+                    {row.keys.map(k => (
+                      <kbd
+                        key={k}
+                        className="text-xs bg-surfaceElevated px-1.5 py-0.5 rounded border border-border font-mono"
+                      >
+                        {k}
+                      </kbd>
+                    ))}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <button
+              onClick={() => setShowShortcutHelp(false)}
+              className="mt-4 w-full py-2 text-sm bg-interactive hover:bg-surfaceElevated rounded-lg transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

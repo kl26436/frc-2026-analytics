@@ -11,6 +11,7 @@ import MatchDetailModal from '../components/MatchDetailModal';
 import TrendChip from '../components/TrendChip';
 import ReliabilityChip from '../components/ReliabilityChip';
 import TeamDetailTabs, { type TeamDetailTabId } from '../components/TeamDetailTabs';
+import EventName from '../components/EventName';
 import OverviewTab from '../components/teamDetail/OverviewTab';
 import PerformanceTab from '../components/teamDetail/PerformanceTab';
 import MatchHistoryTab from '../components/teamDetail/MatchHistoryTab';
@@ -268,10 +269,12 @@ function TeamDetail() {
       teamNum,
       preScoutEntries,
       scoutEntries,
-      // Per-entry points source: prefer FMS-attributed totals (what the
-      // Match History table shows) so the banner's "live avg" matches
-      // what users see row-by-row. Falls back to scout estimate when no
-      // FMS attribution exists (always the case for pre-scout entries).
+      // Live points use FMS attribution (the canonical "what the team scored"
+      // number — same as the Avg Score card and Match History totals).
+      // Pre-scout has no FMS data so it falls through to scout estimate.
+      // matchFuelAttribution is now always populated by the store regardless
+      // of the user's data-source toggle, so the banner stays stable when the
+      // user flips between live / pre-scout / blend.
       e => {
         const fa = matchFuelAttribution.find(
           f => f.matchNumber === e.match_number && f.teamNumber === e.team_number,
@@ -427,7 +430,10 @@ function TeamDetail() {
           >
             <div className="flex items-center justify-between p-4 border-b border-border">
               <h3 className="font-bold">
-                {selectedVideo.eventKey ? `${selectedVideo.eventKey} ` : ''}Match Q{selectedVideo.matchNumber} - Team {teamNum}
+                {selectedVideo.eventKey && (
+                  <><EventName eventKey={selectedVideo.eventKey} /> · </>
+                )}
+                Match Q{selectedVideo.matchNumber} — Team {teamNum}
               </h3>
               <button
                 onClick={() => setSelectedVideo(null)}

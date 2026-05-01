@@ -1,5 +1,6 @@
 import { ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react';
 import type { SourceDelta } from '../utils/strategicInsights';
+import EventName from './EventName';
 
 interface PreScoutNewtonDeltaProps {
   delta: SourceDelta;
@@ -28,7 +29,7 @@ export function PreScoutNewtonDelta({ delta, liveEventLabel }: PreScoutNewtonDel
       : `On par with pre-scout (${delta.deltaPct.toFixed(0)}%)`;
 
   const eventList = delta.preScoutEvents.length === 1
-    ? delta.preScoutEvents[0]
+    ? <EventName eventKey={delta.preScoutEvents[0]} />
     : `${delta.preScoutEvents.length} events`;
 
   return (
@@ -44,7 +45,9 @@ export function PreScoutNewtonDelta({ delta, liveEventLabel }: PreScoutNewtonDel
         </div>
         <div className="font-semibold text-right">{delta.preScoutAvg.toFixed(1)} pts/match</div>
         <div>
-          <span className="text-textSecondary">{liveEventLabel ?? 'Live'}</span>{' '}
+          <span className="text-textSecondary">
+            {liveEventLabel ? <EventName eventKey={liveEventLabel} /> : 'Live'}
+          </span>{' '}
           <span className="text-textMuted">({delta.liveMatches}m)</span>:
         </div>
         <div className="font-semibold text-right">{delta.liveAvg.toFixed(1)} pts/match</div>

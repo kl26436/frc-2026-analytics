@@ -4,6 +4,7 @@ import type { TBAMatch } from '../../types/tba';
 import { estimateMatchPoints, parseClimbLevel } from '../../types/scouting';
 import { getMatchVideoUrl } from '../../utils/tbaApi';
 import DataSourceToggle from '../DataSourceToggle';
+import EventName from '../EventName';
 
 interface LiveMatchRow {
   entry: ScoutEntry;
@@ -230,8 +231,11 @@ export function MatchHistoryTab({
                     return (
                       <tr key={entry.id} className={`hover:bg-interactive transition-colors ${idx % 2 === 0 ? 'bg-surfaceAlt' : ''}`}>
                         <td className="px-3 py-3">
-                          <span className="text-xs font-bold font-mono px-2 py-1 rounded bg-warning/15 text-warning uppercase tracking-wide">
-                            {entry.event_key}
+                          <span
+                            className="text-xs font-semibold px-2 py-1 rounded bg-warning/15 text-warning"
+                            title={entry.event_key}
+                          >
+                            <EventName eventKey={entry.event_key} />
                           </span>
                         </td>
                         <td className="px-3 py-3 font-semibold">Q{entry.match_number}</td>

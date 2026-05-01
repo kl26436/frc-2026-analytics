@@ -5,6 +5,7 @@ import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { useAuth } from '../contexts/AuthContext';
 import { usePickListSync } from '../hooks/usePickListSync';
 import ComparisonModal from '../components/ComparisonModal';
+import EventName from '../components/EventName';
 import {
   DndContext,
   DragOverlay,
@@ -2159,7 +2160,7 @@ function PickList() {
         <div>
           <h1 className="text-2xl md:text-3xl font-bold">Pick List</h1>
           <p className="text-textSecondary text-sm md:text-base">
-            {eventCode}
+            <EventName eventKey={eventCode} />
             {mode === 'personal' && pickList && (
               <> • Last updated: {new Date(pickList.config.lastUpdated).toLocaleString()}</>
             )}

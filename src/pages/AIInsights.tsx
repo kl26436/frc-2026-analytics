@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import ClaudeChat from '../components/ClaudeChat';
+import EventName from '../components/EventName';
 import {
   INSIGHT_TEMPLATES,
   type InsightTemplateId,
@@ -102,7 +103,7 @@ export default function AIInsights() {
           AI Insights
         </h1>
         <p className="text-sm text-textSecondary mt-1">
-          {eventCode} &middot; {teamStatistics.length} teams &middot; {pgTbaMatches.length} matches
+          <EventName eventKey={eventCode} /> &middot; {teamStatistics.length} teams &middot; {pgTbaMatches.length} matches
         </p>
       </div>
 

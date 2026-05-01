@@ -5,8 +5,10 @@ import {
 } from 'lucide-react';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import { useWatchlistStore } from '../store/useWatchlistStore';
+import { useEventNamesStore } from '../store/useEventNamesStore';
 import { useAuth } from '../contexts/AuthContext';
 import ActiveSessionBanner from './ActiveSessionBanner';
+import CommandPalette from './CommandPalette';
 import { matchLabel, matchSortKey } from '../utils/formatting';
 import { useNavStructure, type NavItem, type NavGroup } from '../hooks/useNavStructure';
 
@@ -216,6 +218,7 @@ function AppLayout() {
   const { user, isAdmin, signOut, eventConfig } = useAuth();
   const subscribeToWatchlist = useWatchlistStore(s => s.subscribeToWatchlist);
   const unsubscribeFromWatchlist = useWatchlistStore(s => s.unsubscribeFromWatchlist);
+  const setEventName = useEventNamesStore(s => s.setName);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
 
@@ -225,6 +228,13 @@ function AppLayout() {
     subscribeToWatchlist();
     return () => unsubscribeFromWatchlist();
   }, [user, subscribeToWatchlist, unsubscribeFromWatchlist]);
+
+  // Seed the event-names cache with the active event so EventName lookups
+  // don't need to round-trip to TBA for it.
+  useEffect(() => {
+    const ev = tbaData?.event;
+    if (ev?.key && ev?.name) setEventName(ev.key, ev.name);
+  }, [tbaData?.event, setEventName]);
 
   const { topLevel, moreGroups, isItemActive, isMoreActive } = useNavStructure();
 
@@ -403,6 +413,8 @@ function AppLayout() {
         <ActiveSessionBanner />
         <Outlet />
       </main>
+
+      <CommandPalette />
     </div>
   );
 }

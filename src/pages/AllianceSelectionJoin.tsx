@@ -6,6 +6,7 @@ import { useAllianceSession } from '../hooks/useAllianceSession';
 import { useAllianceSelectionStore } from '../store/useAllianceSelectionStore';
 import { useAnalyticsStore } from '../store/useAnalyticsStore';
 import AllianceSelectionBoard from '../components/allianceSelection/AllianceSelectionBoard';
+import EventName from '../components/EventName';
 
 function AllianceSelectionJoin() {
   const { sessionCode } = useParams<{ sessionCode: string }>();
@@ -105,7 +106,7 @@ function AllianceSelectionJoin() {
           <Handshake size={24} className="text-blueAlliance" />
           <div>
             <h1 className="text-lg font-bold">Alliance Selection</h1>
-            <p className="text-textSecondary text-xs">Team 148 • {eventCode}</p>
+            <p className="text-textSecondary text-xs">Team 148 • <EventName eventKey={eventCode} /></p>
           </div>
         </div>
       </div>

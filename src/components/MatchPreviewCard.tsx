@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom';
 import { Eye, Flag, ChevronDown, MessageSquare } from 'lucide-react';
 import { teamKeyToNumber } from '../utils/tbaApi';
 import type { TBAMatch } from '../types/tba';
@@ -7,6 +6,7 @@ import type { TeamTrend } from '../utils/trendAnalysis';
 import type { computeMatchup } from '../utils/predictions';
 import SourceMixFooter from './SourceMixFooter';
 import WatchForBullets from './WatchForBullets';
+import TeamNumberLink from './TeamNumberLink';
 
 type MatchPrediction = ReturnType<typeof computeMatchup>;
 
@@ -94,9 +94,7 @@ export function MatchPreviewCard({
   const renderTeamNotes = (teams: typeof allyNotes) =>
     teams.map(t => (
       <div key={t.teamNumber}>
-        <Link to={`/teams/${t.teamNumber}`} className="text-xs font-bold hover:underline">
-          {t.teamNumber}
-        </Link>
+        <TeamNumberLink team={t.teamNumber} className="text-xs" />
         <div className="mt-1 space-y-1">
           {t.notes.map((note, i) => (
             <p key={i} className="text-xs text-textSecondary bg-surfaceElevated rounded px-2.5 py-1.5 leading-relaxed">
@@ -285,12 +283,10 @@ export function MatchPreviewCard({
                     {side.teams.map(t => (
                       <tr key={t.teamNumber} className="border-t border-border/30">
                         <td className="py-1 px-2">
-                          <Link
-                            to={`/teams/${t.teamNumber}`}
-                            className={`font-semibold hover:underline ${t.teamNumber === homeTeam ? 'text-warning' : ''}`}
-                          >
-                            {t.teamNumber}
-                          </Link>
+                          <TeamNumberLink
+                            team={t.teamNumber}
+                            className={t.teamNumber === homeTeam ? 'text-warning' : ''}
+                          />
                         </td>
                         <td className="py-1 px-1 text-center">{(t.autoHubPoints + t.autoTowerPoints).toFixed(1)}</td>
                         <td className="py-1 px-1 text-center">{t.teleopHubPoints.toFixed(1)}</td>
@@ -379,16 +375,13 @@ function AllianceColumn({
         {teamKeys.map(k => {
           const num = teamKeyToNumber(k);
           return (
-            <Link
+            <TeamNumberLink
               key={k}
-              to={`/teams/${num}`}
-              onClick={e => e.stopPropagation()}
+              team={num}
               className={`text-[11px] font-bold px-1.5 py-0.5 rounded hover:opacity-80 transition-opacity ${
                 num === homeTeam ? homeChipClass : 'bg-surface text-textSecondary'
               }`}
-            >
-              {num}
-            </Link>
+            />
           );
         })}
       </div>

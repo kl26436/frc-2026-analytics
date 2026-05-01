@@ -9,6 +9,7 @@ import { useWatchSchedule } from '../hooks/useWatchSchedule';
 import { WatchScheduleTable } from './MatchSchedule';
 import { NINJA_TAG_LABELS, NINJA_TAG_COLORS } from '../types/ninja';
 import type { NinjaTag } from '../types/ninja';
+import EventName from '../components/EventName';
 
 function NinjaDashboard() {
   const { isAdmin, user, accessConfig, userProfiles } = useAuth();
@@ -229,7 +230,7 @@ function NinjaDashboard() {
           <Eye size={28} />
           Ninja Scouting
         </h1>
-        <p className="text-textSecondary mt-1">REBUILT 2026 &bull; {eventCode}</p>
+        <p className="text-textSecondary mt-1">REBUILT 2026 &bull; <EventName eventKey={eventCode} /></p>
       </div>
 
       {/* Coverage Overview */}
