@@ -186,17 +186,24 @@ function TeamList() {
 
   // Pre-compute all metric values once — avoids repeated getMetricValue() calls
   // during sort (O(n log n) comparisons) and render (O(n × columns)).
+  // In pre-scout-only mode, suppress teamFuelStats so getMetricValue falls back
+  // to raw-entry aggregation over entriesForMetrics (which IS pre-scout in
+  // that mode). Otherwise FMS-attributed values would leak into pre-scout
+  // displays and the toggle would appear broken.
+  const fuelStatsForMetrics = (usePreScout && predictionMode === 'pre-scout-only')
+    ? undefined
+    : teamFuelStats;
   const metricCache = useMemo(() => {
     const cache = new Map<number, Map<string, number>>();
     for (const team of teamStatistics) {
       const teamMap = new Map<string, number>();
       for (const col of enabledColumns) {
-        teamMap.set(col.field, getMetricValue(col, team, entriesForMetrics, teamFuelStats));
+        teamMap.set(col.field, getMetricValue(col, team, entriesForMetrics, fuelStatsForMetrics));
       }
       cache.set(team.teamNumber, teamMap);
     }
     return cache;
-  }, [teamStatistics, enabledColumns, entriesForMetrics, teamFuelStats]);
+  }, [teamStatistics, enabledColumns, entriesForMetrics, fuelStatsForMetrics]);
 
   // Percentile cache — for each enabled column, store sorted field values once
   // so per-row tinting is O(log n) instead of O(n).
